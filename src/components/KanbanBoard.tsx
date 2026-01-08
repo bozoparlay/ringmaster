@@ -23,6 +23,15 @@ import { TackleModal } from './TackleModal';
 import { ReviewModal } from './ReviewModal';
 import { Toast, ToastType } from './Toast';
 
+interface ScopeAnalysis {
+  aligned: boolean;
+  needsRescope: boolean;
+  completeness: 'complete' | 'partial' | 'minimal';
+  missingRequirements: string[];
+  scopeCreep: string[];
+  reason?: string;
+}
+
 interface ReviewResult {
   passed: boolean;
   summary: string;
@@ -32,6 +41,7 @@ interface ReviewResult {
     line?: number;
     message: string;
   }>;
+  scope?: ScopeAnalysis;
 }
 
 // Priority levels in order from highest to lowest
@@ -139,10 +149,30 @@ export function KanbanBoard({
 
   const handleReviewRetry = async () => {
     if (!reviewItem) return;
-    // Store feedback if review failed
-    const feedback = reviewResult && !reviewResult.passed
-      ? reviewResult.summary
-      : undefined;
+
+    // Build comprehensive feedback from review result
+    let feedbackParts: string[] = [];
+
+    if (reviewResult) {
+      // Add summary if review failed
+      if (!reviewResult.passed) {
+        feedbackParts.push(reviewResult.summary);
+      }
+
+      // Add scope analysis feedback
+      if (reviewResult.scope) {
+        if (reviewResult.scope.needsRescope && reviewResult.scope.reason) {
+          feedbackParts.push(`Rescope needed: ${reviewResult.scope.reason}`);
+        }
+
+        if (reviewResult.scope.missingRequirements.length > 0) {
+          feedbackParts.push(`Missing: ${reviewResult.scope.missingRequirements.join(', ')}`);
+        }
+      }
+    }
+
+    const feedback = feedbackParts.length > 0 ? feedbackParts.join(' | ') : undefined;
+
     // Move back to in_progress with feedback
     await onUpdateItem({
       ...reviewItem,
@@ -151,7 +181,11 @@ export function KanbanBoard({
     });
     setIsReviewOpen(false);
     setReviewItem(null);
-    if (feedback) {
+
+    // Show appropriate toast message
+    if (reviewResult?.scope?.needsRescope) {
+      showToast('Task returned to In Progress - review the scope requirements', 'info');
+    } else if (feedback) {
       showToast('Task returned to In Progress with review feedback', 'info');
     }
   };

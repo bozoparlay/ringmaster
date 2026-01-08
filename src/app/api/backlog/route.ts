@@ -3,10 +3,12 @@ import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { parseBacklogMd, serializeBacklogMd } from '@/lib/backlog-parser';
+import { validateTaskQuality } from '@/lib/task-quality';
 import type { BacklogItem } from '@/types/backlog';
 
-// Default path to BACKLOG.md - can be overridden via query param
-const DEFAULT_BACKLOG_PATH = process.env.BACKLOG_PATH || '../bozo/BACKLOG.md';
+// Default path to BACKLOG.md - can be overridden via query param or env var
+// When running from worktree (.tasks/task-xxx), go up two levels to find main BACKLOG.md
+const DEFAULT_BACKLOG_PATH = process.env.BACKLOG_PATH || '../../BACKLOG.md';
 
 function getBacklogPath(customPath?: string | null): string {
   if (customPath) {
@@ -33,8 +35,24 @@ export async function GET(request: NextRequest) {
     const content = await readFile(backlogPath, 'utf-8');
     const items = parseBacklogMd(content);
 
+    // Compute quality scores for each item (catches offline-created tasks)
+    const itemsWithQuality = items.map(item => {
+      const quality = validateTaskQuality(item.title, item.description || '');
+      return {
+        ...item,
+        qualityScore: quality.score,
+        qualityIssues: quality.issues,
+      };
+    });
+
+    // Log any low-quality tasks found
+    const lowQualityCount = itemsWithQuality.filter(i => (i.qualityScore ?? 100) < 50).length;
+    if (lowQualityCount > 0) {
+      console.log(`[backlog] Found ${lowQualityCount} low-quality tasks that may need improvement`);
+    }
+
     return NextResponse.json({
-      items,
+      items: itemsWithQuality,
       path: backlogPath,
       exists: true,
     });

@@ -68,6 +68,73 @@ interface AnalysisResult {
   enhancedDescription: string;
 }
 
+interface QualityCheck {
+  isValid: boolean;
+  score: number; // 0-100
+  issues: string[];
+}
+
+/**
+ * Validates AI-generated task description quality to prevent downstream rescope issues.
+ * Returns a quality score and any issues found.
+ */
+function validateTaskQuality(
+  title: string,
+  description: string,
+  analysis: AnalysisResult
+): QualityCheck {
+  const issues: string[] = [];
+  let score = 100;
+
+  // Check 1: Description length (minimum meaningful content)
+  if (!analysis.enhancedDescription || analysis.enhancedDescription.length < 50) {
+    issues.push('Description is too short - needs more detail');
+    score -= 30;
+  } else if (analysis.enhancedDescription.length < 100) {
+    issues.push('Description could be more detailed');
+    score -= 10;
+  }
+
+  // Check 2: Has actionable content (requirements, approach, or success criteria)
+  const hasRequirements = /requirements?|must|should|needs? to/i.test(analysis.enhancedDescription);
+  const hasApproach = /approach|implementation|steps?|how to/i.test(analysis.enhancedDescription);
+  const hasCriteria = /success|criteria|acceptance|done when/i.test(analysis.enhancedDescription);
+
+  if (!hasRequirements && !hasApproach && !hasCriteria) {
+    issues.push('Missing actionable content (requirements, approach, or success criteria)');
+    score -= 25;
+  }
+
+  // Check 3: Description is different from title (not just repeated)
+  const titleWords = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const descWords = analysis.enhancedDescription.toLowerCase();
+  const titleOverlap = titleWords.filter(w => descWords.includes(w)).length / Math.max(titleWords.length, 1);
+  if (titleOverlap < 0.3 && analysis.enhancedDescription.length < 200) {
+    // Description doesn't expand on the title much
+    issues.push('Description should expand on the task title with more context');
+    score -= 15;
+  }
+
+  // Check 4: Has structured sections (markdown formatting)
+  const hasStructure = /^#{1,4}\s|^\*\*[^*]+\*\*:|^-\s|^\d+\./m.test(analysis.enhancedDescription);
+  if (!hasStructure && analysis.enhancedDescription.length > 150) {
+    issues.push('Consider adding structured sections for clarity');
+    score -= 5;
+  }
+
+  // Check 5: Category is meaningful
+  if (!analysis.category || analysis.category.length < 3) {
+    issues.push('Category should be specified');
+    score -= 10;
+  }
+
+  return {
+    isValid: score >= 50, // Tasks with score < 50 are considered low quality
+    score: Math.max(0, score),
+    issues,
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const { title, description, comments } = await request.json();
@@ -95,7 +162,7 @@ Your task is to:
 1. Integrate the user's comments into the existing description
 2. Preserve any existing content that's still relevant
 3. Add the new information requested by the user
-4. Keep the description well-organized with markdown formatting
+4. Ensure the description has all required sections for quality validation
 
 Provide your response in the following JSON format (and ONLY the JSON, no other text):
 
@@ -112,7 +179,25 @@ Guidelines:
 - **Effort**: low (few hours), medium (1-3 days), high (1-2 weeks), very_high (multi-week project)
 - **Value**: Based on user impact, business value, and technical benefit
 - **Category**: Choose from: User Management, Season Management, Admin Tools, Notifications, Game Data & Automation, Profile & Achievements, Analytics & Insights, UI/UX Improvements, Security & Privacy, Technical Debt, Infrastructure, Mobile & Future
-- **Enhanced Description**: Merge the user's comments into the existing description. Use proper markdown with clear sections. Be concise but thorough.`
+
+**IMPORTANT - Enhanced Description Requirements:**
+The description MUST include these sections to pass quality validation:
+
+## Description
+Brief overview of what this task accomplishes and why it matters.
+
+## Requirements
+- Bullet list of specific, actionable requirements
+- Each requirement should be verifiable (can determine if it's done)
+
+## Technical Approach
+How this should be implemented (suggested files, patterns, considerations).
+
+## Success Criteria
+- How we know this task is complete
+- Acceptance conditions that can be checked during code review
+
+Merge the user's comments while ensuring all sections are present. The description should be detailed enough that a developer can implement it without needing to ask clarifying questions.`
       : `You are a technical project manager analyzing a backlog task for a software development project called "Bozo Parlay" - a social betting web application where friends create groups, submit weekly picks, and compete in parlays.
 
 Analyze the following task and provide a structured assessment:
@@ -135,7 +220,26 @@ Guidelines for assessment:
 - **Effort**: low (few hours), medium (1-3 days), high (1-2 weeks), very_high (multi-week project)
 - **Value**: Based on user impact, business value, and technical benefit
 - **Category**: Choose from: User Management, Season Management, Admin Tools, Notifications, Game Data & Automation, Profile & Achievements, Analytics & Insights, UI/UX Improvements, Security & Privacy, Technical Debt, Infrastructure, Mobile & Future
-- **Enhanced Description**: Format as proper markdown with sections like Description, Requirements, Technical Approach, and Success Criteria. Be concise but thorough.`;
+
+**IMPORTANT - Enhanced Description Requirements:**
+The description MUST include these sections to pass quality validation:
+
+## Description
+Brief overview of what this task accomplishes and why it matters.
+
+## Requirements
+- Bullet list of specific, actionable requirements
+- Each requirement should be verifiable (can determine if it's done)
+- Include both functional requirements and constraints
+
+## Technical Approach
+How this should be implemented (suggested files, patterns, considerations).
+
+## Success Criteria
+- How we know this task is complete
+- Acceptance conditions that can be checked during code review
+
+The description should be detailed enough that a developer can implement it without needing to ask clarifying questions. Aim for at least 150-200 words with concrete, specific details.`;
 
     try {
       const command = new ConverseCommand({
@@ -147,7 +251,7 @@ Guidelines for assessment:
           },
         ],
         inferenceConfig: {
-          maxTokens: 1024,
+          maxTokens: 2048, // Increased to allow for detailed descriptions with all required sections
           temperature: 0.3,
         },
       });
@@ -182,12 +286,28 @@ Guidelines for assessment:
         enhancedDesc = description;
       }
 
-      return NextResponse.json({
-        priority: validPriorities.includes(analysis.priority) ? analysis.priority : 'medium',
-        effort: validEfforts.includes(analysis.effort) ? analysis.effort : 'medium',
-        value: validValues.includes(analysis.value) ? analysis.value : 'medium',
+      // Create normalized analysis for quality check
+      const normalizedAnalysis: AnalysisResult = {
+        priority: validPriorities.includes(analysis.priority) ? analysis.priority as AnalysisResult['priority'] : 'medium',
+        effort: validEfforts.includes(analysis.effort) ? analysis.effort as AnalysisResult['effort'] : 'medium',
+        value: validValues.includes(analysis.value) ? analysis.value as AnalysisResult['value'] : 'medium',
         category: analysis.category || '',
         enhancedDescription: enhancedDesc,
+      };
+
+      // Validate quality to prevent downstream rescope issues
+      const qualityCheck = validateTaskQuality(title, description || '', normalizedAnalysis);
+
+      // Log quality metrics for monitoring
+      console.log(`[analyze-task] Quality check: score=${qualityCheck.score}, issues=${qualityCheck.issues.length}, task="${title.slice(0, 50)}"`);
+
+      return NextResponse.json({
+        ...normalizedAnalysis,
+        quality: {
+          score: qualityCheck.score,
+          isValid: qualityCheck.isValid,
+          issues: qualityCheck.issues,
+        },
       });
     } catch (bedrockError) {
       console.error('Bedrock API error:', bedrockError);
