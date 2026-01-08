@@ -34,6 +34,23 @@ interface ReviewResult {
   }>;
 }
 
+// Priority levels in order from highest to lowest
+const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
+
+function downgradePriority(current: Priority): Priority {
+  const index = PRIORITY_ORDER.indexOf(current);
+  // If already at lowest, stay there
+  if (index >= PRIORITY_ORDER.length - 1) return current;
+  return PRIORITY_ORDER[index + 1];
+}
+
+function upgradePriority(current: Priority): Priority {
+  const index = PRIORITY_ORDER.indexOf(current);
+  // If already at highest, stay there
+  if (index <= 0) return current;
+  return PRIORITY_ORDER[index - 1];
+}
+
 interface KanbanBoardProps {
   items: BacklogItem[];
   onUpdateItem: (item: BacklogItem) => Promise<void>;
@@ -249,9 +266,26 @@ export function KanbanBoard({
     if (COLUMN_ORDER.includes(overId as Status)) {
       // Check if item is being moved FROM up_next TO backlog (deprioritizing)
       const isInUpNext = columnItems.up_next.some(i => i.id === activeItem.id);
+      const isInBacklog = columnItems.backlog.some(i => i.id === activeItem.id);
+
       if (isInUpNext && overId === 'backlog') {
-        // Downgrade priority to 'low' so it drops out of Up Next
-        onUpdateItem({ ...activeItem, priority: 'low' });
+        // Downgrade priority one level
+        const newPriority = downgradePriority(activeItem.priority);
+        onUpdateItem({ ...activeItem, priority: newPriority });
+        return;
+      }
+
+      // Check if item is being moved FROM backlog TO up_next (prioritizing)
+      if (isInBacklog && overId === 'up_next') {
+        // Upgrade priority one level (or to 'medium' minimum to qualify for up_next)
+        let newPriority = upgradePriority(activeItem.priority);
+        // Ensure it qualifies for up_next (at least medium)
+        const priorityIndex = PRIORITY_ORDER.indexOf(newPriority);
+        const mediumIndex = PRIORITY_ORDER.indexOf('medium');
+        if (priorityIndex > mediumIndex) {
+          newPriority = 'medium';
+        }
+        onUpdateItem({ ...activeItem, priority: newPriority });
         return;
       }
 
@@ -288,7 +322,20 @@ export function KanbanBoard({
       if (targetVisualColumn && activeVisualColumn !== targetVisualColumn) {
         // Check if moving FROM up_next TO backlog (deprioritizing)
         if (activeVisualColumn === 'up_next' && targetVisualColumn === 'backlog') {
-          onUpdateItem({ ...activeItem, priority: 'low' });
+          const newPriority = downgradePriority(activeItem.priority);
+          onUpdateItem({ ...activeItem, priority: newPriority });
+          return;
+        }
+
+        // Check if moving FROM backlog TO up_next (prioritizing)
+        if (activeVisualColumn === 'backlog' && targetVisualColumn === 'up_next') {
+          let newPriority = upgradePriority(activeItem.priority);
+          const priorityIndex = PRIORITY_ORDER.indexOf(newPriority);
+          const mediumIndex = PRIORITY_ORDER.indexOf('medium');
+          if (priorityIndex > mediumIndex) {
+            newPriority = 'medium';
+          }
+          onUpdateItem({ ...activeItem, priority: newPriority });
           return;
         }
 
