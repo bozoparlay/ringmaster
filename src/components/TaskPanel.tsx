@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { TextDiff } from './TextDiff';
 import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, STATUS_LABELS, COLUMN_ORDER, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
 
@@ -501,39 +502,13 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               </div>
             )}
 
-            {/* Diff View - Show before/after when AI made changes */}
+            {/* Diff View - Show unified diff when AI made changes */}
             {showDiff && preAiItem && (
               <div className="mt-3 space-y-3">
-                <div className="flex items-center gap-2 text-xs font-medium text-surface-400">
-                  <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                  AI Changes Preview
-                </div>
-
-                {/* Before */}
-                <div className="relative">
-                  <div className="absolute -left-2 top-0 bottom-0 w-1 bg-red-500/50 rounded-full" />
-                  <div className="text-[10px] uppercase tracking-wider text-red-400 mb-1 font-medium">Before</div>
-                  <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 max-h-32 overflow-y-auto">
-                    <pre className="text-xs text-surface-400 whitespace-pre-wrap font-mono">
-                      {preAiItem.description || '(no description)'}
-                    </pre>
-                  </div>
-                </div>
-
-                {/* After */}
-                <div className="relative">
-                  <div className="absolute -left-2 top-0 bottom-0 w-1 bg-green-500/50 rounded-full" />
-                  <div className="text-[10px] uppercase tracking-wider text-green-400 mb-1 font-medium">After</div>
-                  <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3 max-h-48 overflow-y-auto">
-                    <div className="prose prose-invert prose-sm max-w-none prose-headings:text-surface-100 prose-p:text-surface-300 prose-strong:text-surface-200 prose-code:text-accent prose-li:text-surface-300">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {editedItem.description || '(no description)'}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
+                <TextDiff
+                  before={preAiItem.description || ''}
+                  after={editedItem.description || ''}
+                />
 
                 {/* Accept/Undo buttons */}
                 <div className="flex items-center justify-end gap-2 pt-1">
