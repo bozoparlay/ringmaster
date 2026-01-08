@@ -6,13 +6,14 @@ import remarkGfm from 'remark-gfm';
 import { TextDiff } from './TextDiff';
 import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, STATUS_LABELS, COLUMN_ORDER, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
+import { validateTaskQuality, QUALITY_THRESHOLD } from '@/lib/task-quality';
 
 interface TaskPanelProps {
   item: BacklogItem | null;
   isOpen: boolean;
   onClose: () => void;
   onSave: (item: BacklogItem) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
   onTackle: (item: BacklogItem) => void;
   onShip?: (item: BacklogItem) => Promise<void>;
   backlogPath?: string;
@@ -156,6 +157,9 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const [showAiInput, setShowAiInput] = useState(false);
   const [aiComment, setAiComment] = useState('');
   const [showDiff, setShowDiff] = useState(false);
+  const [qualityWarning, setQualityWarning] = useState<{ score: number; issues: string[] } | null>(null);
+  const [showSaveWarning, setShowSaveWarning] = useState(false);
+  const [pendingQuality, setPendingQuality] = useState<{ score: number; issues: string[] } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const aiInputRef = useRef<HTMLTextAreaElement>(null);
@@ -164,6 +168,8 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const isReadyToShip = editedItem?.status === 'ready_to_ship';
   const hasBranch = !!editedItem?.branch;
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
+  const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
+  const [rescopeDismissed, setRescopeDismissed] = useState(false);
 
   useEffect(() => {
     if (item) {
@@ -173,6 +179,10 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       setShowAiInput(false);
       setAiComment('');
       setShowDiff(false);
+      setQualityWarning(null);
+      setShowSaveWarning(false);
+      setPendingQuality(null);
+      setRescopeDismissed(false);
     }
   }, [item]);
 
@@ -208,11 +218,39 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, editedItem]);
 
-  const handleSave = () => {
-    if (editedItem && editedItem.title.trim()) {
-      onSave(editedItem);
+  const handleSave = (forceIgnoreQuality = false) => {
+    if (!editedItem || !editedItem.title.trim()) {
+      onClose();
+      return;
     }
+
+    // Check quality before saving
+    const quality = validateTaskQuality(editedItem.title, editedItem.description || '');
+
+    // If low quality and not forcing, show warning
+    if (!forceIgnoreQuality && quality.score < QUALITY_THRESHOLD) {
+      setPendingQuality({ score: quality.score, issues: quality.issues });
+      setShowSaveWarning(true);
+      return;
+    }
+
+    // Save with quality scores attached
+    onSave({
+      ...editedItem,
+      qualityScore: quality.score,
+      qualityIssues: quality.issues,
+    });
     onClose();
+  };
+
+  const handleForceSave = () => {
+    setShowSaveWarning(false);
+    handleSave(true);
+  };
+
+  const handleCancelSave = () => {
+    setShowSaveWarning(false);
+    setPendingQuality(null);
   };
 
   const handleAddTag = (e: React.KeyboardEvent) => {
@@ -280,6 +318,16 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
         });
         setShowDiff(true);
         setAiComment('');
+
+        // Check for quality warnings
+        if (analysis.quality && !analysis.quality.isValid) {
+          setQualityWarning({
+            score: analysis.quality.score,
+            issues: analysis.quality.issues || [],
+          });
+        } else {
+          setQualityWarning(null);
+        }
       } else {
         console.error('AI analysis request failed:', response.status);
         setPreAiItem(null);
@@ -298,12 +346,77 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       setPreAiItem(null);
       setShowDiff(false);
       setIsPreviewMode(false);
+      setQualityWarning(null);
     }
   };
 
   const handleAcceptAiChanges = () => {
     setPreAiItem(null);
     setShowDiff(false);
+    // Keep quality warning visible after accepting so user can address issues
+  };
+
+  const handleRescope = async () => {
+    if (!editedItem?.title.trim()) return;
+
+    setIsAnalyzing(true);
+    setRescopeDismissed(true); // Hide the banner while processing
+    // Store current state before AI changes
+    setPreAiItem({ ...editedItem });
+
+    // Build a rescope-specific prompt based on quality issues
+    const qualityIssues = editedItem.qualityIssues || [];
+    const rescopePrompt = `Please improve this task definition to meet quality standards. Current issues: ${qualityIssues.join(', ')}. Add proper Description, Requirements, Technical Approach, and Success Criteria sections. Make it actionable and specific.`;
+
+    try {
+      const response = await fetch('/api/analyze-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editedItem.title.trim(),
+          description: editedItem.description?.trim() || '',
+          comments: rescopePrompt,
+        }),
+      });
+
+      if (response.ok) {
+        const analysis = await response.json();
+        setEditedItem({
+          ...editedItem,
+          priority: analysis.priority || editedItem.priority,
+          effort: analysis.effort || editedItem.effort,
+          value: analysis.value || editedItem.value,
+          category: analysis.category || editedItem.category,
+          description: (typeof analysis.enhancedDescription === 'string' && analysis.enhancedDescription.trim())
+            ? analysis.enhancedDescription
+            : editedItem.description,
+          // Update quality scores from the new analysis
+          qualityScore: analysis.quality?.score,
+          qualityIssues: analysis.quality?.issues,
+        });
+        setShowDiff(true);
+
+        // Check for quality warnings
+        if (analysis.quality && !analysis.quality.isValid) {
+          setQualityWarning({
+            score: analysis.quality.score,
+            issues: analysis.quality.issues || [],
+          });
+        } else {
+          setQualityWarning(null);
+        }
+      } else {
+        console.error('Rescope request failed:', response.status);
+        setPreAiItem(null);
+        setRescopeDismissed(false); // Show banner again on failure
+      }
+    } catch (error) {
+      console.error('Rescope failed:', error);
+      setPreAiItem(null);
+      setRescopeDismissed(false); // Show banner again on failure
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleShip = async () => {
@@ -327,7 +440,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-fade-in"
-        onClick={handleSave}
+        onClick={() => handleSave()}
       />
 
       {/* Panel */}
@@ -345,10 +458,10 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm('Delete this task?')) {
-                  onDelete(editedItem.id);
-                  onClose();
+                  await onDelete(editedItem.id);
+                  // onDelete handler closes the panel
                 }
               }}
               className="p-2 rounded-lg text-surface-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -359,7 +472,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               </svg>
             </button>
             <button
-              onClick={handleSave}
+              onClick={() => handleSave()}
               className="p-2 rounded-lg text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition-colors"
               title="Close"
             >
@@ -372,6 +485,77 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Rescope Banner for Low Quality Tasks */}
+          {isLowQuality && !rescopeDismissed && !isAnalyzing && !showDiff && (
+            <div className="relative overflow-hidden rounded-xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-orange-500/10 to-red-500/10">
+              {/* Animated background pulse */}
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-orange-500/5 animate-pulse" />
+
+              <div className="relative p-4">
+                <div className="flex items-start gap-3">
+                  {/* Warning icon */}
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-sm font-semibold text-red-300">Needs Rescoping</h3>
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-500/30 text-red-300">
+                        Score: {editedItem.qualityScore}/100
+                      </span>
+                    </div>
+                    <p className="text-xs text-surface-400 mb-3">
+                      This task doesn&apos;t have enough detail to be actionable. Let AI help define proper requirements.
+                    </p>
+
+                    {/* Quality Issues */}
+                    {editedItem.qualityIssues && editedItem.qualityIssues.length > 0 && (
+                      <ul className="text-xs text-surface-500 space-y-0.5 mb-3">
+                        {editedItem.qualityIssues.map((issue, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-red-400/60">•</span>
+                            {issue}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleRescope}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg transition-all shadow-lg hover:shadow-purple-500/25"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Rescope with AI
+                      </button>
+                      <button
+                        onClick={() => setRescopeDismissed(true)}
+                        className="px-3 py-2 text-xs font-medium text-surface-400 hover:text-surface-200 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Close button */}
+                  <button
+                    onClick={() => setRescopeDismissed(true)}
+                    className="flex-shrink-0 p-1 text-surface-500 hover:text-surface-300 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Title */}
           <div>
             <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
@@ -497,6 +681,33 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                         </>
                       )}
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quality Warning */}
+            {qualityWarning && (
+              <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-300">
+                      Low Quality Description (Score: {qualityWarning.score}/100)
+                    </p>
+                    <p className="text-xs text-yellow-300/70 mt-1">
+                      Consider improving to avoid rescope issues later:
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {qualityWarning.issues.map((issue, idx) => (
+                        <li key={idx} className="text-xs text-yellow-300/80 flex items-start gap-1">
+                          <span>•</span>
+                          {issue}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -785,13 +996,66 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           )}
 
           <button
-            onClick={handleSave}
+            onClick={() => handleSave()}
             className="w-full bg-accent hover:bg-accent-hover text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber"
           >
             Save Changes
           </button>
         </div>
       </div>
+
+      {/* Low Quality Save Warning Modal */}
+      {showSaveWarning && pendingQuality && (
+        <>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]" onClick={handleCancelSave} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-surface-900 border border-surface-700 rounded-xl shadow-2xl z-[60] p-6">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-surface-100 mb-1">Low Quality Task</h3>
+                <p className="text-sm text-surface-400">
+                  This task scores {pendingQuality.score}/100 and may need rescoping later.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-surface-800 rounded-lg p-3 mb-4">
+              <p className="text-xs font-medium text-surface-400 mb-2">Issues found:</p>
+              <ul className="space-y-1">
+                {pendingQuality.issues.map((issue, idx) => (
+                  <li key={idx} className="text-sm text-surface-300 flex items-start gap-2">
+                    <span className="text-red-400">•</span>
+                    {issue}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelSave}
+                className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors"
+              >
+                Go Back & Fix
+              </button>
+              <button
+                onClick={handleForceSave}
+                className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
+              >
+                Save Anyway
+              </button>
+            </div>
+
+            <p className="text-xs text-surface-500 mt-3 text-center">
+              Tip: Use AI Assist to improve task quality
+            </p>
+          </div>
+        </>
+      )}
     </>
   );
 }

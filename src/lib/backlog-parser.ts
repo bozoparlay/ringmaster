@@ -101,11 +101,12 @@ function isActualTask(title: string, content: string): boolean {
   // 1. It has **Priority**: metadata (required for real tasks)
   // 2. It's NOT just a section header with a blockquote description
 
-  const hasPriorityMeta = /\*\*Priority\*\*:\s*\w+\s*\|/.test(content);
+  // Check for priority metadata - with or without trailing pipe (for multi-field format)
+  const hasPriorityMeta = /\*\*Priority\*\*:\s*\w+/i.test(content);
   const isBlockquoteSection = /^\s*>\s*[A-Z]/.test(content.trim());
   const startsWithEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}✅🚨🐛🎯💡🔧🏗️📊🎨🔐📱🎮🌟]/u.test(title);
 
-  // If it has effort/value metadata, it's definitely a task
+  // If it has priority metadata, it's a task (even minimal ones)
   if (hasPriorityMeta) {
     return true;
   }
@@ -228,7 +229,9 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       .replace(/\*\*Branch\*\*:\s*[^\n]+/i, '') // Remove branch line
       .replace(/\*\*Worktree\*\*:\s*[^\n]+/i, '') // Remove worktree line
       .replace(/>\s*\*\*Review Feedback\*\*:\s*\n((?:>\s*.+\n?)+)/i, '') // Remove review feedback
+      .replace(/^-{3,}\s*$/gm, '') // Remove markdown horizontal rules (---)
       .replace(/^\s*\n/, '') // Remove leading newline
+      .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
       .trim();
 
     // Determine the category for this task

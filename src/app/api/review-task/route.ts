@@ -21,10 +21,20 @@ interface ReviewIssue {
   message: string;
 }
 
+interface ScopeAnalysis {
+  aligned: boolean;
+  needsRescope: boolean;
+  completeness: 'complete' | 'partial' | 'minimal';
+  missingRequirements: string[];
+  scopeCreep: string[];
+  reason?: string;
+}
+
 interface ReviewResult {
   passed: boolean;
   summary: string;
   issues: ReviewIssue[];
+  scope?: ScopeAnalysis;
 }
 
 /**
@@ -47,8 +57,10 @@ The changes are on branch "${branch}" compared to "${baseBranch}".
 
 Instructions:
 1. Run: git diff ${baseBranch}...${branch}
-2. Review the diff for issues - read relevant files if you need more context
-3. Return your review as JSON
+2. Review the diff for code quality issues - read relevant files if you need more context
+3. IMPORTANT: Compare the implementation against the task requirements in the description
+4. Check if the implementation scope matches what was requested
+5. Return your review as JSON
 
 Return ONLY this JSON structure (no markdown, no explanation):
 {
@@ -61,16 +73,39 @@ Return ONLY this JSON structure (no markdown, no explanation):
       "line": 42,
       "message": "Description of the issue"
     }
-  ]
+  ],
+  "scope": {
+    "aligned": boolean,
+    "needsRescope": boolean,
+    "completeness": "complete" | "partial" | "minimal",
+    "missingRequirements": ["requirement that was not implemented"],
+    "scopeCreep": ["extra work done that was not in requirements"],
+    "reason": "explanation if needsRescope is true"
+  }
 }
 
-Severity guidelines:
+Issue Severity guidelines:
 - critical: Security vulnerabilities, data loss risks, crashes
 - major: Logic errors, missing error handling, broken functionality
 - minor: Code style, naming, small improvements
 - suggestion: Optional enhancements
 
-Only set "passed": false for critical or major issues.
+Scope Analysis guidelines:
+- aligned: true if implementation reasonably addresses the task description
+- needsRescope: true ONLY if there's a significant mismatch between task and implementation
+  - Set true if: task fundamentally changed, wrong problem was solved, critical requirements completely missing
+  - Set false for: minor missing features, small scope additions, normal iteration
+- completeness: "complete" if all requirements met, "partial" if most done, "minimal" if just started
+- missingRequirements: list specific requirements from description that aren't implemented
+- scopeCreep: list significant work done that wasn't in the original requirements
+
+IMPORTANT for "needsRescope":
+- Default to FALSE unless there's clear evidence of fundamental scope mismatch
+- Partial implementations should NOT trigger rescope - they're normal in iterative development
+- Extra features (scope creep) alone should NOT trigger rescope unless they dominate the changes
+- Only set true when the task definition itself needs to be revised
+
+Only set "passed": false for critical or major code quality issues.
 Focus on real bugs and issues, not style preferences.`;
 
   return new Promise((resolve, reject) => {
@@ -227,6 +262,7 @@ export async function POST(request: Request) {
     }
 
     // Run the review with Claude Code
+    const startTime = Date.now();
     const result = await reviewWithClaudeCode(
       workDir,
       targetBranch,
@@ -234,6 +270,31 @@ export async function POST(request: Request) {
       title,
       description || ''
     );
+    const duration = Date.now() - startTime;
+
+    // Log pipeline metrics for monitoring
+    const metrics = {
+      taskId,
+      branch: targetBranch,
+      duration,
+      passed: result.passed,
+      issueCount: result.issues.length,
+      criticalIssues: result.issues.filter(i => i.severity === 'critical').length,
+      majorIssues: result.issues.filter(i => i.severity === 'major').length,
+      scope: result.scope ? {
+        aligned: result.scope.aligned,
+        needsRescope: result.scope.needsRescope,
+        completeness: result.scope.completeness,
+        missingCount: result.scope.missingRequirements.length,
+        scopeCreepCount: result.scope.scopeCreep.length,
+      } : null,
+    };
+    console.log('[review-task] Review completed:', JSON.stringify(metrics));
+
+    // Log warning if rescope is flagged
+    if (result.scope?.needsRescope) {
+      console.warn(`[review-task] RESCOPE FLAGGED for task "${title.slice(0, 50)}": ${result.scope.reason || 'No reason provided'}`);
+    }
 
     return NextResponse.json({
       success: true,
@@ -241,6 +302,10 @@ export async function POST(request: Request) {
       branch: targetBranch,
       baseBranch: defaultBranch,
       reviewedBy: 'claude-code',
+      metrics: {
+        duration,
+        timestamp: new Date().toISOString(),
+      },
     });
   } catch (error) {
     console.error('Review task error:', error);

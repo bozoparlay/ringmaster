@@ -23,6 +23,15 @@ import { TackleModal } from './TackleModal';
 import { ReviewModal } from './ReviewModal';
 import { Toast, ToastType } from './Toast';
 
+interface ScopeAnalysis {
+  aligned: boolean;
+  needsRescope: boolean;
+  completeness: 'complete' | 'partial' | 'minimal';
+  missingRequirements: string[];
+  scopeCreep: string[];
+  reason?: string;
+}
+
 interface ReviewResult {
   passed: boolean;
   summary: string;
@@ -32,6 +41,24 @@ interface ReviewResult {
     line?: number;
     message: string;
   }>;
+  scope?: ScopeAnalysis;
+}
+
+// Priority levels in order from highest to lowest
+const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
+
+function downgradePriority(current: Priority): Priority {
+  const index = PRIORITY_ORDER.indexOf(current);
+  // If already at lowest, stay there
+  if (index >= PRIORITY_ORDER.length - 1) return current;
+  return PRIORITY_ORDER[index + 1];
+}
+
+function upgradePriority(current: Priority): Priority {
+  const index = PRIORITY_ORDER.indexOf(current);
+  // If already at highest, stay there
+  if (index <= 0) return current;
+  return PRIORITY_ORDER[index - 1];
 }
 
 interface KanbanBoardProps {
@@ -122,10 +149,30 @@ export function KanbanBoard({
 
   const handleReviewRetry = async () => {
     if (!reviewItem) return;
-    // Store feedback if review failed
-    const feedback = reviewResult && !reviewResult.passed
-      ? reviewResult.summary
-      : undefined;
+
+    // Build comprehensive feedback from review result
+    let feedbackParts: string[] = [];
+
+    if (reviewResult) {
+      // Add summary if review failed
+      if (!reviewResult.passed) {
+        feedbackParts.push(reviewResult.summary);
+      }
+
+      // Add scope analysis feedback
+      if (reviewResult.scope) {
+        if (reviewResult.scope.needsRescope && reviewResult.scope.reason) {
+          feedbackParts.push(`Rescope needed: ${reviewResult.scope.reason}`);
+        }
+
+        if (reviewResult.scope.missingRequirements.length > 0) {
+          feedbackParts.push(`Missing: ${reviewResult.scope.missingRequirements.join(', ')}`);
+        }
+      }
+    }
+
+    const feedback = feedbackParts.length > 0 ? feedbackParts.join(' | ') : undefined;
+
     // Move back to in_progress with feedback
     await onUpdateItem({
       ...reviewItem,
@@ -134,7 +181,11 @@ export function KanbanBoard({
     });
     setIsReviewOpen(false);
     setReviewItem(null);
-    if (feedback) {
+
+    // Show appropriate toast message
+    if (reviewResult?.scope?.needsRescope) {
+      showToast('Task returned to In Progress - review the scope requirements', 'info');
+    } else if (feedback) {
       showToast('Task returned to In Progress with review feedback', 'info');
     }
   };
@@ -247,6 +298,31 @@ export function KanbanBoard({
 
     // If dropped on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
+      // Check if item is being moved FROM up_next TO backlog (deprioritizing)
+      const isInUpNext = columnItems.up_next.some(i => i.id === activeItem.id);
+      const isInBacklog = columnItems.backlog.some(i => i.id === activeItem.id);
+
+      if (isInUpNext && overId === 'backlog') {
+        // Downgrade priority one level
+        const newPriority = downgradePriority(activeItem.priority);
+        onUpdateItem({ ...activeItem, priority: newPriority });
+        return;
+      }
+
+      // Check if item is being moved FROM backlog TO up_next (prioritizing)
+      if (isInBacklog && overId === 'up_next') {
+        // Upgrade priority one level (or to 'medium' minimum to qualify for up_next)
+        let newPriority = upgradePriority(activeItem.priority);
+        // Ensure it qualifies for up_next (at least medium)
+        const priorityIndex = PRIORITY_ORDER.indexOf(newPriority);
+        const mediumIndex = PRIORITY_ORDER.indexOf('medium');
+        if (priorityIndex > mediumIndex) {
+          newPriority = 'medium';
+        }
+        onUpdateItem({ ...activeItem, priority: newPriority });
+        return;
+      }
+
       // up_next is virtual - treat drops there as backlog
       const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
       if (activeItem.status !== targetStatus) {
@@ -278,6 +354,25 @@ export function KanbanBoard({
 
       // If dropped on item in a different visual column, move to that column
       if (targetVisualColumn && activeVisualColumn !== targetVisualColumn) {
+        // Check if moving FROM up_next TO backlog (deprioritizing)
+        if (activeVisualColumn === 'up_next' && targetVisualColumn === 'backlog') {
+          const newPriority = downgradePriority(activeItem.priority);
+          onUpdateItem({ ...activeItem, priority: newPriority });
+          return;
+        }
+
+        // Check if moving FROM backlog TO up_next (prioritizing)
+        if (activeVisualColumn === 'backlog' && targetVisualColumn === 'up_next') {
+          let newPriority = upgradePriority(activeItem.priority);
+          const priorityIndex = PRIORITY_ORDER.indexOf(newPriority);
+          const mediumIndex = PRIORITY_ORDER.indexOf('medium');
+          if (priorityIndex > mediumIndex) {
+            newPriority = 'medium';
+          }
+          onUpdateItem({ ...activeItem, priority: newPriority });
+          return;
+        }
+
         // up_next is virtual - treat as backlog
         const actualStatus = targetVisualColumn === 'up_next' ? 'backlog' : targetVisualColumn;
         // Intercept moves to review column - trigger code review

@@ -3,6 +3,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { BacklogItem, Priority } from '@/types/backlog';
+import { QUALITY_THRESHOLD } from '@/lib/task-quality';
 
 interface TaskCardProps {
   item: BacklogItem;
@@ -35,6 +36,7 @@ export function TaskCard({ item, onClick, isDragging }: TaskCardProps) {
 
   const priority = priorityConfig[item.priority];
   const dragging = isDragging || isSortableDragging;
+  const isLowQuality = item.qualityScore !== undefined && item.qualityScore < QUALITY_THRESHOLD;
 
   return (
     <div
@@ -59,6 +61,18 @@ export function TaskCard({ item, onClick, isDragging }: TaskCardProps) {
       <div
         className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priority.dot} opacity-60`}
       />
+
+      {/* Low quality warning indicator */}
+      {isLowQuality && (
+        <div
+          className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-lg border-2 border-surface-850 z-10"
+          title={`Low quality (${item.qualityScore}/100): ${item.qualityIssues?.join(', ')}`}
+        >
+          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01" />
+          </svg>
+        </div>
+      )}
 
       {/* Content */}
       <div className="pl-2.5">

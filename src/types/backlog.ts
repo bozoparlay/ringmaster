@@ -23,6 +23,9 @@ export interface BacklogItem {
   branch?: string;           // Git branch name (e.g., "task/abc12345-feature-name")
   worktreePath?: string;     // Path to git worktree (e.g., ".tasks/task-abc12345")
   reviewFeedback?: string;   // Feedback from code review if it failed
+  // Quality tracking (computed on load, not persisted)
+  qualityScore?: number;     // 0-100 quality score
+  qualityIssues?: string[];  // List of quality issues found
 }
 
 export interface Column {

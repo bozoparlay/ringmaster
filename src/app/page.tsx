@@ -1,12 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header, KanbanBoard, NewTaskModal } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
+
+const LAST_PATH_KEY = 'ringmaster-last-path';
+
+function getLastPath(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return localStorage.getItem(LAST_PATH_KEY) || undefined;
+}
+
+function setLastPath(path: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAST_PATH_KEY, path);
+}
 
 export default function Home() {
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
+
+  // Load last path from localStorage on mount
+  useEffect(() => {
+    const savedPath = getLastPath();
+    if (savedPath) {
+      setBacklogPath(savedPath);
+    }
+  }, []);
 
   const {
     items,
@@ -19,7 +40,12 @@ export default function Home() {
     deleteItem,
     reorderItems,
     refresh,
-  } = useBacklog();
+  } = useBacklog({ path: backlogPath });
+
+  const handleChangePath = (newPath: string) => {
+    setBacklogPath(newPath);
+    setLastPath(newPath);
+  };
 
   const handleNewTask = async (task: { title: string; description: string; priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday'; effort?: 'low' | 'medium' | 'high' | 'very_high'; value?: 'low' | 'medium' | 'high'; category?: string }) => {
     await addItem(task.title, task.description, task.priority, task.effort, task.value, task.category);
@@ -34,6 +60,7 @@ export default function Home() {
         fileExists={fileExists}
         onNewTask={() => setIsNewTaskOpen(true)}
         onRefresh={refresh}
+        onChangePath={handleChangePath}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />

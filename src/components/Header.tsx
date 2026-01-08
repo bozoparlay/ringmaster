@@ -1,15 +1,71 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
+
 interface HeaderProps {
   filePath: string | null;
   fileExists: boolean;
   onNewTask: () => void;
   onRefresh: () => void;
+  onChangePath: (path: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
 }
 
-export function Header({ filePath, fileExists, onNewTask, onRefresh, searchQuery, onSearchChange }: HeaderProps) {
+const RECENT_PATHS_KEY = 'ringmaster-recent-paths';
+const MAX_RECENT_PATHS = 5;
+
+function getRecentPaths(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_PATHS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function addRecentPath(path: string): void {
+  if (typeof window === 'undefined') return;
+  const recent = getRecentPaths().filter(p => p !== path);
+  recent.unshift(path);
+  localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT_PATHS)));
+}
+
+export function Header({ filePath, fileExists, onNewTask, onRefresh, onChangePath, searchQuery, onSearchChange }: HeaderProps) {
+  const [showPathPicker, setShowPathPicker] = useState(false);
+  const [pathInput, setPathInput] = useState('');
+  const [recentPaths, setRecentPaths] = useState<string[]>([]);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setRecentPaths(getRecentPaths());
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowPathPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectPath = (path: string) => {
+    addRecentPath(path);
+    setRecentPaths(getRecentPaths());
+    onChangePath(path);
+    setShowPathPicker(false);
+    setPathInput('');
+  };
+
+  const handleSubmitPath = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pathInput.trim()) {
+      handleSelectPath(pathInput.trim());
+    }
+  };
+
   return (
     <header className="relative z-10 border-b border-surface-800/50 bg-surface-950/80 backdrop-blur-xl">
       <div className="flex items-center justify-between px-6 py-4">
@@ -34,21 +90,87 @@ export function Header({ filePath, fileExists, onNewTask, onRefresh, searchQuery
           </div>
         </div>
 
-        {/* File Status */}
-        <div className="hidden md:flex items-center gap-3 px-4 py-2 rounded-lg bg-surface-900/50 border border-surface-800">
-          <div className={`w-2 h-2 rounded-full ${fileExists ? 'bg-green-500' : 'bg-yellow-500'}`} />
-          <span className="text-xs text-surface-400 font-mono truncate max-w-[300px]">
-            {filePath || 'No file loaded'}
-          </span>
+        {/* File Status with Picker */}
+        <div className="hidden md:block relative" ref={dropdownRef}>
           <button
-            onClick={onRefresh}
-            className="p-1 text-surface-500 hover:text-surface-300 transition-colors"
-            title="Refresh"
+            onClick={() => setShowPathPicker(!showPathPicker)}
+            className="flex items-center gap-3 px-4 py-2 rounded-lg bg-surface-900/50 border border-surface-800 hover:border-surface-700 transition-colors"
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <div className={`w-2 h-2 rounded-full ${fileExists ? 'bg-green-500' : 'bg-yellow-500'}`} />
+            <span className="text-xs text-surface-400 font-mono truncate max-w-[250px]">
+              {filePath ? filePath.split('/').slice(-2).join('/') : 'No file loaded'}
+            </span>
+            <svg className={`w-3 h-3 text-surface-500 transition-transform ${showPathPicker ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
+
+          {/* Path Picker Dropdown */}
+          {showPathPicker && (
+            <div className="absolute top-full mt-2 left-0 w-96 bg-surface-900 border border-surface-700 rounded-xl shadow-2xl overflow-hidden z-50">
+              {/* Path Input */}
+              <form onSubmit={handleSubmitPath} className="p-3 border-b border-surface-800">
+                <label className="text-xs text-surface-500 mb-1.5 block">Enter BACKLOG.md path:</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={pathInput}
+                    onChange={(e) => setPathInput(e.target.value)}
+                    placeholder="/path/to/BACKLOG.md"
+                    className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-accent/50"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-2 bg-accent hover:bg-accent-hover text-surface-900 font-medium text-sm rounded-lg transition-colors"
+                  >
+                    Open
+                  </button>
+                </div>
+              </form>
+
+              {/* Recent Paths */}
+              {recentPaths.length > 0 && (
+                <div className="p-2">
+                  <p className="text-xs text-surface-500 px-2 py-1">Recent:</p>
+                  {recentPaths.map((path, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSelectPath(path)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-mono truncate transition-colors ${
+                        path === filePath
+                          ? 'bg-accent/10 text-accent'
+                          : 'text-surface-300 hover:bg-surface-800'
+                      }`}
+                    >
+                      {path}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Current Path */}
+              {filePath && (
+                <div className="p-3 border-t border-surface-800 bg-surface-800/50">
+                  <p className="text-xs text-surface-500 mb-1">Current:</p>
+                  <p className="text-xs text-surface-300 font-mono break-all">{filePath}</p>
+                </div>
+              )}
+
+              {/* Refresh Button */}
+              <div className="p-2 border-t border-surface-800">
+                <button
+                  onClick={() => { onRefresh(); setShowPathPicker(false); }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh Current File
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}

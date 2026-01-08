@@ -9,10 +9,20 @@ interface ReviewIssue {
   message: string;
 }
 
+interface ScopeAnalysis {
+  aligned: boolean;
+  needsRescope: boolean;
+  completeness: 'complete' | 'partial' | 'minimal';
+  missingRequirements: string[];
+  scopeCreep: string[];
+  reason?: string;
+}
+
 interface ReviewResult {
   passed: boolean;
   summary: string;
   issues: ReviewIssue[];
+  scope?: ScopeAnalysis;
 }
 
 interface ReviewModalProps {
@@ -38,6 +48,18 @@ const severityLabels = {
   major: 'Major',
   minor: 'Minor',
   suggestion: 'Suggestion',
+};
+
+const completenessStyles = {
+  complete: 'bg-green-500/20 text-green-400 border-green-500/30',
+  partial: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  minimal: 'bg-red-500/20 text-red-400 border-red-500/30',
+};
+
+const completenessLabels = {
+  complete: 'Complete',
+  partial: 'Partial',
+  minimal: 'Minimal',
 };
 
 export function ReviewModal({
@@ -186,6 +208,86 @@ export function ReviewModal({
               {result.issues.length === 0 && result.passed && (
                 <div className="text-center py-4">
                   <p className="text-surface-400">No issues found. Your code looks good!</p>
+                </div>
+              )}
+
+              {/* Scope Analysis */}
+              {result.scope && (
+                <div className="space-y-3 mt-4 pt-4 border-t border-surface-700">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-surface-300">Scope Analysis</h3>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${completenessStyles[result.scope.completeness]}`}>
+                        {completenessLabels[result.scope.completeness]}
+                      </span>
+                      {result.scope.needsRescope && (
+                        <span className="text-xs px-2 py-0.5 rounded font-medium bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                          Needs Rescope
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Rescope Warning */}
+                  {result.scope.needsRescope && (
+                    <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-purple-300">Task may need rescoping</p>
+                          {result.scope.reason && (
+                            <p className="text-xs text-purple-300/80 mt-1">{result.scope.reason}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Missing Requirements */}
+                  {result.scope.missingRequirements.length > 0 && (
+                    <div className="p-3 rounded-lg bg-surface-800 border border-surface-700">
+                      <p className="text-xs font-medium text-surface-400 mb-2">Missing Requirements</p>
+                      <ul className="space-y-1">
+                        {result.scope.missingRequirements.map((req, idx) => (
+                          <li key={idx} className="text-xs text-surface-300 flex items-start gap-2">
+                            <span className="text-red-400">✗</span>
+                            {req}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Scope Creep */}
+                  {result.scope.scopeCreep.length > 0 && (
+                    <div className="p-3 rounded-lg bg-surface-800 border border-surface-700">
+                      <p className="text-xs font-medium text-surface-400 mb-2">Scope Creep (Extra Work)</p>
+                      <ul className="space-y-1">
+                        {result.scope.scopeCreep.map((item, idx) => (
+                          <li key={idx} className="text-xs text-surface-300 flex items-start gap-2">
+                            <span className="text-yellow-400">+</span>
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* All Good */}
+                  {result.scope.aligned && !result.scope.needsRescope &&
+                   result.scope.missingRequirements.length === 0 &&
+                   result.scope.scopeCreep.length === 0 && (
+                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                      <p className="text-sm text-green-300 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Implementation aligns well with task requirements
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
