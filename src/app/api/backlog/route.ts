@@ -6,9 +6,9 @@ import { parseBacklogMd, serializeBacklogMd } from '@/lib/backlog-parser';
 import { validateTaskQuality } from '@/lib/task-quality';
 import type { BacklogItem } from '@/types/backlog';
 
-// Default path to BACKLOG.md - can be overridden via query param or env var
+// Default path to BACKLOG.md - can be overridden via query param or BACKLOG_PATH env var
 // When running from worktree (.tasks/task-xxx), go up two levels to find main BACKLOG.md
-const DEFAULT_BACKLOG_PATH = process.env.BACKLOG_PATH || '../../BACKLOG.md';
+const DEFAULT_BACKLOG_PATH = process.env.BACKLOG_PATH || './BACKLOG.md';
 
 function getBacklogPath(customPath?: string | null): string {
   if (customPath) {
@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
 
     const { items } = (await request.json()) as { items: BacklogItem[] };
 
+    console.log('Serializing items:', items.length, 'items');
+    console.log('Item statuses:', items.map(i => i.status));
+
     const content = serializeBacklogMd(items);
     await writeFile(backlogPath, content, 'utf-8');
 
@@ -83,8 +86,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error writing backlog:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { error: 'Failed to write backlog file' },
+      { error: 'Failed to write backlog file', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

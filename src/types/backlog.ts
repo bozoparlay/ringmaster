@@ -19,6 +19,9 @@ export interface BacklogItem {
   createdAt: string;
   updatedAt: string;
   order: number;
+  // Structured task fields
+  acceptanceCriteria?: string[];  // List of acceptance criteria (checkboxes)
+  notes?: string;                 // Additional context, links, technical notes
   // Git workflow fields
   branch?: string;           // Git branch name (e.g., "task/abc12345-feature-name")
   worktreePath?: string;     // Path to git worktree (e.g., ".tasks/task-abc12345")

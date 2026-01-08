@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Header, KanbanBoard, NewTaskModal } from '@/components';
+import { Header, KanbanBoard, NewTaskModal, CleanupWizard, ProjectSelector } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
 
 const LAST_PATH_KEY = 'ringmaster-last-path';
@@ -18,6 +18,8 @@ function setLastPath(path: string): void {
 
 export default function Home() {
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+  const [isCleanupOpen, setIsCleanupOpen] = useState(false);
+  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
 
@@ -61,6 +63,7 @@ export default function Home() {
         onNewTask={() => setIsNewTaskOpen(true)}
         onRefresh={refresh}
         onChangePath={handleChangePath}
+        onCleanup={() => setIsCleanupOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
@@ -91,6 +94,24 @@ export default function Home() {
         isOpen={isNewTaskOpen}
         onClose={() => setIsNewTaskOpen(false)}
         onSubmit={handleNewTask}
+        backlogPath={filePath ?? undefined}
+      />
+
+      {/* Cleanup Wizard */}
+      <CleanupWizard
+        isOpen={isCleanupOpen}
+        onClose={() => setIsCleanupOpen(false)}
+        items={items}
+        onUpdateItem={updateItem}
+        workDir={filePath ? filePath.replace(/\/[^/]+$/, '') : undefined}
+      />
+
+      {/* Project Selector */}
+      <ProjectSelector
+        isOpen={isProjectSelectorOpen}
+        onClose={() => setIsProjectSelectorOpen(false)}
+        currentPath={filePath}
+        onSelectPath={handleChangePath}
       />
     </main>
   );

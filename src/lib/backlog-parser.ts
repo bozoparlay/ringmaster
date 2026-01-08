@@ -222,7 +222,20 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       ? reviewFeedbackMatch[1].replace(/^>\s*/gm, '').trim()
       : undefined;
 
-    // Extract description - everything after the metadata line
+    // Extract acceptance criteria (checkboxes)
+    const acceptanceCriteriaMatch = taskContent.match(/\*\*Acceptance Criteria\*\*:\s*\n((?:- \[[ x]\].+\n?)+)/i);
+    const acceptanceCriteria = acceptanceCriteriaMatch
+      ? acceptanceCriteriaMatch[1]
+          .split('\n')
+          .map(line => line.replace(/^- \[[ x]\]\s*/, '').trim())
+          .filter(line => line.length > 0)
+      : undefined;
+
+    // Extract notes section
+    const notesMatch = taskContent.match(/\*\*Notes\*\*:\s*\n([\s\S]*?)(?=\n\*\*|\n---|\n###|$)/i);
+    const notes = notesMatch ? notesMatch[1].trim() : undefined;
+
+    // Extract description - everything after the metadata line, excluding structured sections
     let description = taskContent
       .replace(/\*\*Priority\*\*:\s*[^\n]+/i, '') // Remove priority line
       .replace(/\*\*Created\*\*:\s*[^\n]+/i, '') // Remove created line
@@ -230,6 +243,9 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       .replace(/\*\*Worktree\*\*:\s*[^\n]+/i, '') // Remove worktree line
       .replace(/>\s*\*\*Review Feedback\*\*:\s*\n((?:>\s*.+\n?)+)/i, '') // Remove review feedback
       .replace(/^-{3,}\s*$/gm, '') // Remove markdown horizontal rules (---)
+      .replace(/\*\*Acceptance Criteria\*\*:\s*\n((?:- \[[ x]\].+\n?)+)/i, '') // Remove acceptance criteria
+      .replace(/\*\*Notes\*\*:\s*\n[\s\S]*?(?=\n\*\*|\n---|\n###|$)/i, '') // Remove notes section
+      .replace(/\*\*Description\*\*:\s*/i, '') // Remove description label if present
       .replace(/^\s*\n/, '') // Remove leading newline
       .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
       .trim();
@@ -257,6 +273,9 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       createdAt: now,
       updatedAt: now,
       order: currentOrder++,
+      // Structured task fields
+      acceptanceCriteria,
+      notes,
       // Git workflow fields
       branch,
       worktreePath,
@@ -287,6 +306,7 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
 
   // Group by status first, then by category within each status
   const byStatus = new Map<string, Map<string, BacklogItem[]>>();
+  // Note: up_next is a virtual status, so we treat it as backlog for serialization
   const statusOrder = ['backlog', 'in_progress', 'review', 'ready_to_ship'];
 
   for (const status of statusOrder) {
@@ -295,7 +315,9 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
 
   for (const item of items) {
     const cat = item.category || 'Uncategorized';
-    const statusMap = byStatus.get(item.status) || byStatus.get('backlog')!;
+    // Normalize up_next status to backlog (up_next is virtual and computed at display time)
+    const normalizedStatus = item.status === 'up_next' ? 'backlog' : item.status;
+    const statusMap = byStatus.get(normalizedStatus) || byStatus.get('backlog')!;
     if (!statusMap.has(cat)) {
       statusMap.set(cat, []);
     }
@@ -352,8 +374,26 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
         }
         lines.push('');
 
+        // Write description section
         if (item.description) {
+          lines.push('**Description**:');
           lines.push(item.description);
+          lines.push('');
+        }
+
+        // Write acceptance criteria section
+        if (item.acceptanceCriteria && item.acceptanceCriteria.length > 0) {
+          lines.push('**Acceptance Criteria**:');
+          for (const criterion of item.acceptanceCriteria) {
+            lines.push(`- [ ] ${criterion}`);
+          }
+          lines.push('');
+        }
+
+        // Write notes section
+        if (item.notes) {
+          lines.push('**Notes**:');
+          lines.push(item.notes);
           lines.push('');
         }
 

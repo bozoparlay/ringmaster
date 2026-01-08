@@ -22,6 +22,7 @@ import { TaskPanel } from './TaskPanel';
 import { TackleModal } from './TackleModal';
 import { ReviewModal } from './ReviewModal';
 import { Toast, ToastType } from './Toast';
+import { taskNeedsCleanup } from '@/lib/task-validator';
 
 interface ScopeAnalysis {
   aligned: boolean;
@@ -88,6 +89,7 @@ export function KanbanBoard({
   const [isTackleOpen, setIsTackleOpen] = useState(false);
   const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
+  const [showRescopeColumn, setShowRescopeColumn] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   // Review modal state
@@ -273,6 +275,19 @@ export function KanbanBoard({
 
     return columns;
   }, [items, priorityFilter, searchQuery, isSearching]);
+
+  // Compute items that need rescoping (don't match the strict template)
+  const rescopeItems = useMemo(() => {
+    if (!showRescopeColumn) return [];
+    // Only show backlog items that need cleanup (not in_progress, etc.)
+    return items.filter(item =>
+      item.status === 'backlog' && taskNeedsCleanup(item)
+    ).sort((a, b) => {
+      const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.order - b.order;
+    });
+  }, [items, showRescopeColumn]);
 
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
@@ -525,20 +540,42 @@ export function KanbanBoard({
       {/* Toolbar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-surface-800/50">
         {/* Priority Filter */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-surface-500 uppercase tracking-wider">Filter:</span>
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value as Priority | 'all')}
-            className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-1.5 text-sm text-surface-200 focus:outline-none focus:border-accent/50 transition-colors"
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-surface-500 uppercase tracking-wider">Filter:</span>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value as Priority | 'all')}
+              className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-1.5 text-sm text-surface-200 focus:outline-none focus:border-accent/50 transition-colors"
+            >
+              <option value="all">All Priorities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="someday">Someday</option>
+            </select>
+          </div>
+
+          {/* Rescope Column Toggle */}
+          <button
+            onClick={() => setShowRescopeColumn(!showRescopeColumn)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              showRescopeColumn
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                : 'bg-surface-800 text-surface-400 border border-surface-700 hover:bg-surface-700'
+            }`}
           >
-            <option value="all">All Priorities</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-            <option value="someday">Someday</option>
-          </select>
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Needs Rescope
+            {rescopeItems.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-amber-500/30 rounded text-[10px]">
+                {rescopeItems.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Stats */}
@@ -565,6 +602,62 @@ export function KanbanBoard({
           onDragEnd={handleDragEnd}
         >
           <div className="flex gap-4 p-6 h-full w-full">
+            {/* Needs Rescope Column (special, not a workflow status) */}
+            {showRescopeColumn && rescopeItems.length > 0 && (
+              <div className="flex-shrink-0 w-72 flex flex-col bg-surface-900/30 rounded-xl border border-amber-500/20">
+                {/* Column Header */}
+                <div className="px-4 py-3 border-b border-amber-500/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <h3 className="font-medium text-amber-300 text-sm">Needs Rescope</h3>
+                    </div>
+                    <span className="text-xs font-mono text-amber-400/70 bg-amber-500/10 px-2 py-0.5 rounded">
+                      {rescopeItems.length}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-amber-400/50 mt-1">
+                    Tasks missing required fields
+                  </p>
+                </div>
+
+                {/* Column Content */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {rescopeItems.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => handleItemClick(item)}
+                      className="p-3 bg-surface-800/80 border border-amber-500/20 rounded-lg cursor-pointer hover:bg-surface-800 hover:border-amber-500/40 transition-colors group"
+                    >
+                      <h4 className="text-sm font-medium text-surface-200 line-clamp-2 group-hover:text-surface-100">
+                        {item.title}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          item.priority === 'critical' ? 'bg-red-500/20 text-red-300' :
+                          item.priority === 'high' ? 'bg-orange-500/20 text-orange-300' :
+                          item.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
+                          item.priority === 'low' ? 'bg-green-500/20 text-green-300' :
+                          'bg-surface-600/50 text-surface-400'
+                        }`}>
+                          {item.priority}
+                        </span>
+                        {!item.description && (
+                          <span className="text-[10px] text-amber-400/70">No description</span>
+                        )}
+                        {!item.acceptanceCriteria?.length && (
+                          <span className="text-[10px] text-amber-400/70">No criteria</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Regular Workflow Columns */}
             {COLUMN_ORDER.map((status) => (
               <KanbanColumn
                 key={status}

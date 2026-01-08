@@ -13,10 +13,19 @@ interface EnhancedTask {
   category?: string;
 }
 
+interface SimilarTask {
+  id: string;
+  title: string;
+  similarity: number;
+  recommendation: 'merge' | 'extend' | 'duplicate';
+  reason: string;
+}
+
 interface NewTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (task: EnhancedTask) => void;
+  backlogPath?: string;
 }
 
 const priorityOptions: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
@@ -31,7 +40,7 @@ const priorityColors: Record<Priority, string> = {
   someday: 'bg-surface-500',
 };
 
-export function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModalProps) {
+export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority | undefined>(undefined);
@@ -40,6 +49,9 @@ export function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModalProps) {
   const [category, setCategory] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [similarTasks, setSimilarTasks] = useState<SimilarTask[]>([]);
+  const [isCheckingSimilarity, setIsCheckingSimilarity] = useState(false);
+  const [showSimilarModal, setShowSimilarModal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -51,9 +63,44 @@ export function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModalProps) {
       setValue(undefined);
       setCategory('');
       setShowAdvanced(false);
+      setSimilarTasks([]);
+      setShowSimilarModal(false);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
+
+  const checkSimilarity = async (): Promise<boolean> => {
+    if (!backlogPath || !title.trim()) return true; // Proceed if no path or title
+
+    setIsCheckingSimilarity(true);
+    try {
+      const response = await fetch('/api/check-similarity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          category: category.trim() || undefined,
+          backlogPath,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.similar && result.similar.length > 0) {
+          setSimilarTasks(result.similar);
+          setShowSimilarModal(true);
+          return false; // Don't proceed, show modal
+        }
+      }
+      return true; // Proceed with task creation
+    } catch (error) {
+      console.error('Similarity check failed:', error);
+      return true; // Proceed on error
+    } finally {
+      setIsCheckingSimilarity(false);
+    }
+  };
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -97,20 +144,36 @@ export function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModalProps) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const submitTask = () => {
+    onSubmit({
+      title: title.trim(),
+      description: description.trim(),
+      priority: priority || 'medium',
+      effort,
+      value,
+      category: category.trim() || undefined,
+    });
+    setTitle('');
+    setDescription('');
+    setSimilarTasks([]);
+    setShowSimilarModal(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (title.trim()) {
-      onSubmit({
-        title: title.trim(),
-        description: description.trim(),
-        priority: priority || 'medium',
-        effort,
-        value,
-        category: category.trim() || undefined,
-      });
-      setTitle('');
-      setDescription('');
+    if (!title.trim()) return;
+
+    // Check for similar tasks first
+    const shouldProceed = await checkSimilarity();
+    if (shouldProceed) {
+      submitTask();
     }
+    // If not proceeding, the similar tasks modal will be shown
+  };
+
+  const handleForceSubmit = () => {
+    // User chose to add anyway despite similar tasks
+    submitTask();
   };
 
   if (!isOpen) return null;
@@ -318,15 +381,97 @@ export function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModalProps) {
               </button>
               <button
                 type="submit"
-                disabled={!title.trim()}
+                disabled={!title.trim() || isCheckingSimilarity}
                 className="flex-1 bg-accent hover:bg-accent-hover disabled:bg-surface-700 disabled:text-surface-500 text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber disabled:shadow-none"
               >
-                Add Task
+                {isCheckingSimilarity ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Checking...
+                  </span>
+                ) : 'Add Task'}
               </button>
             </div>
           </form>
         </div>
       </div>
+
+      {/* Similar Tasks Modal */}
+      {showSimilarModal && similarTasks.length > 0 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowSimilarModal(false)}
+          />
+          <div className="relative w-full max-w-md bg-surface-800 border border-surface-600 rounded-xl shadow-2xl animate-scale-in">
+            <div className="px-5 py-4 border-b border-surface-700">
+              <h3 className="font-display text-base text-surface-100 flex items-center gap-2">
+                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Similar Tasks Found
+              </h3>
+              <p className="text-sm text-surface-400 mt-1">
+                We found tasks that might be related to what you&apos;re adding.
+              </p>
+            </div>
+
+            <div className="p-4 space-y-3 max-h-[300px] overflow-y-auto">
+              {similarTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="p-3 bg-surface-900/50 border border-surface-700 rounded-lg"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="font-medium text-surface-200 text-sm">{task.title}</h4>
+                    <span className={`
+                      px-2 py-0.5 rounded text-xs font-medium shrink-0
+                      ${task.recommendation === 'duplicate' ? 'bg-red-500/20 text-red-300' :
+                        task.recommendation === 'merge' ? 'bg-amber-500/20 text-amber-300' :
+                        'bg-blue-500/20 text-blue-300'}
+                    `}>
+                      {task.recommendation === 'duplicate' ? 'Duplicate' :
+                       task.recommendation === 'merge' ? 'Consider Merging' :
+                       'Related'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-surface-400 mt-1.5">{task.reason}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex-1 bg-surface-700 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full ${
+                          task.similarity >= 0.8 ? 'bg-red-500' :
+                          task.similarity >= 0.6 ? 'bg-amber-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${task.similarity * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-surface-500">{Math.round(task.similarity * 100)}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-5 py-4 border-t border-surface-700 flex gap-3">
+              <button
+                onClick={() => setShowSimilarModal(false)}
+                className="flex-1 bg-surface-700 hover:bg-surface-600 text-surface-300 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleForceSubmit}
+                className="flex-1 bg-accent hover:bg-accent-hover text-surface-900 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+              >
+                Add Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

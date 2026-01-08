@@ -13,7 +13,11 @@
       "Bash(git branch:*)",
       "Bash(git fetch:*)",
       "mcp__plugin_playwright_playwright__browser_console_messages",
-      "mcp__plugin_playwright_playwright__browser_network_requests"
+      "mcp__plugin_playwright_playwright__browser_network_requests",
+      "Bash(git checkout:*)",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase:*)",
+      "Bash(grep:*)"
     ]
   }
 }

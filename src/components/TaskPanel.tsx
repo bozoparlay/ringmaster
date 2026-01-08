@@ -7,6 +7,7 @@ import { TextDiff } from './TextDiff';
 import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, STATUS_LABELS, COLUMN_ORDER, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
 import { validateTaskQuality, QUALITY_THRESHOLD } from '@/lib/task-quality';
+import { taskNeedsCleanup } from '@/lib/task-validator';
 
 interface TaskPanelProps {
   item: BacklogItem | null;
@@ -153,6 +154,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isShipping, setIsShipping] = useState(false);
+  const [isRescoping, setIsRescoping] = useState(false);
   const [preAiItem, setPreAiItem] = useState<BacklogItem | null>(null);
   const [showAiInput, setShowAiInput] = useState(false);
   const [aiComment, setAiComment] = useState('');
@@ -169,6 +171,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const hasBranch = !!editedItem?.branch;
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
   const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
+  const needsRescope = editedItem ? taskNeedsCleanup(editedItem) : false;
   const [rescopeDismissed, setRescopeDismissed] = useState(false);
 
   useEffect(() => {
@@ -433,6 +436,48 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     }
   };
 
+  const handleAiRescope = async () => {
+    if (!editedItem) return;
+
+    setIsRescoping(true);
+    setPreAiItem({ ...editedItem });
+
+    try {
+      const workDir = backlogPath ? backlogPath.replace(/\/[^/]+$/, '') : undefined;
+      const response = await fetch('/api/suggest-cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: editedItem, workDir }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.suggestion) {
+          const suggestion = result.suggestion;
+          setEditedItem({
+            ...editedItem,
+            title: suggestion.title || editedItem.title,
+            description: suggestion.description || editedItem.description,
+            acceptanceCriteria: suggestion.acceptanceCriteria || editedItem.acceptanceCriteria,
+            notes: suggestion.notes || editedItem.notes,
+            priority: (suggestion.priority as Priority) || editedItem.priority,
+            effort: (suggestion.effort as Effort) || editedItem.effort,
+            value: (suggestion.value as Value) || editedItem.value,
+          });
+          setShowDiff(true);
+        }
+      } else {
+        console.error('AI Rescope failed:', response.status);
+        setPreAiItem(null);
+      }
+    } catch (error) {
+      console.error('AI Rescope error:', error);
+      setPreAiItem(null);
+    } finally {
+      setIsRescoping(false);
+    }
+  };
+
   if (!isOpen || !editedItem) return null;
 
   return (
@@ -485,8 +530,19 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Rescope Banner for Low Quality Tasks */}
-          {isLowQuality && !rescopeDismissed && !isAnalyzing && !showDiff && (
+          {/* AI Rescope Loading State */}
+          {isRescoping && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-amber-300">AI Rescoping Task...</h4>
+                <span className="text-xs text-surface-500">This may take up to a minute</span>
+              </div>
+              <AiLoadingState />
+            </div>
+          )}
+
+          {/* Rescope Banner for Low Quality Tasks (score-based) */}
+          {isLowQuality && !rescopeDismissed && !isAnalyzing && !showDiff && !isRescoping && (
             <div className="relative overflow-hidden rounded-xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-orange-500/10 to-red-500/10">
               {/* Animated background pulse */}
               <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-orange-500/5 animate-pulse" />
@@ -552,6 +608,36 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                     </svg>
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Needs Rescope Banner (structure-based - missing fields) */}
+          {needsRescope && !isLowQuality && !showDiff && !isRescoping && (
+            <div className="p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-lg">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-amber-300">Task Needs Rescoping</h4>
+                  <p className="text-xs text-amber-400/70 mt-0.5">
+                    Missing required fields: {!editedItem.description || editedItem.description.length < 20 ? 'description' : ''}
+                    {(!editedItem.description || editedItem.description.length < 20) && (!editedItem.acceptanceCriteria || editedItem.acceptanceCriteria.length === 0) ? ', ' : ''}
+                    {!editedItem.acceptanceCriteria || editedItem.acceptanceCriteria.length === 0 ? 'acceptance criteria' : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={handleAiRescope}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-medium rounded-lg transition-all shadow-lg hover:shadow-amber-500/20"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                  </svg>
+                  AI Rescope
+                </button>
               </div>
             </div>
           )}
