@@ -1,17 +1,21 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { BacklogItem, Priority, Status, PRIORITY_WEIGHT } from '@/types/backlog';
+import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
 
 /**
  * Parses a BACKLOG.md file into BacklogItem objects
  *
  * Expected format:
- * # Backlog
+ * ## [status] 🎯 Category Name
+ * **ID:** ...
+ * **Priority:** ...
+ * > Category description
  *
- * ## [status] Task Title
- * **Priority:** high
- * **Tags:** tag1, tag2
+ * ### Subcategory (optional)
  *
- * Description text here...
+ * #### Task Title
+ * **Priority**: High | **Effort**: Medium | **Value**: High
+ * **Description**: ...
+ * ... more content ...
  *
  * ---
  */
@@ -33,146 +37,305 @@ const PRIORITY_MAP: Record<string, Priority> = {
   'someday': 'someday',
 };
 
-export function parseBacklogMd(content: string): BacklogItem[] {
+const EFFORT_MAP: Record<string, Effort> = {
+  'low': 'low',
+  'medium': 'medium',
+  'high': 'high',
+  'very high': 'very_high',
+};
+
+const VALUE_MAP: Record<string, Value> = {
+  'low': 'low',
+  'medium': 'medium',
+  'high': 'high',
+};
+
+interface CategorySection {
+  name: string;
+  status: Status;
+  content: string;
+}
+
+function extractCategorySections(content: string): CategorySection[] {
+  const sections: CategorySection[] = [];
+
+  // Try two formats:
+  // 1. With status: ## [status] Name
+  // 2. Without status: ## Name (assumes backlog)
+  const categoryWithStatusRegex = /^## \[([^\]]+)\]\s*(.+)$/gm;
+  const matchesWithStatus = [...content.matchAll(categoryWithStatusRegex)];
+
+  if (matchesWithStatus.length > 0) {
+    // Format with status markers
+    for (let i = 0; i < matchesWithStatus.length; i++) {
+      const match = matchesWithStatus[i];
+      const statusRaw = match[1].toLowerCase();
+      const name = match[2].trim();
+      const status = STATUS_MAP[statusRaw] || 'backlog';
+
+      const startIndex = match.index! + match[0].length;
+      const endIndex = i < matchesWithStatus.length - 1 ? matchesWithStatus[i + 1].index! : content.length;
+      const sectionContent = content.slice(startIndex, endIndex);
+
+      sections.push({ name, status, content: sectionContent });
+    }
+  } else {
+    // Original format without status markers - treat entire file as one section
+    // Parse all content starting from first ## or ### header
+    const firstHeader = content.search(/^##?\s+/m);
+    if (firstHeader !== -1) {
+      sections.push({
+        name: 'Backlog',
+        status: 'backlog',
+        content: content.slice(firstHeader),
+      });
+    }
+  }
+
+  return sections;
+}
+
+function isActualTask(title: string, content: string): boolean {
+  // A header is an actual task if:
+  // 1. It has **Priority**: metadata (required for real tasks)
+  // 2. It's NOT just a section header with a blockquote description
+
+  const hasPriorityMeta = /\*\*Priority\*\*:\s*\w+\s*\|/.test(content);
+  const isBlockquoteSection = /^\s*>\s*[A-Z]/.test(content.trim());
+  const startsWithEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}✅🚨🐛🎯💡🔧🏗️📊🎨🔐📱🎮🌟]/u.test(title);
+
+  // If it has effort/value metadata, it's definitely a task
+  if (hasPriorityMeta) {
+    return true;
+  }
+
+  // If it starts with emoji and has only a blockquote, it's a section header
+  if (startsWithEmoji && isBlockquoteSection) {
+    return false;
+  }
+
+  // If it has substantial content (description, requirements, etc.), it's a task
+  const hasSubstantialContent = content.includes('**Description**:') ||
+                                 content.includes('**Requirements**:') ||
+                                 content.includes('**Current Issue**:') ||
+                                 content.includes('**Issue**:') ||
+                                 content.includes('**Solution**:') ||
+                                 content.includes('**Features**:') ||
+                                 content.length > 200;
+
+  return hasSubstantialContent;
+}
+
+function isSectionHeader(title: string, content: string): boolean {
+  // A section header typically:
+  // 1. Starts with an emoji
+  // 2. Has a blockquote description (> text) as its main content
+  // 3. Doesn't have substantial task content
+  const startsWithEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}✅🚨🐛🎯💡🔧🏗️📊🎨🔐📱🎮🌟]/u.test(title);
+  const hasOnlyBlockquote = /^\s*(\*\*Priority\*\*:\s*\w+\s*\n+)?>\s*.+$/m.test(content.trim());
+  const isShortContent = content.trim().length < 150;
+
+  return startsWithEmoji && (hasOnlyBlockquote || isShortContent);
+}
+
+function extractParentCategory(content: string, taskIndex: number, allMatches: RegExpMatchArray[]): string | undefined {
+  // Look backwards from this task to find its parent section header
+  // A section header is a ### that starts with emoji or is followed by a blockquote
+  for (let i = taskIndex - 1; i >= 0; i--) {
+    const prevMatch = allMatches[i];
+    const prevTitle = prevMatch[2].trim();
+
+    // Get the content of the previous header
+    const prevStartIndex = prevMatch.index! + prevMatch[0].length;
+    const prevEndIndex = i < allMatches.length - 1 ? allMatches[i + 1].index! : content.length;
+    const prevContent = content.slice(prevStartIndex, prevEndIndex);
+
+    // Check if this is a section header (not a task)
+    if (isSectionHeader(prevTitle, prevContent)) {
+      // Return the section name (cleaned of emoji)
+      return prevTitle.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}✅🚨🐛🎯💡🔧🏗️📊🎨🔐📱🎮🌟]+\s*/u, '').trim();
+    }
+
+    // Also check for non-emoji headers that act as categories (like "User Management")
+    // These have no substantial content - just a newline before the next header
+    const isEmptySection = prevContent.trim().length < 10 && !prevContent.includes('**');
+    if (isEmptySection && prevMatch[1].length === 3) {
+      return prevTitle;
+    }
+  }
+  return undefined;
+}
+
+function extractTasksFromCategory(category: CategorySection, order: number): { items: BacklogItem[], nextOrder: number } {
   const items: BacklogItem[] = [];
-  const sections = content.split(/^---+$/m).filter(s => s.trim());
+  let currentOrder = order;
 
-  let order = 0;
+  // Clean the category name (remove emoji prefix for tag)
+  const categoryTag = category.name.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}✅🚨🐛🎯💡🔧🏗️📊🎨🔐📱🎮🌟]+\s*/u, '').trim() || category.name;
 
-  for (const section of sections) {
-    const lines = section.trim().split('\n');
+  // Find all headers (### or ####)
+  const headerRegex = /^(#{3,4})\s+(.+)$/gm;
+  const allMatches = [...category.content.matchAll(headerRegex)];
 
-    // Look for ## [status] Title pattern
-    const headerMatch = lines.find(l => l.startsWith('## '));
-    if (!headerMatch) continue;
+  for (let i = 0; i < allMatches.length; i++) {
+    const match = allMatches[i];
+    const headerLevel = match[1].length;
+    const title = match[2].trim();
 
-    const titleMatch = headerMatch.match(/^## \[([^\]]+)\]\s*(.+)$/);
-    if (!titleMatch) {
-      // Try without status bracket
-      const simpleTitleMatch = headerMatch.match(/^## (.+)$/);
-      if (simpleTitleMatch) {
-        const item = parseSimpleSection(lines, simpleTitleMatch[1], order++);
-        if (item) items.push(item);
-      }
+    // Get content until next header or section end
+    const startIndex = match.index! + match[0].length;
+    const endIndex = i < allMatches.length - 1 ? allMatches[i + 1].index! : category.content.length;
+    const taskContent = category.content.slice(startIndex, endIndex);
+
+    // Check if this is an actual task vs a section header
+    if (!isActualTask(title, taskContent)) {
       continue;
     }
 
-    const [, statusRaw, title] = titleMatch;
-    const status = STATUS_MAP[statusRaw.toLowerCase()] || 'backlog';
+    // Parse metadata from inline format: **Priority**: High | **Effort**: Medium | **Value**: High
+    const metaMatch = taskContent.match(/\*\*Priority\*\*:\s*(\w+)(?:\s*\|\s*\*\*Effort\*\*:\s*([^|*\n]+))?(?:\s*\|\s*\*\*Value\*\*:\s*(\w+))?/i);
 
-    // Extract priority
-    const priorityLine = lines.find(l => l.toLowerCase().startsWith('**priority:**'));
-    const priorityMatch = priorityLine?.match(/\*\*priority:\*\*\s*(\w+)/i);
-    const priority: Priority = priorityMatch
-      ? (PRIORITY_MAP[priorityMatch[1].toLowerCase()] || 'medium')
-      : 'medium';
+    let priority: Priority = 'medium';
+    let effort: Effort | undefined;
+    let value: Value | undefined;
 
-    // Extract tags
-    const tagsLine = lines.find(l => l.toLowerCase().startsWith('**tags:**'));
-    const tagsMatch = tagsLine?.match(/\*\*tags:\*\*\s*(.+)/i);
-    const tags = tagsMatch
-      ? tagsMatch[1].split(',').map(t => t.trim()).filter(Boolean)
-      : [];
+    if (metaMatch) {
+      priority = PRIORITY_MAP[metaMatch[1].toLowerCase()] || 'medium';
+      if (metaMatch[2]) {
+        effort = EFFORT_MAP[metaMatch[2].trim().toLowerCase()];
+      }
+      if (metaMatch[3]) {
+        value = VALUE_MAP[metaMatch[3].toLowerCase()];
+      }
+    }
 
-    // Extract ID if present
-    const idLine = lines.find(l => l.toLowerCase().startsWith('**id:**'));
-    const idMatch = idLine?.match(/\*\*id:\*\*\s*(.+)/i);
-    const id = idMatch ? idMatch[1].trim() : uuidv4();
+    // Extract description - everything after the metadata line
+    let description = taskContent
+      .replace(/\*\*Priority\*\*:\s*[^\n]+/i, '') // Remove priority line
+      .replace(/\*\*Created\*\*:\s*[^\n]+/i, '') // Remove created line
+      .replace(/^\s*\n/, '') // Remove leading newline
+      .trim();
 
-    // Everything else is description
-    const descriptionLines = lines.filter(l =>
-      !l.startsWith('## ') &&
-      !l.toLowerCase().startsWith('**priority:**') &&
-      !l.toLowerCase().startsWith('**tags:**') &&
-      !l.toLowerCase().startsWith('**id:**') &&
-      !l.toLowerCase().startsWith('**created:**') &&
-      !l.toLowerCase().startsWith('**updated:**')
-    );
-    const description = descriptionLines.join('\n').trim();
+    // Determine the category for this task
+    // Look backward for the nearest section header (emoji header or empty category header)
+    let taskCategory = categoryTag;
+    const parentCat = extractParentCategory(category.content, i, allMatches);
+    if (parentCat) {
+      taskCategory = parentCat;
+    }
 
-    // Extract dates if present
-    const createdLine = lines.find(l => l.toLowerCase().startsWith('**created:**'));
-    const createdMatch = createdLine?.match(/\*\*created:\*\*\s*(.+)/i);
-    const createdAt = createdMatch ? createdMatch[1].trim() : new Date().toISOString();
-
-    const updatedLine = lines.find(l => l.toLowerCase().startsWith('**updated:**'));
-    const updatedMatch = updatedLine?.match(/\*\*updated:\*\*\s*(.+)/i);
-    const updatedAt = updatedMatch ? updatedMatch[1].trim() : new Date().toISOString();
+    const now = new Date().toISOString();
 
     items.push({
-      id,
-      title: title.trim(),
+      id: uuidv4(),
+      title,
       description,
       priority,
-      status,
-      tags,
-      createdAt,
-      updatedAt,
-      order: order++,
+      effort,
+      value,
+      status: category.status,
+      tags: taskCategory ? [taskCategory] : [],
+      category: taskCategory || undefined,
+      createdAt: now,
+      updatedAt: now,
+      order: currentOrder++,
     });
   }
 
-  return items;
+  return { items, nextOrder: currentOrder };
 }
 
-function parseSimpleSection(lines: string[], title: string, order: number): BacklogItem | null {
-  const description = lines
-    .filter(l => !l.startsWith('## ') && !l.startsWith('# '))
-    .join('\n')
-    .trim();
+export function parseBacklogMd(content: string): BacklogItem[] {
+  const allItems: BacklogItem[] = [];
+  let order = 0;
 
-  if (!title.trim()) return null;
+  const categories = extractCategorySections(content);
 
-  return {
-    id: uuidv4(),
-    title: title.trim(),
-    description,
-    priority: 'medium',
-    status: 'backlog',
-    tags: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    order,
-  };
+  for (const category of categories) {
+    const { items, nextOrder } = extractTasksFromCategory(category, order);
+    allItems.push(...items);
+    order = nextOrder;
+  }
+
+  return allItems;
 }
 
 export function serializeBacklogMd(items: BacklogItem[]): string {
   const lines: string[] = ['# Backlog\n'];
 
-  // Sort by status, then priority, then order
-  const sorted = [...items].sort((a, b) => {
-    const statusOrder = ['backlog', 'ready', 'in_progress', 'review', 'done'];
-    const statusDiff = statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status);
-    if (statusDiff !== 0) return statusDiff;
+  // Group by status first, then by category within each status
+  const byStatus = new Map<string, Map<string, BacklogItem[]>>();
+  const statusOrder = ['backlog', 'ready', 'in_progress', 'review', 'done'];
 
-    const priorityOrder = ['critical', 'high', 'medium', 'low', 'someday'];
-    const priorityDiff = priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority);
-    if (priorityDiff !== 0) return priorityDiff;
+  for (const status of statusOrder) {
+    byStatus.set(status, new Map());
+  }
 
-    return a.order - b.order;
-  });
-
-  for (const item of sorted) {
-    lines.push(`## [${item.status}] ${item.title}`);
-    lines.push(`**ID:** ${item.id}`);
-    lines.push(`**Priority:** ${item.priority}`);
-    if (item.tags.length > 0) {
-      lines.push(`**Tags:** ${item.tags.join(', ')}`);
+  for (const item of items) {
+    const cat = item.category || 'Uncategorized';
+    const statusMap = byStatus.get(item.status) || byStatus.get('backlog')!;
+    if (!statusMap.has(cat)) {
+      statusMap.set(cat, []);
     }
-    lines.push(`**Created:** ${item.createdAt}`);
-    lines.push(`**Updated:** ${item.updatedAt}`);
-    lines.push('');
-    if (item.description) {
-      lines.push(item.description);
+    statusMap.get(cat)!.push(item);
+  }
+
+  // Serialize each status section
+  for (const [status, categoryMap] of byStatus) {
+    if (categoryMap.size === 0) continue;
+
+    // Sort categories alphabetically, but put Uncategorized last
+    const sortedCategories = [...categoryMap.keys()].sort((a, b) => {
+      if (a === 'Uncategorized') return 1;
+      if (b === 'Uncategorized') return -1;
+      return a.localeCompare(b);
+    });
+
+    for (const category of sortedCategories) {
+      const categoryItems = categoryMap.get(category)!;
+      if (categoryItems.length === 0) continue;
+
+      // Sort items by priority weight, then order
+      const sorted = [...categoryItems].sort((a, b) => {
+        const priorityOrder = ['critical', 'high', 'medium', 'low', 'someday'];
+        const priorityDiff = priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority);
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.order - b.order;
+      });
+
+      // Write status + category header
+      lines.push(`## [${status}] ${category}`);
       lines.push('');
+
+      for (const item of sorted) {
+        lines.push(`### ${item.title}`);
+
+        // Write metadata line
+        const metaParts = [`**Priority**: ${item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}`];
+        if (item.effort) {
+          const effortLabel = item.effort === 'very_high' ? 'Very High' : item.effort.charAt(0).toUpperCase() + item.effort.slice(1);
+          metaParts.push(`**Effort**: ${effortLabel}`);
+        }
+        if (item.value) {
+          metaParts.push(`**Value**: ${item.value.charAt(0).toUpperCase() + item.value.slice(1)}`);
+        }
+        lines.push(metaParts.join(' | '));
+        lines.push('');
+
+        if (item.description) {
+          lines.push(item.description);
+          lines.push('');
+        }
+      }
+
+      lines.push('---\n');
     }
-    lines.push('---\n');
   }
 
   return lines.join('\n');
 }
 
-export function createNewItem(title: string, description: string = ''): BacklogItem {
+export function createNewItem(title: string, description: string = '', category?: string): BacklogItem {
   const now = new Date().toISOString();
   return {
     id: uuidv4(),
@@ -180,7 +343,8 @@ export function createNewItem(title: string, description: string = ''): BacklogI
     description,
     priority: 'medium',
     status: 'backlog',
-    tags: [],
+    tags: category ? [category] : [],
+    category,
     createdAt: now,
     updatedAt: now,
     order: Date.now(),

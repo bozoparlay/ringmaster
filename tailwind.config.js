@@ -46,6 +46,7 @@ module.exports = {
         'glow-amber-sm': '0 0 10px -3px rgba(245, 158, 11, 0.2)',
         'card': '0 2px 8px -2px rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2)',
         'card-hover': '0 8px 24px -4px rgba(0, 0, 0, 0.4), 0 2px 8px -2px rgba(0, 0, 0, 0.3)',
+        'card-dragging': '0 20px 40px -8px rgba(0, 0, 0, 0.5), 0 8px 16px -4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(245, 158, 11, 0.15), 0 0 30px -5px rgba(245, 158, 11, 0.2)',
         'panel': '-8px 0 32px -4px rgba(0, 0, 0, 0.5)',
       },
       animation: {
@@ -54,6 +55,15 @@ module.exports = {
         'fade-in': 'fadeIn 0.2s ease-out',
         'scale-in': 'scaleIn 0.15s ease-out',
         'spotlight': 'spotlight 3s ease-in-out infinite',
+        'card-lift': 'cardLift 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+        'card-drop': 'cardDrop 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards',
+        'ai-gradient': 'aiGradient 8s ease infinite',
+        'ai-pulse': 'aiPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'ai-orbit': 'aiOrbit 3s linear infinite',
+        'ai-orbit-reverse': 'aiOrbitReverse 4s linear infinite',
+        'ai-float': 'aiFloat 3s ease-in-out infinite',
+        'ai-shimmer': 'aiShimmer 2s linear infinite',
+        'ai-text-cycle': 'aiTextCycle 0.5s ease-in-out',
       },
       keyframes: {
         slideIn: {
@@ -76,8 +86,94 @@ module.exports = {
           '0%, 100%': { opacity: '0.5' },
           '50%': { opacity: '0.8' },
         },
+        cardLift: {
+          '0%': {
+            transform: 'scale(1) rotate(0deg)',
+            boxShadow: '0 2px 8px -2px rgba(0, 0, 0, 0.3)',
+          },
+          '50%': {
+            transform: 'scale(1.06) rotate(1.5deg)',
+          },
+          '100%': {
+            transform: 'scale(1.04) rotate(1deg)',
+            boxShadow: '0 20px 40px -8px rgba(0, 0, 0, 0.5), 0 8px 16px -4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(245, 158, 11, 0.15), 0 0 30px -5px rgba(245, 158, 11, 0.2)',
+          },
+        },
+        cardDrop: {
+          '0%': {
+            transform: 'scale(1.04) rotate(1deg)',
+          },
+          '60%': {
+            transform: 'scale(0.98) rotate(-0.5deg)',
+          },
+          '100%': {
+            transform: 'scale(1) rotate(0deg)',
+          },
+        },
+        aiGradient: {
+          '0%, 100%': {
+            backgroundPosition: '0% 50%',
+          },
+          '50%': {
+            backgroundPosition: '100% 50%',
+          },
+        },
+        aiPulse: {
+          '0%, 100%': {
+            opacity: '1',
+            transform: 'scale(1)',
+          },
+          '50%': {
+            opacity: '0.7',
+            transform: 'scale(0.95)',
+          },
+        },
+        aiOrbit: {
+          '0%': {
+            transform: 'rotate(0deg) translateX(24px) rotate(0deg)',
+          },
+          '100%': {
+            transform: 'rotate(360deg) translateX(24px) rotate(-360deg)',
+          },
+        },
+        aiOrbitReverse: {
+          '0%': {
+            transform: 'rotate(0deg) translateX(32px) rotate(0deg)',
+          },
+          '100%': {
+            transform: 'rotate(-360deg) translateX(32px) rotate(360deg)',
+          },
+        },
+        aiFloat: {
+          '0%, 100%': {
+            transform: 'translateY(0px)',
+          },
+          '50%': {
+            transform: 'translateY(-6px)',
+          },
+        },
+        aiShimmer: {
+          '0%': {
+            backgroundPosition: '-200% 0',
+          },
+          '100%': {
+            backgroundPosition: '200% 0',
+          },
+        },
+        aiTextCycle: {
+          '0%': {
+            opacity: '0',
+            transform: 'translateY(8px)',
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateY(0)',
+          },
+        },
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 }

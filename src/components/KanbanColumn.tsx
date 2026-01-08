@@ -10,12 +10,14 @@ interface KanbanColumnProps {
   status: Status;
   items: BacklogItem[];
   onItemClick: (item: BacklogItem) => void;
+  onStartItem?: (item: BacklogItem) => void;
   isLoading?: boolean;
+  subtitle?: string;
 }
 
 const columnAccents: Record<Status, string> = {
   backlog: 'from-surface-600/20',
-  ready: 'from-blue-500/10',
+  up_next: 'from-cyan-500/15',
   in_progress: 'from-accent/10',
   review: 'from-purple-500/10',
   done: 'from-green-500/10',
@@ -23,29 +25,36 @@ const columnAccents: Record<Status, string> = {
 
 const columnDots: Record<Status, string> = {
   backlog: 'bg-surface-500',
-  ready: 'bg-blue-500',
+  up_next: 'bg-cyan-400',
   in_progress: 'bg-accent',
   review: 'bg-purple-500',
   done: 'bg-green-500',
 };
 
-export function KanbanColumn({ status, items, onItemClick, isLoading }: KanbanColumnProps) {
+export function KanbanColumn({ status, items, onItemClick, onStartItem, isLoading, subtitle }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
 
+  const isUpNext = status === 'up_next';
+
   return (
-    <div className="flex flex-col min-w-[280px] max-w-[320px] flex-1">
+    <div className={`flex flex-col ${isUpNext ? 'min-w-[280px] max-w-[280px]' : 'min-w-[240px] flex-1'}`}>
       {/* Column Header */}
       <div className="flex items-center justify-between mb-3 px-1">
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${columnDots[status]}`} />
-          <h2 className="font-medium text-sm text-surface-200 tracking-wide">
-            {STATUS_LABELS[status]}
-          </h2>
-          <span className="text-xs font-mono text-surface-500 tabular-nums">
-            {items.length}
-          </span>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${columnDots[status]} ${isUpNext ? 'animate-pulse' : ''}`} />
+            <h2 className={`font-medium text-sm tracking-wide ${isUpNext ? 'text-cyan-300' : 'text-surface-200'}`}>
+              {STATUS_LABELS[status]}
+            </h2>
+            <span className="text-xs font-mono text-surface-500 tabular-nums">
+              {items.length}
+            </span>
+          </div>
+          {subtitle && (
+            <span className="text-[10px] text-surface-500 ml-4">{subtitle}</span>
+          )}
         </div>
       </div>
 
@@ -71,11 +80,27 @@ export function KanbanColumn({ status, items, onItemClick, isLoading }: KanbanCo
               </>
             ) : items.length > 0 ? (
               items.map((item) => (
-                <TaskCard
-                  key={item.id}
-                  item={item}
-                  onClick={() => onItemClick(item)}
-                />
+                <div key={item.id} className="relative group/card">
+                  <TaskCard
+                    item={item}
+                    onClick={() => onItemClick(item)}
+                  />
+                  {isUpNext && onStartItem && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStartItem(item);
+                      }}
+                      className="absolute bottom-2 right-2 opacity-0 group-hover/card:opacity-100 transition-opacity bg-accent hover:bg-accent-hover text-surface-900 text-xs font-medium px-3 py-1.5 rounded-md shadow-lg flex items-center gap-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Start
+                    </button>
+                  )}
+                </div>
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-center">

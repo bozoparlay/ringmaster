@@ -6,6 +6,7 @@ import { useBacklog } from '@/hooks/useBacklog';
 
 export default function Home() {
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const {
     items,
@@ -20,8 +21,8 @@ export default function Home() {
     refresh,
   } = useBacklog();
 
-  const handleNewTask = async (title: string, description: string) => {
-    await addItem(title, description);
+  const handleNewTask = async (task: { title: string; description: string; priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday'; effort?: 'low' | 'medium' | 'high' | 'very_high'; value?: 'low' | 'medium' | 'high'; category?: string }) => {
+    await addItem(task.title, task.description, task.priority, task.effort, task.value, task.category);
     setIsNewTaskOpen(false);
   };
 
@@ -33,6 +34,8 @@ export default function Home() {
         fileExists={fileExists}
         onNewTask={() => setIsNewTaskOpen(true)}
         onRefresh={refresh}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
       />
 
       {/* Error banner */}
@@ -49,8 +52,10 @@ export default function Home() {
           onUpdateItem={updateItem}
           onDeleteItem={deleteItem}
           onReorderItems={reorderItems}
-          onAddItem={addItem}
+          onNewTask={() => setIsNewTaskOpen(true)}
           isLoading={loading}
+          searchQuery={searchQuery}
+          backlogPath={filePath}
         />
       </div>
 

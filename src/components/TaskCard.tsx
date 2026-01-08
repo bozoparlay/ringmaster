@@ -46,13 +46,12 @@ export function TaskCard({ item, onClick, isDragging }: TaskCardProps) {
       className={`
         group relative
         bg-surface-850 hover:bg-surface-800
-        border border-surface-700/50 hover:border-surface-600
+        border hover:border-surface-600
         rounded-lg p-3.5
         cursor-pointer select-none
-        transition-all duration-200 ease-out
         ${dragging
-          ? 'shadow-card-hover scale-[1.02] rotate-1 opacity-90 z-50'
-          : 'shadow-card hover:shadow-card-hover hover:-translate-y-0.5'
+          ? 'shadow-card-dragging scale-[1.04] rotate-[1deg] z-50 border-accent/20 bg-surface-800 animate-card-lift'
+          : 'shadow-card hover:shadow-card-hover hover:-translate-y-0.5 border-surface-700/50 transition-all duration-200 ease-out'
         }
       `}
     >
@@ -77,31 +76,50 @@ export function TaskCard({ item, onClick, isDragging }: TaskCardProps) {
           </p>
         )}
 
-        {/* Footer with priority and tags */}
+        {/* Footer with category, priority, and metadata */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Category tag */}
+          {item.category && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium text-blue-400 bg-blue-500/10 border border-blue-500/20">
+              {item.category}
+            </span>
+          )}
+
+          {/* Priority badge */}
           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ${priority.bg} ${priority.text}`}>
             <span className={`w-1 h-1 rounded-full ${priority.dot}`} />
             {item.priority}
           </span>
 
-          {item.tags.slice(0, 2).map((tag) => (
-            <span
-              key={tag}
-              className="px-1.5 py-0.5 rounded text-[10px] font-mono text-surface-400 bg-surface-800 border border-surface-700/50"
-            >
-              {tag}
+          {/* Effort indicator */}
+          {item.effort && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-surface-400 bg-surface-800 border border-surface-700/50">
+              {item.effort === 'very_high' ? 'XL' : item.effort.charAt(0).toUpperCase()}
             </span>
-          ))}
-          {item.tags.length > 2 && (
-            <span className="text-[10px] text-surface-500">
-              +{item.tags.length - 2}
+          )}
+
+          {/* Value indicator */}
+          {item.value && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+              ${item.value.charAt(0).toUpperCase()}
             </span>
           )}
         </div>
       </div>
 
-      {/* Hover glow effect */}
-      <div className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-br from-accent/5 via-transparent to-transparent" />
+      {/* Hover/drag glow effect */}
+      <div
+        className={`
+          absolute inset-0 rounded-lg pointer-events-none transition-opacity duration-300
+          bg-gradient-to-br from-accent/5 via-transparent to-transparent
+          ${dragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
+        `}
+      />
+
+      {/* Dragging accent border glow */}
+      {dragging && (
+        <div className="absolute -inset-[1px] rounded-lg bg-gradient-to-br from-accent/20 via-accent/5 to-transparent pointer-events-none" />
+      )}
     </div>
   );
 }

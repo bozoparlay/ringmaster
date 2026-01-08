@@ -5,9 +5,11 @@ interface HeaderProps {
   fileExists: boolean;
   onNewTask: () => void;
   onRefresh: () => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
-export function Header({ filePath, fileExists, onNewTask, onRefresh }: HeaderProps) {
+export function Header({ filePath, fileExists, onNewTask, onRefresh, searchQuery, onSearchChange }: HeaderProps) {
   return (
     <header className="relative z-10 border-b border-surface-800/50 bg-surface-950/80 backdrop-blur-xl">
       <div className="flex items-center justify-between px-6 py-4">
@@ -51,6 +53,35 @@ export function Header({ filePath, fileExists, onNewTask, onRefresh }: HeaderPro
 
         {/* Actions */}
         <div className="flex items-center gap-3">
+          {/* Search */}
+          <div className="relative hidden sm:block">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search tasks..."
+              className="w-56 bg-surface-900 border border-surface-700 rounded-lg pl-9 pr-8 py-2 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => onSearchChange('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
           <button
             onClick={onNewTask}
             className="hidden sm:flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-surface-900 font-medium text-sm rounded-lg transition-all shadow-glow-amber-sm hover:shadow-glow-amber"

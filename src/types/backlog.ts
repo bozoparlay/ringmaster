@@ -1,17 +1,24 @@
 export type Priority = 'critical' | 'high' | 'medium' | 'low' | 'someday';
 
-export type Status = 'backlog' | 'ready' | 'in_progress' | 'review' | 'done';
+export type Effort = 'low' | 'medium' | 'high' | 'very_high';
+
+export type Value = 'low' | 'medium' | 'high';
+
+export type Status = 'backlog' | 'up_next' | 'in_progress' | 'review' | 'done';
 
 export interface BacklogItem {
   id: string;
   title: string;
   description: string;
   priority: Priority;
+  effort?: Effort;
+  value?: Value;
   status: Status;
   tags: string[];
+  category?: string; // Parent category like "High Priority Features"
   createdAt: string;
   updatedAt: string;
-  order: number; // For sorting within a column
+  order: number;
 }
 
 export interface Column {
@@ -44,12 +51,28 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
   someday: 'Someday',
 };
 
+export const EFFORT_LABELS: Record<Effort, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  very_high: 'Very High',
+};
+
+export const VALUE_LABELS: Record<Value, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
+
 export const STATUS_LABELS: Record<Status, string> = {
   backlog: 'Backlog',
-  ready: 'Ready',
+  up_next: 'Up Next',
   in_progress: 'In Progress',
   review: 'Review',
   done: 'Done',
 };
 
-export const COLUMN_ORDER: Status[] = ['backlog', 'ready', 'in_progress', 'review', 'done'];
+export const COLUMN_ORDER: Status[] = ['backlog', 'up_next', 'in_progress', 'review', 'done'];
+
+// Maximum items shown in Up Next column
+export const UP_NEXT_LIMIT = 5;

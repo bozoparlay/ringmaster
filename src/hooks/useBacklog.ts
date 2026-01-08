@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { BacklogItem, Priority, Status } from '@/types/backlog';
+import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
 import { v4 as uuidv4 } from 'uuid';
 
 interface UseBacklogOptions {
@@ -14,7 +14,7 @@ interface UseBacklogReturn {
   error: string | null;
   filePath: string | null;
   fileExists: boolean;
-  addItem: (title: string, description?: string) => Promise<void>;
+  addItem: (title: string, description?: string, priority?: Priority, effort?: Effort, value?: Value, category?: string) => Promise<void>;
   updateItem: (item: BacklogItem) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   moveItem: (id: string, newStatus: Status) => Promise<void>;
@@ -74,15 +74,25 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     }
   }, [buildUrl]);
 
-  const addItem = useCallback(async (title: string, description: string = '') => {
+  const addItem = useCallback(async (
+    title: string,
+    description: string = '',
+    priority: Priority = 'medium',
+    effort?: Effort,
+    value?: Value,
+    category?: string
+  ) => {
     const now = new Date().toISOString();
     const newItem: BacklogItem = {
       id: uuidv4(),
       title,
       description,
-      priority: 'medium',
+      priority,
+      effort,
+      value,
       status: 'backlog',
-      tags: [],
+      tags: category ? [category] : [],
+      category,
       createdAt: now,
       updatedAt: now,
       order: Date.now(),

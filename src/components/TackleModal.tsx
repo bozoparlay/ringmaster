@@ -8,16 +8,20 @@ interface TackleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onStartWork: (item: BacklogItem) => void;
+  onShowToast?: (message: string, type: 'success' | 'error' | 'info') => void;
+  backlogPath?: string;
 }
 
-export function TackleModal({ item, isOpen, onClose, onStartWork }: TackleModalProps) {
+export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, backlogPath }: TackleModalProps) {
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<'plan' | 'prompt'>('plan');
+  const [isLaunching, setIsLaunching] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       setCopied(false);
       setMode('plan');
+      setIsLaunching(false);
     }
   }, [isOpen]);
 
@@ -105,6 +109,39 @@ Let's begin by exploring the codebase to understand the current state and then c
     onClose();
   };
 
+  const handleLaunchClaude = async () => {
+    if (!item) return;
+
+    setIsLaunching(true);
+    try {
+      const response = await fetch('/api/tackle-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: item.title,
+          description: item.description,
+          category: item.category,
+          priority: item.priority,
+          backlogPath,
+        }),
+      });
+
+      if (response.ok) {
+        // Set task to in progress
+        onStartWork(item);
+        onShowToast?.('Task prompt copied! Open VS Code terminal and paste (⌘V) to start Claude Code.', 'success');
+        onClose();
+      } else {
+        onShowToast?.('Failed to prepare task. Please try again.', 'error');
+      }
+    } catch (error) {
+      console.error('Launch error:', error);
+      onShowToast?.('Failed to launch. Please try again.', 'error');
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -189,41 +226,68 @@ Let's begin by exploring the codebase to understand the current state and then c
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-surface-800 bg-surface-900/80 flex gap-3">
+        <div className="px-6 py-4 border-t border-surface-800 bg-surface-900/80 space-y-3">
+          {/* Launch Claude Code - Primary Action */}
           <button
-            onClick={handleCopy}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all
-              ${copied
-                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                : 'bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700'
-              }`}
+            onClick={handleLaunchClaude}
+            disabled={isLaunching}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:from-purple-600/50 disabled:to-blue-600/50 text-white font-medium py-3 px-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/25 disabled:cursor-not-allowed"
           >
-            {copied ? (
+            {isLaunching ? (
               <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Copied!
+                Launching...
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Copy to Clipboard
+                Launch Claude Code
               </>
             )}
           </button>
-          <button
-            onClick={handleStartWork}
-            className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Start Working
-          </button>
+
+          {/* Secondary actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={handleCopy}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all
+                ${copied
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                  : 'bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700'
+                }`}
+            >
+              {copied ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy Plan
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleStartWork}
+              className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Mark In Progress
+            </button>
+          </div>
         </div>
       </div>
     </>

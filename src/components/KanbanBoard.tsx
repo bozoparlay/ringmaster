@@ -14,21 +14,23 @@ import {
   DragOverEvent,
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import type { BacklogItem, Priority, Status } from '@/types/backlog';
-import { COLUMN_ORDER, PRIORITY_WEIGHT } from '@/types/backlog';
+import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
+import { COLUMN_ORDER, PRIORITY_WEIGHT, UP_NEXT_LIMIT } from '@/types/backlog';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { TaskPanel } from './TaskPanel';
-import { NewTaskModal } from './NewTaskModal';
 import { TackleModal } from './TackleModal';
+import { Toast, ToastType } from './Toast';
 
 interface KanbanBoardProps {
   items: BacklogItem[];
   onUpdateItem: (item: BacklogItem) => Promise<void>;
   onDeleteItem: (id: string) => Promise<void>;
   onReorderItems: (items: BacklogItem[]) => Promise<void>;
-  onAddItem: (title: string, description?: string) => Promise<void>;
+  onNewTask: () => void;
   isLoading?: boolean;
+  searchQuery?: string;
+  backlogPath?: string;
 }
 
 export function KanbanBoard({
@@ -36,16 +38,24 @@ export function KanbanBoard({
   onUpdateItem,
   onDeleteItem,
   onReorderItems,
-  onAddItem,
+  onNewTask,
   isLoading,
+  searchQuery = '',
+  backlogPath,
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<BacklogItem | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [isTackleOpen, setIsTackleOpen] = useState(false);
   const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+
+  const showToast = (message: string, type: ToastType) => {
+    setToast({ message, type });
+  };
+
+  const isSearching = searchQuery.trim().length > 0;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -60,24 +70,65 @@ export function KanbanBoard({
 
   // Filter and organize items by column
   const columnItems = useMemo(() => {
-    const filtered = priorityFilter === 'all'
+    // Apply priority filter
+    let filtered = priorityFilter === 'all'
       ? items
       : items.filter(item => item.priority === priorityFilter);
 
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(item =>
+        item.title.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query) ||
+        item.category?.toLowerCase().includes(query) ||
+        item.tags.some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+
     const columns: Record<Status, BacklogItem[]> = {
       backlog: [],
-      ready: [],
+      up_next: [],
       in_progress: [],
       review: [],
       done: [],
     };
 
+    // First pass: distribute items to their actual status columns
     filtered.forEach((item) => {
-      columns[item.status].push(item);
+      // Skip up_next status items - they should go to backlog
+      // (up_next is computed, not a stored status)
+      if (item.status === 'up_next') {
+        columns.backlog.push(item);
+      } else {
+        columns[item.status].push(item);
+      }
     });
 
-    // Sort by priority weight, then by order
-    Object.keys(columns).forEach((status) => {
+    // Sort backlog by priority weight, then by order
+    columns.backlog.sort((a, b) => {
+      const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.order - b.order;
+    });
+
+    // Compute "Up Next" - take top N high-priority items from backlog
+    // Only items with critical, high, or medium priority are eligible
+    // When searching, disable auto-population so items stay in their actual columns
+    if (!isSearching) {
+      const eligibleForUpNext = columns.backlog.filter(
+        item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
+      );
+      const upNextItems = eligibleForUpNext.slice(0, UP_NEXT_LIMIT);
+      const upNextIds = new Set(upNextItems.map(item => item.id));
+
+      // Move Up Next items from backlog display
+      columns.up_next = upNextItems;
+      columns.backlog = columns.backlog.filter(item => !upNextIds.has(item.id));
+    }
+
+    // Sort other columns by priority weight, then by order
+    ['in_progress', 'review', 'done'].forEach((status) => {
       columns[status as Status].sort((a, b) => {
         const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
         if (priorityDiff !== 0) return priorityDiff;
@@ -86,7 +137,7 @@ export function KanbanBoard({
     });
 
     return columns;
-  }, [items, priorityFilter]);
+  }, [items, priorityFilter, searchQuery, isSearching]);
 
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
@@ -94,22 +145,9 @@ export function KanbanBoard({
     setActiveId(event.active.id as string);
   };
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeItem = items.find(i => i.id === active.id);
-    if (!activeItem) return;
-
-    // Check if dragging over a column
-    const overId = over.id as string;
-    if (COLUMN_ORDER.includes(overId as Status)) {
-      // Moving to a different column
-      if (activeItem.status !== overId) {
-        const updatedItem = { ...activeItem, status: overId as Status };
-        onUpdateItem(updatedItem);
-      }
-    }
+  const handleDragOver = (_event: DragOverEvent) => {
+    // Don't update status on hover - wait for drop
+    // This prevents items from getting "stuck" during drag
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -125,30 +163,56 @@ export function KanbanBoard({
 
     // If dropped on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
-      if (activeItem.status !== overId) {
-        onUpdateItem({ ...activeItem, status: overId as Status });
+      // up_next is virtual - treat drops there as backlog
+      const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
+      if (activeItem.status !== targetStatus) {
+        onUpdateItem({ ...activeItem, status: targetStatus });
       }
       return;
     }
 
     // If dropped on another item
     const overItem = items.find(i => i.id === overId);
-    if (overItem && activeItem.status === overItem.status) {
-      const columnItemsList = columnItems[activeItem.status];
-      const oldIndex = columnItemsList.findIndex(i => i.id === active.id);
-      const newIndex = columnItemsList.findIndex(i => i.id === over.id);
+    if (overItem) {
+      // Find which visual column each item is in (could differ from stored status due to Up Next)
+      let activeVisualColumn: Status | null = null;
+      let targetVisualColumn: Status | null = null;
 
-      if (oldIndex !== newIndex) {
-        const reordered = arrayMove(columnItemsList, oldIndex, newIndex);
-        // Update order values
-        const updatedItems = items.map(item => {
-          const reorderedIndex = reordered.findIndex(r => r.id === item.id);
-          if (reorderedIndex !== -1) {
-            return { ...item, order: reorderedIndex };
-          }
-          return item;
-        });
-        onReorderItems(updatedItems);
+      for (const [status, columnList] of Object.entries(columnItems)) {
+        if (columnList.some(item => item.id === active.id)) {
+          activeVisualColumn = status as Status;
+        }
+        if (columnList.some(item => item.id === overId)) {
+          targetVisualColumn = status as Status;
+        }
+      }
+
+      // If dropped on item in a different visual column, move to that column
+      if (targetVisualColumn && activeVisualColumn !== targetVisualColumn) {
+        // up_next is virtual - treat as backlog
+        const actualStatus = targetVisualColumn === 'up_next' ? 'backlog' : targetVisualColumn;
+        onUpdateItem({ ...activeItem, status: actualStatus });
+        return;
+      }
+
+      // If same visual column, reorder
+      if (targetVisualColumn && activeVisualColumn === targetVisualColumn) {
+        const columnItemsList = columnItems[targetVisualColumn];
+        const oldIndex = columnItemsList.findIndex(i => i.id === active.id);
+        const newIndex = columnItemsList.findIndex(i => i.id === over.id);
+
+        if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+          const reordered = arrayMove(columnItemsList, oldIndex, newIndex);
+          // Update order values
+          const updatedItems = items.map(item => {
+            const reorderedIndex = reordered.findIndex(r => r.id === item.id);
+            if (reorderedIndex !== -1) {
+              return { ...item, order: reorderedIndex };
+            }
+            return item;
+          });
+          onReorderItems(updatedItems);
+        }
       }
     }
   };
@@ -169,11 +233,6 @@ export function KanbanBoard({
     setIsPanelOpen(false);
   };
 
-  const handleNewTask = async (title: string, description: string) => {
-    await onAddItem(title, description);
-    setIsNewTaskOpen(false);
-  };
-
   const handleTackle = (item: BacklogItem) => {
     setTackleItem(item);
     setIsTackleOpen(true);
@@ -185,6 +244,11 @@ export function KanbanBoard({
     await onUpdateItem({ ...item, status: 'in_progress' });
     setIsTackleOpen(false);
     setTackleItem(null);
+  };
+
+  const handleStartItem = async (item: BacklogItem) => {
+    // Move directly to in_progress from Up Next
+    await onUpdateItem({ ...item, status: 'in_progress' });
   };
 
   return (
@@ -210,6 +274,12 @@ export function KanbanBoard({
 
         {/* Stats */}
         <div className="flex items-center gap-4 text-xs text-surface-500">
+          {isSearching && (
+            <>
+              <span className="font-mono text-accent">{Object.values(columnItems).flat().length} matches</span>
+              <span className="text-surface-700">|</span>
+            </>
+          )}
           <span className="font-mono">{items.length} total</span>
           <span className="text-surface-700">|</span>
           <span className="font-mono text-accent">{columnItems.in_progress.length} active</span>
@@ -225,13 +295,14 @@ export function KanbanBoard({
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-4 p-6 h-full min-w-max">
+          <div className="flex gap-4 p-6 h-full w-full">
             {COLUMN_ORDER.map((status) => (
               <KanbanColumn
                 key={status}
                 status={status}
                 items={columnItems[status]}
                 onItemClick={handleItemClick}
+                onStartItem={status === 'up_next' ? handleStartItem : undefined}
                 isLoading={isLoading}
               />
             ))}
@@ -268,18 +339,22 @@ export function KanbanBoard({
           setTackleItem(null);
         }}
         onStartWork={handleStartWork}
+        onShowToast={showToast}
+        backlogPath={backlogPath}
       />
 
-      {/* New Task Modal */}
-      <NewTaskModal
-        isOpen={isNewTaskOpen}
-        onClose={() => setIsNewTaskOpen(false)}
-        onSubmit={handleNewTask}
-      />
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
 
       {/* Floating Action Button */}
       <button
-        onClick={() => setIsNewTaskOpen(true)}
+        onClick={onNewTask}
         className="fixed bottom-8 right-8 w-14 h-14 bg-accent hover:bg-accent-hover text-surface-900 rounded-full shadow-glow-amber hover:shadow-glow-amber transition-all duration-200 hover:scale-105 flex items-center justify-center z-30"
       >
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
