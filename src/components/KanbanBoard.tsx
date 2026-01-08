@@ -247,6 +247,14 @@ export function KanbanBoard({
 
     // If dropped on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
+      // Check if item is being moved FROM up_next TO backlog (deprioritizing)
+      const isInUpNext = columnItems.up_next.some(i => i.id === activeItem.id);
+      if (isInUpNext && overId === 'backlog') {
+        // Downgrade priority to 'low' so it drops out of Up Next
+        onUpdateItem({ ...activeItem, priority: 'low' });
+        return;
+      }
+
       // up_next is virtual - treat drops there as backlog
       const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
       if (activeItem.status !== targetStatus) {
@@ -278,6 +286,12 @@ export function KanbanBoard({
 
       // If dropped on item in a different visual column, move to that column
       if (targetVisualColumn && activeVisualColumn !== targetVisualColumn) {
+        // Check if moving FROM up_next TO backlog (deprioritizing)
+        if (activeVisualColumn === 'up_next' && targetVisualColumn === 'backlog') {
+          onUpdateItem({ ...activeItem, priority: 'low' });
+          return;
+        }
+
         // up_next is virtual - treat as backlog
         const actualStatus = targetVisualColumn === 'up_next' ? 'backlog' : targetVisualColumn;
         // Intercept moves to review column - trigger code review
