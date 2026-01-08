@@ -12,7 +12,7 @@ interface TaskPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (item: BacklogItem) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
   onTackle: (item: BacklogItem) => void;
   onShip?: (item: BacklogItem) => Promise<void>;
   backlogPath?: string;
@@ -345,10 +345,10 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm('Delete this task?')) {
-                  onDelete(editedItem.id);
-                  onClose();
+                  await onDelete(editedItem.id);
+                  // onDelete handler closes the panel
                 }
               }}
               className="p-2 rounded-lg text-surface-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
