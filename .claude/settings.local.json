@@ -17,7 +17,11 @@
       "Bash(git checkout:*)",
       "Bash(git rebase:*)",
       "Bash(GIT_EDITOR=true git rebase:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git push:*)",
+      "Bash(git worktree:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)"
     ]
   }
 }

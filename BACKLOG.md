@@ -74,32 +74,6 @@ Adjust the width of the "Up Next" column to maintain visual consistency with oth
 
 ---
 
-## [in_progress] Technical Debt
-
-### Fix Task Creation/Rescope
-**Priority**: High | **Effort**: Medium | **Value**: High
-
-**Description**:
-## Description
-Investigate and fix the task creation and rescoping pipeline to ensure AI-generated tasks meet quality criteria and are not incorrectly flagged for rescoping.
-
-## Requirements
-- Analyze current task creation workflow and AI assist functionality
-- Review rescoping criteria and validation logic
-- Identify gaps between AI-generated task quality and rescope requirements
-- Fix pipeline to prevent false positive rescope flags for AI-assisted tasks
-
-## Technical Approach
-1. Audit the task creation process and AI assist integration
-2. Review rescope detection algorithms and criteria
-3. Analyze recent AI-generated tasks that were incorrectly flagged
-4. Implement fixes to align AI output with rescope validation
-5. Add logging/monitoring to track pipeline health
-
-## Success Criteria
-- AI-generated tasks pass rescope validation without false positives
-- Task creation pipeline operates smoothly
-- Clear documentation of updated criteria and processes
-- Monitoring in place to detect future pipeline issues
+## [backlog] Technical Debt
 
 ---
