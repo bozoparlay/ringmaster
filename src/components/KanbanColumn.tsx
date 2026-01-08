@@ -10,7 +10,6 @@ interface KanbanColumnProps {
   status: Status;
   items: BacklogItem[];
   onItemClick: (item: BacklogItem) => void;
-  onStartItem?: (item: BacklogItem) => void;
   isLoading?: boolean;
   subtitle?: string;
 }
@@ -31,7 +30,7 @@ const columnDots: Record<Status, string> = {
   ready_to_ship: 'bg-green-500',
 };
 
-export function KanbanColumn({ status, items, onItemClick, onStartItem, isLoading, subtitle }: KanbanColumnProps) {
+export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
@@ -80,27 +79,11 @@ export function KanbanColumn({ status, items, onItemClick, onStartItem, isLoadin
               </>
             ) : items.length > 0 ? (
               items.map((item) => (
-                <div key={item.id} className="relative group/card">
-                  <TaskCard
-                    item={item}
-                    onClick={() => onItemClick(item)}
-                  />
-                  {isUpNext && onStartItem && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStartItem(item);
-                      }}
-                      className="absolute bottom-2 right-2 opacity-0 group-hover/card:opacity-100 transition-opacity bg-accent hover:bg-accent-hover text-surface-900 text-xs font-medium px-3 py-1.5 rounded-md shadow-lg flex items-center gap-1.5"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Start
-                    </button>
-                  )}
-                </div>
+                <TaskCard
+                  key={item.id}
+                  item={item}
+                  onClick={() => onItemClick(item)}
+                />
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-center">

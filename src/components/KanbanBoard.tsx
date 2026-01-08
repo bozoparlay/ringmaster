@@ -425,11 +425,6 @@ export function KanbanBoard({
     setTackleItem(null);
   };
 
-  const handleStartItem = async (item: BacklogItem) => {
-    // Move directly to in_progress from Up Next (also creates worktree)
-    await handleStartWork(item);
-  };
-
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
@@ -481,7 +476,6 @@ export function KanbanBoard({
                 status={status}
                 items={columnItems[status]}
                 onItemClick={handleItemClick}
-                onStartItem={status === 'up_next' ? handleStartItem : undefined}
                 isLoading={isLoading}
               />
             ))}
