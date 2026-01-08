@@ -21,7 +21,10 @@
       "Bash(git push:*)",
       "Bash(git worktree:*)",
       "Bash(ls:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(lsof:*)",
+      "Bash(npm run dev:*)",
+      "mcp__plugin_playwright_playwright__browser_wait_for"
     ]
   }
 }
