@@ -20,7 +20,7 @@ const columnAccents: Record<Status, string> = {
   up_next: 'from-cyan-500/15',
   in_progress: 'from-accent/10',
   review: 'from-purple-500/10',
-  done: 'from-green-500/10',
+  ready_to_ship: 'from-green-500/10',
 };
 
 const columnDots: Record<Status, string> = {
@@ -28,7 +28,7 @@ const columnDots: Record<Status, string> = {
   up_next: 'bg-cyan-400',
   in_progress: 'bg-accent',
   review: 'bg-purple-500',
-  done: 'bg-green-500',
+  ready_to_ship: 'bg-green-500',
 };
 
 export function KanbanColumn({ status, items, onItemClick, onStartItem, isLoading, subtitle }: KanbanColumnProps) {

@@ -4,7 +4,7 @@ export type Effort = 'low' | 'medium' | 'high' | 'very_high';
 
 export type Value = 'low' | 'medium' | 'high';
 
-export type Status = 'backlog' | 'up_next' | 'in_progress' | 'review' | 'done';
+export type Status = 'backlog' | 'up_next' | 'in_progress' | 'review' | 'ready_to_ship';
 
 export interface BacklogItem {
   id: string;
@@ -19,6 +19,10 @@ export interface BacklogItem {
   createdAt: string;
   updatedAt: string;
   order: number;
+  // Git workflow fields
+  branch?: string;           // Git branch name (e.g., "task/abc12345-feature-name")
+  worktreePath?: string;     // Path to git worktree (e.g., ".tasks/task-abc12345")
+  reviewFeedback?: string;   // Feedback from code review if it failed
 }
 
 export interface Column {
@@ -69,10 +73,10 @@ export const STATUS_LABELS: Record<Status, string> = {
   up_next: 'Up Next',
   in_progress: 'In Progress',
   review: 'Review',
-  done: 'Done',
+  ready_to_ship: 'Ready to Ship',
 };
 
-export const COLUMN_ORDER: Status[] = ['backlog', 'up_next', 'in_progress', 'review', 'done'];
+export const COLUMN_ORDER: Status[] = ['backlog', 'up_next', 'in_progress', 'review', 'ready_to_ship'];
 
 // Maximum items shown in Up Next column
 export const UP_NEXT_LIMIT = 5;

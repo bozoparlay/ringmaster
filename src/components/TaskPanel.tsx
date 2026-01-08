@@ -13,6 +13,8 @@ interface TaskPanelProps {
   onSave: (item: BacklogItem) => void;
   onDelete: (id: string) => void;
   onTackle: (item: BacklogItem) => void;
+  onShip?: (item: BacklogItem) => Promise<void>;
+  backlogPath?: string;
 }
 
 // AI Loading State Messages
@@ -143,11 +145,12 @@ const valueColors: Record<Value, string> = {
   high: 'bg-emerald-500',
 };
 
-export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle }: TaskPanelProps) {
+export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onShip, backlogPath }: TaskPanelProps) {
   const [editedItem, setEditedItem] = useState<BacklogItem | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isShipping, setIsShipping] = useState(false);
   const [preAiItem, setPreAiItem] = useState<BacklogItem | null>(null);
   const [showAiInput, setShowAiInput] = useState(false);
   const [aiComment, setAiComment] = useState('');
@@ -157,6 +160,9 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle }:
   const aiInputRef = useRef<HTMLTextAreaElement>(null);
 
   const hasAiChanges = preAiItem !== null;
+  const isReadyToShip = editedItem?.status === 'ready_to_ship';
+  const hasBranch = !!editedItem?.branch;
+  const hasReviewFeedback = !!editedItem?.reviewFeedback;
 
   useEffect(() => {
     if (item) {
@@ -297,6 +303,20 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle }:
   const handleAcceptAiChanges = () => {
     setPreAiItem(null);
     setShowDiff(false);
+  };
+
+  const handleShip = async () => {
+    if (!editedItem || !onShip) return;
+
+    setIsShipping(true);
+    try {
+      await onShip(editedItem);
+      onClose();
+    } catch (error) {
+      console.error('Ship error:', error);
+    } finally {
+      setIsShipping(false);
+    }
   };
 
   if (!isOpen || !editedItem) return null;
@@ -720,15 +740,75 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle }:
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-surface-800 bg-surface-900/80 backdrop-blur space-y-3">
-          <button
-            onClick={() => onTackle(editedItem)}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/25"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Tackle with Claude Code
-          </button>
+          {/* Branch info */}
+          {hasBranch && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-surface-800/50 rounded-lg border border-surface-700/50">
+              <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span className="text-xs font-mono text-surface-300 truncate flex-1">
+                {editedItem.branch}
+              </span>
+              {editedItem.worktreePath && (
+                <span className="text-[10px] text-surface-500 font-mono">
+                  {editedItem.worktreePath}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Review feedback */}
+          {hasReviewFeedback && (
+            <div className="px-3 py-2 bg-orange-500/10 rounded-lg border border-orange-500/30">
+              <div className="flex items-center gap-1.5 mb-1">
+                <svg className="w-3.5 h-3.5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-xs font-medium text-orange-400">Review Feedback</span>
+              </div>
+              <p className="text-xs text-orange-300/80">{editedItem.reviewFeedback}</p>
+            </div>
+          )}
+
+          {/* Ship button (for ready_to_ship status) */}
+          {isReadyToShip && onShip && (
+            <button
+              onClick={handleShip}
+              disabled={isShipping}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-green-600/50 disabled:to-emerald-600/50 text-white font-medium py-3 px-4 rounded-lg transition-all shadow-lg hover:shadow-green-500/25 disabled:cursor-not-allowed"
+            >
+              {isShipping ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Shipping...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-14 9V3z" />
+                  </svg>
+                  Commit & Push
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Tackle button (not shown when ready to ship) */}
+          {!isReadyToShip && (
+            <button
+              onClick={() => onTackle(editedItem)}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/25"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Tackle with Claude Code
+            </button>
+          )}
+
           <button
             onClick={handleSave}
             className="w-full bg-accent hover:bg-accent-hover text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber"

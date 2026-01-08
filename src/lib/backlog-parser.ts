@@ -22,11 +22,12 @@ import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backl
 
 const STATUS_MAP: Record<string, Status> = {
   'backlog': 'backlog',
-  'ready': 'ready',
+  'ready': 'backlog',           // legacy mapping
   'in progress': 'in_progress',
   'in_progress': 'in_progress',
   'review': 'review',
-  'done': 'done',
+  'done': 'ready_to_ship',      // legacy mapping
+  'ready_to_ship': 'ready_to_ship',
 };
 
 const PRIORITY_MAP: Record<string, Priority> = {
@@ -209,10 +210,24 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       }
     }
 
+    // Extract git workflow fields
+    const branchMatch = taskContent.match(/\*\*Branch\*\*:\s*(.+)/i);
+    const worktreeMatch = taskContent.match(/\*\*Worktree\*\*:\s*(.+)/i);
+    const reviewFeedbackMatch = taskContent.match(/>\s*\*\*Review Feedback\*\*:\s*\n((?:>\s*.+\n?)+)/i);
+
+    const branch = branchMatch ? branchMatch[1].trim() : undefined;
+    const worktreePath = worktreeMatch ? worktreeMatch[1].trim() : undefined;
+    const reviewFeedback = reviewFeedbackMatch
+      ? reviewFeedbackMatch[1].replace(/^>\s*/gm, '').trim()
+      : undefined;
+
     // Extract description - everything after the metadata line
     let description = taskContent
       .replace(/\*\*Priority\*\*:\s*[^\n]+/i, '') // Remove priority line
       .replace(/\*\*Created\*\*:\s*[^\n]+/i, '') // Remove created line
+      .replace(/\*\*Branch\*\*:\s*[^\n]+/i, '') // Remove branch line
+      .replace(/\*\*Worktree\*\*:\s*[^\n]+/i, '') // Remove worktree line
+      .replace(/>\s*\*\*Review Feedback\*\*:\s*\n((?:>\s*.+\n?)+)/i, '') // Remove review feedback
       .replace(/^\s*\n/, '') // Remove leading newline
       .trim();
 
@@ -239,6 +254,10 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       createdAt: now,
       updatedAt: now,
       order: currentOrder++,
+      // Git workflow fields
+      branch,
+      worktreePath,
+      reviewFeedback,
     });
   }
 
@@ -265,7 +284,7 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
 
   // Group by status first, then by category within each status
   const byStatus = new Map<string, Map<string, BacklogItem[]>>();
-  const statusOrder = ['backlog', 'ready', 'in_progress', 'review', 'done'];
+  const statusOrder = ['backlog', 'in_progress', 'review', 'ready_to_ship'];
 
   for (const status of statusOrder) {
     byStatus.set(status, new Map());
@@ -320,10 +339,25 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
           metaParts.push(`**Value**: ${item.value.charAt(0).toUpperCase() + item.value.slice(1)}`);
         }
         lines.push(metaParts.join(' | '));
+
+        // Write git workflow fields if present
+        if (item.branch) {
+          lines.push(`**Branch**: ${item.branch}`);
+        }
+        if (item.worktreePath) {
+          lines.push(`**Worktree**: ${item.worktreePath}`);
+        }
         lines.push('');
 
         if (item.description) {
           lines.push(item.description);
+          lines.push('');
+        }
+
+        // Write review feedback if present (typically after failed review)
+        if (item.reviewFeedback) {
+          lines.push('> **Review Feedback**:');
+          lines.push(`> ${item.reviewFeedback.split('\n').join('\n> ')}`);
           lines.push('');
         }
       }

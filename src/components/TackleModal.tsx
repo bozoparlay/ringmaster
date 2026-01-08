@@ -118,11 +118,13 @@ Let's begin by exploring the codebase to understand the current state and then c
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          taskId: item.id,
           title: item.title,
           description: item.description,
           category: item.category,
           priority: item.priority,
           backlogPath,
+          worktreePath: item.worktreePath,
         }),
       });
 

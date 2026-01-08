@@ -55,7 +55,7 @@ export default function Home() {
           onNewTask={() => setIsNewTaskOpen(true)}
           isLoading={loading}
           searchQuery={searchQuery}
-          backlogPath={filePath}
+          backlogPath={filePath ?? undefined}
         />
       </div>
 

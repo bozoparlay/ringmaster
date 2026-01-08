@@ -20,7 +20,19 @@ import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { TaskPanel } from './TaskPanel';
 import { TackleModal } from './TackleModal';
+import { ReviewModal } from './ReviewModal';
 import { Toast, ToastType } from './Toast';
+
+interface ReviewResult {
+  passed: boolean;
+  summary: string;
+  issues: Array<{
+    severity: 'critical' | 'major' | 'minor' | 'suggestion';
+    file?: string;
+    line?: number;
+    message: string;
+  }>;
+}
 
 interface KanbanBoardProps {
   items: BacklogItem[];
@@ -51,8 +63,80 @@ export function KanbanBoard({
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
+  // Review modal state
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [isReviewLoading, setIsReviewLoading] = useState(false);
+  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
+  const [reviewError, setReviewError] = useState<string | undefined>();
+  const [reviewItem, setReviewItem] = useState<BacklogItem | null>(null);
+
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
+  };
+
+  // Trigger code review when moving to review column
+  const triggerReview = async (item: BacklogItem) => {
+    setReviewItem(item);
+    setIsReviewOpen(true);
+    setIsReviewLoading(true);
+    setReviewResult(null);
+    setReviewError(undefined);
+
+    try {
+      const response = await fetch('/api/review-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: item.id,
+          title: item.title,
+          description: item.description,
+          branch: item.branch,
+          worktreePath: item.worktreePath,
+          backlogPath,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setReviewResult(data.result);
+      } else {
+        setReviewError(data.error || 'Review failed');
+      }
+    } catch (error) {
+      console.error('Review error:', error);
+      setReviewError(error instanceof Error ? error.message : 'Review failed');
+    } finally {
+      setIsReviewLoading(false);
+    }
+  };
+
+  // Handle review modal actions
+  const handleReviewContinue = async () => {
+    if (!reviewItem) return;
+    // Move to ready_to_ship
+    await onUpdateItem({ ...reviewItem, status: 'ready_to_ship' });
+    setIsReviewOpen(false);
+    setReviewItem(null);
+    showToast('Task moved to Ready to Ship!', 'success');
+  };
+
+  const handleReviewRetry = async () => {
+    if (!reviewItem) return;
+    // Store feedback if review failed
+    const feedback = reviewResult && !reviewResult.passed
+      ? reviewResult.summary
+      : undefined;
+    // Move back to in_progress with feedback
+    await onUpdateItem({
+      ...reviewItem,
+      status: 'in_progress',
+      reviewFeedback: feedback,
+    });
+    setIsReviewOpen(false);
+    setReviewItem(null);
+    if (feedback) {
+      showToast('Task returned to In Progress with review feedback', 'info');
+    }
   };
 
   const isSearching = searchQuery.trim().length > 0;
@@ -91,7 +175,7 @@ export function KanbanBoard({
       up_next: [],
       in_progress: [],
       review: [],
-      done: [],
+      ready_to_ship: [],
     };
 
     // First pass: distribute items to their actual status columns
@@ -128,7 +212,7 @@ export function KanbanBoard({
     }
 
     // Sort other columns by priority weight, then by order
-    ['in_progress', 'review', 'done'].forEach((status) => {
+    ['in_progress', 'review', 'ready_to_ship'].forEach((status) => {
       columns[status as Status].sort((a, b) => {
         const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
         if (priorityDiff !== 0) return priorityDiff;
@@ -166,6 +250,11 @@ export function KanbanBoard({
       // up_next is virtual - treat drops there as backlog
       const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
       if (activeItem.status !== targetStatus) {
+        // Intercept moves to review column - trigger code review
+        if (targetStatus === 'review' && activeItem.status === 'in_progress') {
+          triggerReview(activeItem);
+          return;
+        }
         onUpdateItem({ ...activeItem, status: targetStatus });
       }
       return;
@@ -191,6 +280,11 @@ export function KanbanBoard({
       if (targetVisualColumn && activeVisualColumn !== targetVisualColumn) {
         // up_next is virtual - treat as backlog
         const actualStatus = targetVisualColumn === 'up_next' ? 'backlog' : targetVisualColumn;
+        // Intercept moves to review column - trigger code review
+        if (actualStatus === 'review' && activeItem.status === 'in_progress') {
+          triggerReview(activeItem);
+          return;
+        }
         onUpdateItem({ ...activeItem, status: actualStatus });
         return;
       }
@@ -239,16 +333,101 @@ export function KanbanBoard({
     setIsPanelOpen(false);
   };
 
+  const handleShip = async (item: BacklogItem) => {
+    try {
+      // Step 1: Commit, push, and clean up worktree
+      const response = await fetch('/api/ship-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: item.id,
+          title: item.title,
+          branch: item.branch,
+          worktreePath: item.worktreePath,
+          backlogPath,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        showToast(`Ship failed: ${result.error}`, 'error');
+        return;
+      }
+
+      // Step 2: Delete the task from backlog (updates BACKLOG.md file)
+      await onDeleteItem(item.id);
+
+      // Step 3: Commit the backlog change to main repo
+      if (backlogPath) {
+        try {
+          await fetch('/api/commit-backlog', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              backlogPath,
+              message: `Ship: ${item.title}`,
+            }),
+          });
+        } catch (commitError) {
+          console.warn('Failed to commit backlog change:', commitError);
+          // Don't fail the ship - the task was already pushed
+        }
+      }
+
+      showToast(`Shipped! Branch ${result.branch} pushed to remote.`, 'success');
+    } catch (error) {
+      console.error('Ship error:', error);
+      showToast('Ship failed. Check console for details.', 'error');
+    }
+  };
+
   const handleStartWork = async (item: BacklogItem) => {
-    // Move to in_progress when starting work
-    await onUpdateItem({ ...item, status: 'in_progress' });
+    // Create worktree for isolated development
+    try {
+      const response = await fetch('/api/create-worktree', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: item.id,
+          title: item.title,
+          backlogPath,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        // Update item with branch and worktree info
+        await onUpdateItem({
+          ...item,
+          status: 'in_progress',
+          branch: result.branch,
+          worktreePath: result.worktreePath,
+        });
+
+        if (result.alreadyExists) {
+          showToast(`Worktree already exists: ${result.worktreePath}`, 'info');
+        } else {
+          showToast(`Created worktree: ${result.worktreePath} (branch: ${result.branch})`, 'success');
+        }
+      } else {
+        // Still move to in_progress but without worktree
+        await onUpdateItem({ ...item, status: 'in_progress' });
+        showToast(`Could not create worktree: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      // Fallback - still move to in_progress
+      await onUpdateItem({ ...item, status: 'in_progress' });
+      console.error('Worktree creation failed:', error);
+      showToast('Worktree creation failed, but task moved to In Progress', 'error');
+    }
+
     setIsTackleOpen(false);
     setTackleItem(null);
   };
 
   const handleStartItem = async (item: BacklogItem) => {
-    // Move directly to in_progress from Up Next
-    await onUpdateItem({ ...item, status: 'in_progress' });
+    // Move directly to in_progress from Up Next (also creates worktree)
+    await handleStartWork(item);
   };
 
   return (
@@ -328,6 +507,8 @@ export function KanbanBoard({
         onSave={handleSaveItem}
         onDelete={handleDeleteItem}
         onTackle={handleTackle}
+        onShip={handleShip}
+        backlogPath={backlogPath}
       />
 
       {/* Tackle Modal */}
@@ -341,6 +522,21 @@ export function KanbanBoard({
         onStartWork={handleStartWork}
         onShowToast={showToast}
         backlogPath={backlogPath}
+      />
+
+      {/* Review Modal */}
+      <ReviewModal
+        isOpen={isReviewOpen}
+        isLoading={isReviewLoading}
+        result={reviewResult}
+        error={reviewError}
+        onClose={() => {
+          setIsReviewOpen(false);
+          setReviewItem(null);
+        }}
+        onContinue={handleReviewContinue}
+        onRetry={handleReviewRetry}
+        taskTitle={reviewItem?.title || ''}
       />
 
       {/* Toast Notification */}
