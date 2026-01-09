@@ -75,10 +75,11 @@ Important:
 - Notes should capture any technical details, links, or considerations`;
 
   return new Promise((resolve) => {
-    const claude = spawn('claude', ['-p', prompt, '--output-format', 'text'], {
+    // Use full path since Node.js spawn doesn't use shell PATH
+    const claudePath = '/opt/homebrew/bin/claude';
+    const claude = spawn(claudePath, ['-p', prompt, '--output-format', 'text'], {
       cwd: workDir,
       env: { ...process.env, FORCE_COLOR: '0' },
-      shell: true,
     });
 
     let stdout = '';

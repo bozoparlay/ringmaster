@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
-import { exec, spawn } from 'child_process';
+import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { fromIni } from '@aws-sdk/credential-providers';
+import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 
 const execAsync = promisify(exec);
+
+// Initialize Bedrock client with profile support
+const bedrockClient = new BedrockRuntimeClient({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: fromIni({
+    profile: process.env.AWS_PROFILE || 'bozo',
+  }),
+});
+
+const CLAUDE_MODEL_ID = 'us.anthropic.claude-sonnet-4-20250514-v1:0';
 
 interface ReviewRequest {
   taskId: string;
@@ -38,29 +50,50 @@ interface ReviewResult {
 }
 
 /**
- * Review code changes using Claude Code CLI.
- * Claude Code has access to the full codebase and can use tools like grep, read files, etc.
+ * Get git diff between branches
  */
-async function reviewWithClaudeCode(
-  workDir: string,
-  branch: string,
-  baseBranch: string,
+async function getGitDiff(workDir: string, baseBranch: string, targetBranch: string): Promise<string> {
+  try {
+    // Try three-dot syntax first (commits on target not in base)
+    const { stdout } = await execAsync(
+      `git diff ${baseBranch}...${targetBranch}`,
+      { cwd: workDir, maxBuffer: 10 * 1024 * 1024 }
+    );
+    return stdout;
+  } catch {
+    // Fallback to two-dot syntax
+    const { stdout } = await execAsync(
+      `git diff ${baseBranch} ${targetBranch}`,
+      { cwd: workDir, maxBuffer: 10 * 1024 * 1024 }
+    );
+    return stdout;
+  }
+}
+
+/**
+ * Review code changes using Bedrock API directly
+ */
+async function reviewWithBedrock(
+  diff: string,
   title: string,
   description: string
 ): Promise<ReviewResult> {
-  const prompt = `You are reviewing code changes for a task. Analyze the changes thoroughly.
+  const prompt = `You are reviewing code changes for a task. Analyze the git diff thoroughly.
 
 Task: ${title}
 Description: ${description || 'No description provided'}
 
-The changes are on branch "${branch}" compared to "${baseBranch}".
+Git Diff:
+\`\`\`diff
+${diff.slice(0, 50000)}
+\`\`\`
+${diff.length > 50000 ? '\n[Diff truncated due to length]' : ''}
 
 Instructions:
-1. Run: git diff ${baseBranch}...${branch}
-2. Review the diff for code quality issues - read relevant files if you need more context
-3. IMPORTANT: Compare the implementation against the task requirements in the description
-4. Check if the implementation scope matches what was requested
-5. Return your review as JSON
+1. Review the diff for code quality issues
+2. Compare the implementation against the task requirements in the description
+3. Check if the implementation scope matches what was requested
+4. Return your review as JSON
 
 Return ONLY this JSON structure (no markdown, no explanation):
 {
@@ -108,70 +141,46 @@ IMPORTANT for "needsRescope":
 Only set "passed": false for critical or major code quality issues.
 Focus on real bugs and issues, not style preferences.`;
 
-  return new Promise((resolve, reject) => {
-    // Use spawn to run claude CLI in print mode
-    const claude = spawn('claude', ['-p', prompt, '--output-format', 'text'], {
-      cwd: workDir,
-      env: { ...process.env, FORCE_COLOR: '0' },
-      shell: true,
-    });
+  console.log(`[review-task] Calling Bedrock API with diff length: ${diff.length}`);
 
-    let stdout = '';
-    let stderr = '';
-
-    claude.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    claude.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    claude.on('close', (code: number | null) => {
-      if (code !== 0) {
-        console.error('Claude Code stderr:', stderr);
-        reject(new Error(`Claude Code exited with code ${code}`));
-        return;
-      }
-
-      // Parse JSON from response - find the JSON object in the output
-      try {
-        // Look for JSON object pattern
-        const jsonMatch = stdout.match(/\{[\s\S]*?"passed"[\s\S]*?"summary"[\s\S]*?\}/);
-        if (jsonMatch) {
-          const result = JSON.parse(jsonMatch[0]) as ReviewResult;
-          resolve(result);
-        } else {
-          console.error('Claude Code output:', stdout);
-          reject(new Error('No valid JSON found in Claude Code response'));
-        }
-      } catch (err) {
-        console.error('Parse error. Output was:', stdout);
-        reject(new Error(`Failed to parse Claude Code response: ${err}`));
-      }
-    });
-
-    claude.on('error', (err: Error) => {
-      reject(new Error(`Failed to spawn Claude Code: ${err.message}`));
-    });
-
-    // Set a timeout for the review (5 minutes max)
-    setTimeout(() => {
-      claude.kill();
-      reject(new Error('Claude Code review timed out after 5 minutes'));
-    }, 5 * 60 * 1000);
+  const command = new ConverseCommand({
+    modelId: CLAUDE_MODEL_ID,
+    messages: [
+      {
+        role: 'user',
+        content: [{ text: prompt }],
+      },
+    ],
+    inferenceConfig: {
+      maxTokens: 4096,
+      temperature: 0.3,
+    },
   });
-}
 
-/**
- * Check if Claude Code CLI is available
- */
-async function isClaudeCodeAvailable(): Promise<boolean> {
+  const response = await bedrockClient.send(command);
+
+  const assistantMessage = response.output?.message?.content?.[0];
+  if (!assistantMessage || assistantMessage.text === undefined) {
+    throw new Error('No response from Bedrock');
+  }
+
+  const responseText = assistantMessage.text;
+  console.log(`[review-task] Bedrock response length: ${responseText.length}`);
+
+  // Parse JSON from response
+  const jsonMatch = responseText.match(/\{[\s\S]*?"passed"[\s\S]*?"summary"[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error('[review-task] No JSON found in response:', responseText.slice(0, 500));
+    throw new Error('No valid JSON found in Bedrock response');
+  }
+
   try {
-    await execAsync('which claude');
-    return true;
-  } catch {
-    return false;
+    const result = JSON.parse(jsonMatch[0]) as ReviewResult;
+    return result;
+  } catch (parseError) {
+    console.error('[review-task] JSON parse error:', parseError);
+    console.error('[review-task] Raw JSON:', jsonMatch[0].slice(0, 500));
+    throw new Error(`Failed to parse review JSON: ${parseError}`);
   }
 }
 
@@ -217,31 +226,19 @@ export async function POST(request: Request) {
       else if (stdout.includes('master')) defaultBranch = 'master';
     } catch {}
 
-    // Check if there are any changes to review
-    let hasChanges = false;
+    // Get the git diff
+    console.log(`[review-task] Getting diff: ${defaultBranch}...${targetBranch} in ${workDir}`);
+    let diff: string;
     try {
-      const { stdout } = await execAsync(
-        `git diff ${defaultBranch}...${targetBranch} --stat`,
-        { cwd: workDir }
+      diff = await getGitDiff(workDir, defaultBranch, targetBranch);
+    } catch (diffError) {
+      return NextResponse.json(
+        { error: `Could not get git diff: ${diffError}` },
+        { status: 400 }
       );
-      hasChanges = stdout.trim().length > 0;
-    } catch {
-      // Try alternative diff
-      try {
-        const { stdout } = await execAsync(
-          `git diff ${defaultBranch} ${targetBranch} --stat`,
-          { cwd: workDir }
-        );
-        hasChanges = stdout.trim().length > 0;
-      } catch {
-        return NextResponse.json(
-          { error: 'Could not get git diff. Make sure both branches exist.' },
-          { status: 400 }
-        );
-      }
     }
 
-    if (!hasChanges) {
+    if (!diff.trim()) {
       return NextResponse.json({
         success: true,
         result: {
@@ -252,24 +249,9 @@ export async function POST(request: Request) {
       });
     }
 
-    // Check if Claude Code is available
-    const claudeAvailable = await isClaudeCodeAvailable();
-    if (!claudeAvailable) {
-      return NextResponse.json(
-        { error: 'Claude Code CLI is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code' },
-        { status: 500 }
-      );
-    }
-
-    // Run the review with Claude Code
+    // Run the review with Bedrock
     const startTime = Date.now();
-    const result = await reviewWithClaudeCode(
-      workDir,
-      targetBranch,
-      defaultBranch,
-      title,
-      description || ''
-    );
+    const result = await reviewWithBedrock(diff, title, description || '');
     const duration = Date.now() - startTime;
 
     // Log pipeline metrics for monitoring
@@ -337,7 +319,7 @@ export async function POST(request: Request) {
       result,
       branch: targetBranch,
       baseBranch: defaultBranch,
-      reviewedBy: 'claude-code',
+      reviewedBy: 'bedrock-api',
       metrics: {
         duration,
         timestamp: new Date().toISOString(),

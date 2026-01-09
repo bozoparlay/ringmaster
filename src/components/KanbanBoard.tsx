@@ -360,7 +360,10 @@ export function KanbanBoard({
       if (activeItem.status !== targetStatus) {
         // Intercept moves to review column - trigger code review
         if (targetStatus === 'review' && activeItem.status === 'in_progress') {
-          triggerReview(activeItem);
+          // Move to review column immediately, then trigger review
+          const updatedItem = { ...activeItem, status: 'review' as Status };
+          onUpdateItem(updatedItem);
+          triggerReview(updatedItem);
           return;
         }
         onUpdateItem({ ...activeItem, status: targetStatus });
@@ -409,7 +412,10 @@ export function KanbanBoard({
         const actualStatus = targetVisualColumn === 'up_next' ? 'backlog' : targetVisualColumn;
         // Intercept moves to review column - trigger code review
         if (actualStatus === 'review' && activeItem.status === 'in_progress') {
-          triggerReview(activeItem);
+          // Move to review column immediately, then trigger review
+          const updatedItem = { ...activeItem, status: 'review' as Status };
+          onUpdateItem(updatedItem);
+          triggerReview(updatedItem);
           return;
         }
         onUpdateItem({ ...activeItem, status: actualStatus });
@@ -708,6 +714,7 @@ export function KanbanBoard({
         onSave={handleSaveItem}
         onDelete={handleDeleteItem}
         onTackle={handleTackle}
+        onReview={triggerReview}
         onShip={handleShip}
         backlogPath={backlogPath}
         isActive={selectedItem ? signals?.activeTaskId === selectedItem.id : false}

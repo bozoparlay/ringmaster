@@ -16,6 +16,7 @@ interface TaskPanelProps {
   onSave: (item: BacklogItem) => void;
   onDelete: (id: string) => Promise<void>;
   onTackle: (item: BacklogItem) => void;
+  onReview?: (item: BacklogItem) => void;
   onShip?: (item: BacklogItem) => Promise<void>;
   backlogPath?: string;
   isActive?: boolean;
@@ -150,7 +151,7 @@ const valueColors: Record<Value, string> = {
   high: 'bg-emerald-500',
 };
 
-export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onShip, backlogPath, isActive, onSetActiveTask }: TaskPanelProps) {
+export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onReview, onShip, backlogPath, isActive, onSetActiveTask }: TaskPanelProps) {
   const [editedItem, setEditedItem] = useState<BacklogItem | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -170,6 +171,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
 
   const hasAiChanges = preAiItem !== null;
   const isReadyToShip = editedItem?.status === 'ready_to_ship';
+  const isInReview = editedItem?.status === 'review';
   const hasBranch = !!editedItem?.branch;
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
   const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
@@ -1070,6 +1072,19 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </button>
           )}
 
+          {/* Review button (shown when in review status) */}
+          {isInReview && onReview && (
+            <button
+              onClick={() => onReview(editedItem)}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-cyan-500/25"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Run Code Review
+            </button>
+          )}
+
           {/* Mark as Active toggle */}
           {onSetActiveTask && (
             <button
@@ -1099,8 +1114,8 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </button>
           )}
 
-          {/* Tackle button (not shown when ready to ship) */}
-          {!isReadyToShip && (
+          {/* Tackle button (not shown when ready to ship or in review) */}
+          {!isReadyToShip && !isInReview && (
             <button
               onClick={() => onTackle(editedItem)}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/25"
