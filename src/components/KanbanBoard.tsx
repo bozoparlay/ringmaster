@@ -63,6 +63,17 @@ function upgradePriority(current: Priority): Priority {
   return PRIORITY_ORDER[index - 1];
 }
 
+/**
+ * Calculate how many items should be shown in Up Next based on backlog size.
+ * Uses proportional scaling to avoid overwhelming small backlogs.
+ */
+function calculateUpNextLimit(backlogSize: number): number {
+  if (backlogSize < 5) return 1;
+  if (backlogSize < 10) return 3;
+  if (backlogSize < 15) return 4;
+  return UP_NEXT_LIMIT; // 5 for larger backlogs
+}
+
 interface KanbanBoardProps {
   items: BacklogItem[];
   onUpdateItem: (item: BacklogItem) => Promise<void>;
@@ -275,27 +286,19 @@ export function KanbanBoard({
         item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
       );
 
-      // Dynamic Up Next limit based on backlog size
-      const backlogSize = columns.backlog.length;
-      let upNextLimit: number;
-      if (backlogSize < 5) {
-        upNextLimit = 1;
-      } else if (backlogSize < 10) {
-        upNextLimit = 3;
-      } else if (backlogSize < 15) {
-        upNextLimit = 4;
-      } else {
-        upNextLimit = UP_NEXT_LIMIT; // 5 for larger backlogs
-      }
-
+      const upNextLimit = calculateUpNextLimit(columns.backlog.length);
       const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
       upNextItemIds = new Set(upNextItems.map(item => item.id));
 
       // Set Up Next column items
       columns.up_next = upNextItems;
 
-      // Keep Up Next items in backlog too (don't filter them out)
-      // This allows users to see that Up Next items are still part of the backlog
+      // IMPORTANT: Keep Up Next items in backlog too (don't filter them out)
+      // This is the core behavior that enables dual-visibility:
+      // - Users can see all pending work in Backlog (including what's up next)
+      // - Up Next provides a focused view of immediate priorities
+      // - Items get a cyan badge in Backlog to show they're also in Up Next
+      // This transparency helps users understand the relationship between backlog and scheduled work
     }
 
     // Sort other columns by priority weight, then by order

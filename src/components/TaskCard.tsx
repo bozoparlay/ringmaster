@@ -64,7 +64,7 @@ export function TaskCard({ item, onClick, isDragging, isActive, isInUpNext }: Ta
         className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priority.dot} opacity-60`}
       />
 
-      {/* Low quality warning indicator */}
+      {/* Low quality warning indicator (top-right) */}
       {isLowQuality && (
         <div
           className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-lg border-2 border-surface-850 z-10"
@@ -76,10 +76,10 @@ export function TaskCard({ item, onClick, isDragging, isActive, isInUpNext }: Ta
         </div>
       )}
 
-      {/* Up Next indicator - shows when a backlog item is also in Up Next */}
+      {/* Up Next indicator (top-left) - shows when a backlog item is also in Up Next */}
       {isInUpNext && (
         <div
-          className={`absolute ${isLowQuality ? '-top-1 -right-7' : '-top-1 -right-1'} w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center shadow-lg border-2 border-surface-850 z-10`}
+          className="absolute -top-1 -left-1 w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center shadow-lg border-2 border-surface-850 z-10"
           title="This item is in Up Next"
         >
           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
