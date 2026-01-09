@@ -6,27 +6,47 @@
 **Priority**: High | **Effort**: Medium | **Value**: High
 
 **Description**:
-The AI Rescope functionality is currently broken, preventing administrators from using AI assistance to automatically adjust task scope and requirements. When users click the "AI Rescope" button, the interface shows a loading spinner indefinitely without performing any rescoping operation or providing feedback. This blocks a key administrative workflow for task management.
+**Description:**
+The AI Rescope functionality is currently broken, preventing administrators from using AI assistance to automatically adjust task scope and requirements. When users click the "AI Rescope" button, the interface shows a loading spinner indefinitely without performing any rescoping operation or providing feedback. This blocks a key administrative workflow for task management and reduces productivity for project managers who rely on AI-assisted task refinement.
 
 **Requirements:**
 - Fix the AI Rescope button to properly trigger the rescoping operation
 - Ensure the loading spinner resolves after the operation completes or fails
 - Display appropriate success/error messages to provide user feedback
-- Verify the rescoped content is properly saved and displayed
-- Add proper error handling for API failures or timeout scenarios
-- Implement reasonable timeout limits (30-60 seconds) to prevent infinite loading
-- Ensure the rescoping maintains original task context and intent
-- Add logging for debugging future AI integration issues
+- Verify the rescoped content is properly saved and displayed in the task interface
+- Add proper error handling for API failures, network issues, or timeout scenarios
+- Implement reasonable timeout limits (30-60 seconds) to prevent infinite loading states
+- Ensure the rescoping maintains original task context and intent while improving clarity
+- Add comprehensive logging for debugging future AI integration issues
+- Validate that rescoped content preserves all critical task information
+- Ensure the UI remains responsive during the rescoping process
 
 **Technical Approach:**
-Investigate the frontend event handler for the AI Rescope button and trace the API call chain. Check for broken API endpoints, authentication issues, or timeout problems. Examine the AI service integration for proper request formatting and response handling. Review error handling middleware and ensure proper state management for loading states.
+Investigate the frontend event handler for the AI Rescope button and trace the complete API call chain from button click to response handling. Check for broken API endpoints, authentication token issues, or network timeout problems. Examine the AI service integration for proper request formatting, response parsing, and error handling. Review error handling middleware and ensure proper state management for loading states. Inspect the task update mechanism to ensure rescoped content is properly persisted to the database. Add appropriate try-catch blocks and implement exponential backoff for retry logic. Consider adding a progress indicator for long-running AI operations and ensure proper cleanup of event listeners and timers.
 
-**Acceptance Criteria**:
-- [ ] AI Rescope button successfully processes requests within reasonable time
-- [ ] Loading spinner properly indicates operation status
-- [ ] Users receive clear feedback on success/failure
-- [ ] Rescoped content is accurately saved and displayed
-- [ ] No infinite loading states occur
+---
+
+## [backlog] Infrastructure
+
+### Setup docker container
+**Priority**: High | **Effort**: Medium | **Value**: High
+
+**Description**:
+**Description:**
+Setup a Docker development container environment to provide a secure, isolated sandbox for running AI-assisted development tools. This containerized environment will prevent potential security risks when using automated code generation and modification tools that require elevated permissions, while ensuring consistent development environments across the team.
+
+**Requirements:**
+- Follow the reference implementation from https://github.com/anthropics/claude-code/tree/main/.devcontainer
+- Create a Docker container without internet access to minimize security risks
+- Configure the container to support the Bozo Parlay application stack (likely Node.js/React frontend, backend API)
+- Include all necessary development dependencies and tools within the container
+- Ensure the container can run AI development tools safely with bypassed permission checks
+- Document the setup process and usage instructions for the development team
+- Configure volume mounts to persist code changes between container sessions
+- Set up appropriate user permissions within the container
+
+**Technical Approach:**
+Create a .devcontainer directory in the project root with devcontainer.json configuration. Use a base image that supports the application's tech stack. Configure Docker Compose if multiple services are needed. Include VS Code extensions and settings for optimal development experience. Set up network isolation to prevent internet access while maintaining localhost connectivity for development servers.
 
 ---
 

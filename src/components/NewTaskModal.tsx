@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Priority, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
+import { InlineOptionSelector } from './InlineOptionSelector';
 
 interface EnhancedTask {
   title: string;
@@ -28,24 +29,58 @@ interface NewTaskModalProps {
   backlogPath?: string;
 }
 
-const priorityOptions: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
-const effortOptions: Effort[] = ['low', 'medium', 'high', 'very_high'];
-const valueOptions: Value[] = ['low', 'medium', 'high'];
+// Priority options with labels
+const priorityOptions: { value: Priority; label: string }[] = [
+  { value: 'critical', label: PRIORITY_LABELS.critical },
+  { value: 'high', label: PRIORITY_LABELS.high },
+  { value: 'medium', label: PRIORITY_LABELS.medium },
+  { value: 'low', label: PRIORITY_LABELS.low },
+  { value: 'someday', label: PRIORITY_LABELS.someday },
+];
 
+// Effort options with labels
+const effortOptions: { value: Effort; label: string }[] = [
+  { value: 'low', label: EFFORT_LABELS.low },
+  { value: 'medium', label: EFFORT_LABELS.medium },
+  { value: 'high', label: EFFORT_LABELS.high },
+  { value: 'very_high', label: EFFORT_LABELS.very_high },
+];
+
+// Value options with labels
+const valueOptions: { value: Value; label: string }[] = [
+  { value: 'low', label: VALUE_LABELS.low },
+  { value: 'medium', label: VALUE_LABELS.medium },
+  { value: 'high', label: VALUE_LABELS.high },
+];
+
+// Color maps for each selector (green → yellow → blue → orange → red)
 const priorityColors: Record<Priority, string> = {
-  critical: 'bg-red-500',
+  someday: 'bg-green-500',
+  low: 'bg-yellow-500',
+  medium: 'bg-blue-500',
   high: 'bg-orange-500',
-  medium: 'bg-yellow-500',
+  critical: 'bg-red-500',
+};
+
+const effortColors: Record<Effort, string> = {
   low: 'bg-green-500',
-  someday: 'bg-surface-500',
+  medium: 'bg-yellow-500',
+  high: 'bg-orange-500',
+  very_high: 'bg-red-500',
+};
+
+const valueColors: Record<Value, string> = {
+  low: 'bg-green-500',
+  medium: 'bg-yellow-500',
+  high: 'bg-red-500',
 };
 
 export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<Priority | undefined>(undefined);
-  const [effort, setEffort] = useState<Effort | undefined>(undefined);
-  const [value, setValue] = useState<Value | undefined>(undefined);
+  const [priority, setPriority] = useState<Priority>('medium');
+  const [effort, setEffort] = useState<Effort>('medium');
+  const [value, setValue] = useState<Value>('medium');
   const [category, setCategory] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -58,9 +93,9 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
     if (isOpen) {
       setTitle('');
       setDescription('');
-      setPriority(undefined);
-      setEffort(undefined);
-      setValue(undefined);
+      setPriority('medium');
+      setEffort('medium');
+      setValue('medium');
       setCategory('');
       setShowAdvanced(false);
       setSimilarTasks([]);
@@ -148,7 +183,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
     onSubmit({
       title: title.trim(),
       description: description.trim(),
-      priority: priority || 'medium',
+      priority,
       effort,
       value,
       category: category.trim() || undefined,
@@ -293,80 +328,31 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
                   />
                 </div>
 
-                {/* Priority */}
-                <div>
-                  <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                    Priority
-                  </label>
-                  <div className="flex gap-1">
-                    {priorityOptions.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setPriority(priority === p ? undefined : p)}
-                        className={`
-                          flex-1 py-2 rounded-lg text-xs font-medium capitalize transition-all
-                          ${priority === p
-                            ? `${priorityColors[p]} text-white shadow-lg`
-                            : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                          }
-                        `}
-                      >
-                        {PRIORITY_LABELS[p]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                {/* Priority, Effort & Value - 3 Column Grid */}
+                <div className="grid grid-cols-3 gap-4">
+                  <InlineOptionSelector<Priority>
+                    label="Priority"
+                    options={priorityOptions}
+                    value={priority}
+                    onChange={setPriority}
+                    colorMap={priorityColors}
+                  />
 
-                {/* Effort & Value */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                      Effort
-                    </label>
-                    <div className="flex flex-col gap-1">
-                      {effortOptions.map((e) => (
-                        <button
-                          key={e}
-                          type="button"
-                          onClick={() => setEffort(effort === e ? undefined : e)}
-                          className={`
-                            py-1.5 px-2 rounded-lg text-xs font-medium transition-all text-left
-                            ${effort === e
-                              ? 'bg-blue-500 text-white shadow-lg'
-                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                            }
-                          `}
-                        >
-                          {EFFORT_LABELS[e]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <InlineOptionSelector<Effort>
+                    label="Effort"
+                    options={effortOptions}
+                    value={effort}
+                    onChange={setEffort}
+                    colorMap={effortColors}
+                  />
 
-                  <div>
-                    <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                      Value
-                    </label>
-                    <div className="flex flex-col gap-1">
-                      {valueOptions.map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => setValue(value === v ? undefined : v)}
-                          className={`
-                            py-1.5 px-2 rounded-lg text-xs font-medium transition-all text-left
-                            ${value === v
-                              ? 'bg-emerald-500 text-white shadow-lg'
-                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                            }
-                          `}
-                        >
-                          {VALUE_LABELS[v]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <InlineOptionSelector<Value>
+                    label="Value"
+                    options={valueOptions}
+                    value={value}
+                    onChange={setValue}
+                    colorMap={valueColors}
+                  />
                 </div>
               </div>
             )}
