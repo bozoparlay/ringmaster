@@ -22,12 +22,12 @@ The AI Rescope functionality is currently broken, preventing administrators from
 ## Technical Approach
 Investigate the frontend event handler for the AI Rescope button and trace the API call chain. Check for broken API endpoints, authentication issues, or timeout problems. Examine the AI service integration for proper request formatting and response handling. Review error handling middleware and ensure proper state management for loading states.
 
-## Success Criteria
-- AI Rescope button successfully processes requests within reasonable time
-- Loading spinner properly indicates operation status
-- Users receive clear feedback on success/failure
-- Rescoped content is accurately saved and displayed
-- No infinite loading states occur
+**Acceptance Criteria**:
+- [ ] AI Rescope button successfully processes requests within reasonable time
+- [ ] Loading spinner properly indicates operation status
+- [ ] Users receive clear feedback on success/failure
+- [ ] Rescoped content is accurately saved and displayed
+- [ ] No infinite loading states occur
 
 ---
 
@@ -53,12 +53,12 @@ Optimize the task creation workflow to eliminate performance bottlenecks when ad
 ## Technical Approach
 Profile the current task creation flow to identify bottlenecks (likely database operations, API calls, or inefficient data processing). Optimize database queries, implement proper indexing, and consider caching strategies. Review the AI assist integration for unnecessary blocking operations. Implement asynchronous processing where possible and add proper loading states in the frontend. Consider batching operations or using background jobs for heavy processing.
 
-## Success Criteria
-- Task creation completes in under 2 seconds consistently
-- Users receive immediate feedback when clicking "Add Task"
-- No increase in failed task creation attempts
-- Performance metrics show measurable improvement
-- User experience testing confirms smoother workflow
+**Acceptance Criteria**:
+- [ ] Task creation completes in under 2 seconds consistently
+- [ ] Users receive immediate feedback when clicking "Add Task"
+- [ ] No increase in failed task creation attempts
+- [ ] Performance metrics show measurable improvement
+- [ ] User experience testing confirms smoother workflow
 
 ---
 
@@ -98,18 +98,18 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 - Update state management to properly handle tile position changes
 - Test drop functionality specifically near column headers/emojis to ensure the fix addresses the reported issue
 
-## Success Criteria
-- Users can successfully drag tiles from "Up Next" to "In Progress" sections
-- Users can successfully drag tiles from "In Progress" back to "Up Next" sections
-- Tiles can be dropped anywhere within a column, including near the top where emojis/headers are located
-- Drop zones provide clear visual feedback across the entire column area
-- Drag and drop works on desktop browsers (Chrome, Firefox, Safari, Edge)
-- Drag and drop works on mobile devices (iOS Safari, Android Chrome)
-- Visual feedback is clear during drag operations and shows the full droppable area
-- No JavaScript errors occur during drag and drop operations
-- Tile positions persist correctly after drag operations
-- QA testing confirms functionality works for all user scenarios, specifically testing drops near column headers
-- User can intuitively drop tiles without having to aim for the middle of columns
+**Acceptance Criteria**:
+- [ ] Users can successfully drag tiles from "Up Next" to "In Progress" sections
+- [ ] Users can successfully drag tiles from "In Progress" back to "Up Next" sections
+- [ ] Tiles can be dropped anywhere within a column, including near the top where emojis/headers are located
+- [ ] Drop zones provide clear visual feedback across the entire column area
+- [ ] Drag and drop works on desktop browsers (Chrome, Firefox, Safari, Edge)
+- [ ] Drag and drop works on mobile devices (iOS Safari, Android Chrome)
+- [ ] Visual feedback is clear during drag operations and shows the full droppable area
+- [ ] No JavaScript errors occur during drag and drop operations
+- [ ] Tile positions persist correctly after drag operations
+- [ ] QA testing confirms functionality works for all user scenarios, specifically testing drops near column headers
+- [ ] User can intuitively drop tiles without having to aim for the middle of columns
 
 ### Up Next Should Also Be in Backlog
 **Priority**: Medium | **Effort**: Low | **Value**: Medium
@@ -129,11 +129,11 @@ This task addresses a UI consistency issue in the project management interface w
 ## Technical Approach
 Modify the column filtering logic to include Up Next items in the Backlog query. Update the card component to display a visual badge or styling when an item exists in both states. Consider implementing a shared state management approach to ensure data consistency. Likely files to modify include the board/kanban component, card filtering utilities, and CSS for visual indicators.
 
-## Success Criteria
-- All Up Next cards are visible in Backlog column with appropriate visual distinction
-- No duplicate actions or state conflicts when interacting with dual-visible cards
-- Existing column functionality remains intact
-- Visual indicators clearly communicate dual-column status to users
+**Acceptance Criteria**:
+- [ ] All Up Next cards are visible in Backlog column with appropriate visual distinction
+- [ ] No duplicate actions or state conflicts when interacting with dual-visible cards
+- [ ] Existing column functionality remains intact
+- [ ] Visual indicators clearly communicate dual-column status to users
 
 ### Resize Up Next column
 **Priority**: Low | **Effort**: Low | **Value**: Low
@@ -153,10 +153,10 @@ Adjust the width of the "Up Next" column to maintain visual consistency with oth
 - Test column proportions on desktop, tablet, and mobile viewports
 - Ensure no content overflow or truncation issues
 
-## Success Criteria
-- "Up Next" column width is visually balanced with other columns
-- Table maintains proper alignment and spacing
-- No horizontal scrolling introduced on standard screen sizes
-- Content remains fully readable and accessible
+**Acceptance Criteria**:
+- [ ] "Up Next" column width is visually balanced with other columns
+- [ ] Table maintains proper alignment and spacing
+- [ ] No horizontal scrolling introduced on standard screen sizes
+- [ ] Content remains fully readable and accessible
 
 ---
