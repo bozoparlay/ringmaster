@@ -8,6 +8,8 @@ const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
 const GIT_WORKTREE_TIMEOUT_MS = 30000;  // 30s for worktree creation
 const EXTERNAL_APP_TIMEOUT_MS = 5000;   // 5s for opening VS Code, clipboard
 
+type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro';
+
 interface TackleRequest {
   taskId: string;
   title: string;
@@ -16,7 +18,16 @@ interface TackleRequest {
   priority?: string;
   backlogPath?: string;
   worktreePath?: string;  // If already created
+  ide?: IdeType;
 }
+
+// IDE launch commands
+const IDE_COMMANDS: Record<IdeType, string> = {
+  vscode: 'code -n',
+  cursor: 'cursor',
+  kiro: 'kiro',
+  terminal: '', // No IDE to launch
+};
 
 function slugify(text: string): string {
   return text
@@ -28,7 +39,7 @@ function slugify(text: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { taskId, title, description, category, priority, backlogPath, worktreePath } =
+    const { taskId, title, description, category, priority, backlogPath, worktreePath, ide = 'vscode' } =
       await request.json() as TackleRequest;
 
     if (!title || !taskId) {
@@ -149,19 +160,22 @@ export async function POST(request: Request) {
       }
     }
 
-    // Open VS Code in a new window at the target directory (worktree or repo)
-    // This can fail if VS Code isn't installed - non-critical
-    try {
-      await execWithTimeout(
-        `code -n "${targetDir}"`,
-        {},
-        EXTERNAL_APP_TIMEOUT_MS
-      );
-    } catch (err) {
-      if (err instanceof TimeoutError) {
-        console.warn('[tackle-task] VS Code launch timed out');
-      } else {
-        console.warn('[tackle-task] Failed to open VS Code');
+    // Open the selected IDE in a new window at the target directory (worktree or repo)
+    // This can fail if the IDE isn't installed - non-critical
+    const ideCommand = IDE_COMMANDS[ide];
+    if (ideCommand) {
+      try {
+        await execWithTimeout(
+          `${ideCommand} "${targetDir}"`,
+          {},
+          EXTERNAL_APP_TIMEOUT_MS
+        );
+      } catch (err) {
+        if (err instanceof TimeoutError) {
+          console.warn(`[tackle-task] ${ide} launch timed out`);
+        } else {
+          console.warn(`[tackle-task] Failed to open ${ide}`);
+        }
       }
     }
 
@@ -170,7 +184,10 @@ export async function POST(request: Request) {
       command: claudeCommand,
       targetDir,
       branch,
-      message: 'Command copied to clipboard. Open VS Code terminal and paste to start!',
+      ide,
+      message: ide === 'terminal'
+        ? 'Command copied to clipboard. Paste in your terminal to start!'
+        : `Opening ${ide}... Command copied to clipboard!`,
     });
   } catch (error) {
     // Handle timeout errors with appropriate status code

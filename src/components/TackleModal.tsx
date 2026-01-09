@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { BacklogItem } from '@/types/backlog';
+import { useIdeSettings, IDE_OPTIONS, type IdeType } from '@/hooks/useIdeSettings';
 
 interface TackleModalProps {
   item: BacklogItem | null;
@@ -12,26 +13,68 @@ interface TackleModalProps {
   backlogPath?: string;
 }
 
+// IDE icon component
+function IdeIcon({ ide, className = "w-4 h-4" }: { ide: string; className?: string }) {
+  switch (ide) {
+    case 'vscode':
+    case 'code':
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.583 2.005L8.994 9.572l-4.166-3.2-2.33 1.16 3.732 3.477-3.732 3.477 2.33 1.16 4.166-3.2 8.59 7.567 3.903-1.822V3.828l-3.904-1.823zm0 3.783v12.424l-5.588-4.925V10.71l5.588-4.922z"/>
+        </svg>
+      );
+    case 'cursor':
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 01.35-.15h6.87a.5.5 0 00.35-.85L6.35 2.86a.5.5 0 00-.85.35z"/>
+        </svg>
+      );
+    case 'kiro':
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" strokeWidth="2" stroke="currentColor" fill="none"/>
+          <path d="M8 12h8M12 8v8" strokeWidth="2" stroke="currentColor" strokeLinecap="round"/>
+        </svg>
+      );
+    case 'terminal':
+    default:
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      );
+  }
+}
+
 export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, backlogPath }: TackleModalProps) {
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<'plan' | 'prompt'>('plan');
   const [isLaunching, setIsLaunching] = useState(false);
+  const [showIdeSelector, setShowIdeSelector] = useState(false);
+  const { selectedIde, setIde, currentIde, isLoaded } = useIdeSettings();
 
   useEffect(() => {
     if (!isOpen) {
       setCopied(false);
       setMode('plan');
       setIsLaunching(false);
+      setShowIdeSelector(false);
     }
   }, [isOpen]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose();
+      if (e.key === 'Escape' && isOpen) {
+        if (showIdeSelector) {
+          setShowIdeSelector(false);
+        } else {
+          onClose();
+        }
+      }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, showIdeSelector]);
 
   if (!isOpen || !item) return null;
 
@@ -109,7 +152,7 @@ Let's begin by exploring the codebase to understand the current state and then c
     onClose();
   };
 
-  const handleLaunchClaude = async () => {
+  const handleLaunch = async () => {
     if (!item) return;
 
     setIsLaunching(true);
@@ -125,13 +168,20 @@ Let's begin by exploring the codebase to understand the current state and then c
           priority: item.priority,
           backlogPath,
           worktreePath: item.worktreePath,
+          ide: selectedIde,
         }),
       });
 
       if (response.ok) {
         // Set task to in progress
         onStartWork(item);
-        onShowToast?.('Task prompt copied! Open VS Code terminal and paste (⌘V) to start Claude Code.', 'success');
+
+        // Show appropriate toast based on IDE
+        if (selectedIde === 'terminal') {
+          onShowToast?.('Task prompt copied to clipboard! Paste in your terminal to start.', 'success');
+        } else {
+          onShowToast?.(`Opening ${currentIde.name}... Task prompt copied to clipboard!`, 'success');
+        }
         onClose();
       } else {
         onShowToast?.('Failed to prepare task. Please try again.', 'error');
@@ -144,12 +194,23 @@ Let's begin by exploring the codebase to understand the current state and then c
     }
   };
 
+  const handleIdeSelect = (ide: IdeType) => {
+    setIde(ide);
+    setShowIdeSelector(false);
+  };
+
   return (
     <>
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 animate-fade-in"
-        onClick={onClose}
+        onClick={() => {
+          if (showIdeSelector) {
+            setShowIdeSelector(false);
+          } else {
+            onClose();
+          }
+        }}
       />
 
       {/* Modal */}
@@ -163,8 +224,8 @@ Let's begin by exploring the codebase to understand the current state and then c
               </svg>
             </div>
             <div>
-              <h2 className="font-display text-lg text-surface-100">Tackle Task</h2>
-              <p className="text-xs text-surface-500">Generate a plan to attack this work</p>
+              <h2 className="font-display text-lg text-surface-100">Start Working</h2>
+              <p className="text-xs text-surface-500">Generate a plan to tackle this task</p>
             </div>
           </div>
           <button
@@ -213,7 +274,7 @@ Let's begin by exploring the codebase to understand the current state and then c
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative
               ${mode === 'prompt' ? 'text-accent' : 'text-surface-400 hover:text-surface-200'}`}
           >
-            Claude Code Prompt
+            AI Prompt
             {mode === 'prompt' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
             )}
@@ -229,10 +290,55 @@ Let's begin by exploring the codebase to understand the current state and then c
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-surface-800 bg-surface-900/80 space-y-3">
-          {/* Launch Claude Code - Primary Action */}
+          {/* IDE Selection */}
+          <div className="relative">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-surface-500 uppercase tracking-wider">Open with</span>
+              <button
+                onClick={() => setShowIdeSelector(!showIdeSelector)}
+                className="flex items-center gap-2 text-xs text-surface-400 hover:text-surface-200 transition-colors"
+              >
+                <IdeIcon ide={currentIde.icon} className="w-3.5 h-3.5" />
+                <span>{currentIde.name}</span>
+                <svg className={`w-3 h-3 transition-transform ${showIdeSelector ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+
+            {/* IDE Dropdown */}
+            {showIdeSelector && (
+              <div className="absolute bottom-full right-0 mb-2 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 py-1 animate-in slide-in-from-bottom-2 duration-150">
+                {IDE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() => handleIdeSelect(option.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors
+                      ${selectedIde === option.id
+                        ? 'bg-accent/10 text-accent'
+                        : 'text-surface-300 hover:bg-surface-700'
+                      }`}
+                  >
+                    <IdeIcon ide={option.icon} className="w-4 h-4" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">{option.name}</div>
+                      <div className="text-[10px] text-surface-500 truncate">{option.description}</div>
+                    </div>
+                    {selectedIde === option.id && (
+                      <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Launch Button - Primary Action */}
           <button
-            onClick={handleLaunchClaude}
-            disabled={isLaunching}
+            onClick={handleLaunch}
+            disabled={isLaunching || !isLoaded}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:from-purple-600/50 disabled:to-blue-600/50 text-white font-medium py-3 px-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/25 disabled:cursor-not-allowed"
           >
             {isLaunching ? (
@@ -245,10 +351,8 @@ Let's begin by exploring the codebase to understand the current state and then c
               </>
             ) : (
               <>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Launch Claude Code
+                <IdeIcon ide={currentIde.icon} className="w-5 h-5" />
+                {selectedIde === 'terminal' ? 'Copy & Start' : `Open in ${currentIde.name}`}
               </>
             )}
           </button>

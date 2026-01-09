@@ -6,7 +6,8 @@ import remarkGfm from 'remark-gfm';
 import { TextDiff } from './TextDiff';
 import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, STATUS_LABELS, COLUMN_ORDER, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
-import { validateTaskQuality, QUALITY_THRESHOLD, getQualityLabel, getQualityStyles } from '@/lib/task-quality';
+import { validateTaskQuality, QUALITY_THRESHOLD } from '@/lib/task-quality';
+import { TaskQualityScore } from './TaskQualityScore';
 import { taskNeedsCleanup } from '@/lib/task-validator';
 
 interface TaskPanelProps {
@@ -1096,50 +1097,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                 editedItem.description,
                 editedItem.acceptanceCriteria
               );
-              const label = getQualityLabel(quality.score);
-              const colorClasses = getQualityStyles(quality.score);
-              const barColor = quality.score >= 70
-                ? 'bg-emerald-500'
-                : quality.score >= QUALITY_THRESHOLD
-                  ? 'bg-amber-500'
-                  : 'bg-red-500';
-              const glowColor = quality.score >= 70
-                ? 'shadow-emerald-500/20'
-                : quality.score >= QUALITY_THRESHOLD
-                  ? 'shadow-amber-500/20'
-                  : 'shadow-red-500/20';
-
-              return (
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center gap-3">
-                    {/* Score pill */}
-                    <div className={`flex items-center gap-2 px-2.5 py-1 rounded-md border ${colorClasses}`}>
-                      <span className="text-xs font-semibold tabular-nums">{quality.score}</span>
-                      <span className="text-[10px] uppercase tracking-wider opacity-80">{label}</span>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="flex-1 h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${barColor} rounded-full transition-all duration-500 shadow-lg ${glowColor}`}
-                        style={{ width: `${quality.score}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Issues list (if any) */}
-                  {quality.issues.length > 0 && (
-                    <div className="text-[11px] text-surface-500 space-y-0.5 pl-1">
-                      {quality.issues.map((issue, i) => (
-                        <div key={i} className="flex items-start gap-1.5">
-                          <span className="text-surface-600 mt-0.5">•</span>
-                          <span>{issue}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
+              return <TaskQualityScore score={quality.score} issues={quality.issues} />;
             })()}
 
             <div className="mt-2 text-xs font-mono text-surface-600 truncate">
@@ -1228,7 +1186,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              Tackle with Claude Code
+              Start Working
             </button>
           )}
 

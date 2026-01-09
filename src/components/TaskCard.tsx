@@ -75,14 +75,25 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
         </div>
       )}
 
-      {/* Up Next indicator (top-left) - shows when a backlog item is also in Up Next */}
+      {/* Up Next indicator (top-left) - gold star shows when a backlog item is prioritized */}
       {isInUpNext && (
         <div
-          className="absolute -top-1 -left-1 w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center shadow-lg border-2 border-surface-850 z-10"
-          title="This item is in Up Next"
+          className="absolute -top-1.5 -left-1.5 z-10 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]"
+          title="Priority: Up Next"
         >
-          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          <svg
+            className="w-5 h-5"
+            viewBox="0 0 24 24"
+            fill="url(#starGradient)"
+          >
+            <defs>
+              <linearGradient id="starGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#FDE68A" />
+                <stop offset="50%" stopColor="#FBBF24" />
+                <stop offset="100%" stopColor="#D97706" />
+              </linearGradient>
+            </defs>
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
           </svg>
         </div>
       )}
