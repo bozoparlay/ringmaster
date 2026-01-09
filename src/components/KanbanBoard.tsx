@@ -23,6 +23,7 @@ import { TackleModal } from './TackleModal';
 import { ReviewModal } from './ReviewModal';
 import { Toast, ToastType } from './Toast';
 import { taskNeedsCleanup } from '@/lib/task-validator';
+import type { AuxiliarySignals } from '@/lib/local-storage-cache';
 
 interface ScopeAnalysis {
   aligned: boolean;
@@ -71,6 +72,9 @@ interface KanbanBoardProps {
   isLoading?: boolean;
   searchQuery?: string;
   backlogPath?: string;
+  signals?: AuxiliarySignals;
+  onSetActiveTask?: (taskId: string | null) => void;
+  onUpdatePRStatus?: (taskId: string, status: AuxiliarySignals['prStatus'][string]) => void;
 }
 
 export function KanbanBoard({
@@ -82,6 +86,9 @@ export function KanbanBoard({
   isLoading,
   searchQuery = '',
   backlogPath,
+  signals,
+  onSetActiveTask,
+  onUpdatePRStatus,
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<BacklogItem | null>(null);
@@ -98,6 +105,9 @@ export function KanbanBoard({
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewError, setReviewError] = useState<string | undefined>();
   const [reviewItem, setReviewItem] = useState<BacklogItem | null>(null);
+  const [prUrl, setPrUrl] = useState<string | undefined>();
+  const [prNumber, setPrNumber] = useState<number | undefined>();
+  const [prError, setPrError] = useState<string | undefined>();
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -110,6 +120,9 @@ export function KanbanBoard({
     setIsReviewLoading(true);
     setReviewResult(null);
     setReviewError(undefined);
+    setPrUrl(undefined);
+    setPrNumber(undefined);
+    setPrError(undefined);
 
     try {
       const response = await fetch('/api/review-task', {
@@ -128,6 +141,10 @@ export function KanbanBoard({
       const data = await response.json();
       if (data.success) {
         setReviewResult(data.result);
+        // Capture PR info from response (auto-created on pass)
+        if (data.prUrl) setPrUrl(data.prUrl);
+        if (data.prNumber) setPrNumber(data.prNumber);
+        if (data.prError) setPrError(data.prError);
       } else {
         setReviewError(data.error || 'Review failed');
       }
@@ -665,6 +682,7 @@ export function KanbanBoard({
                 items={columnItems[status]}
                 onItemClick={handleItemClick}
                 isLoading={isLoading}
+                activeTaskId={signals?.activeTaskId}
               />
             ))}
           </div>
@@ -675,6 +693,7 @@ export function KanbanBoard({
                 item={activeItem}
                 onClick={() => {}}
                 isDragging
+                isActive={signals?.activeTaskId === activeItem.id}
               />
             ) : null}
           </DragOverlay>
@@ -691,6 +710,8 @@ export function KanbanBoard({
         onTackle={handleTackle}
         onShip={handleShip}
         backlogPath={backlogPath}
+        isActive={selectedItem ? signals?.activeTaskId === selectedItem.id : false}
+        onSetActiveTask={onSetActiveTask}
       />
 
       {/* Tackle Modal */}
@@ -719,6 +740,9 @@ export function KanbanBoard({
         onContinue={handleReviewContinue}
         onRetry={handleReviewRetry}
         taskTitle={reviewItem?.title || ''}
+        prUrl={prUrl}
+        prNumber={prNumber}
+        prError={prError}
       />
 
       {/* Toast Notification */}
