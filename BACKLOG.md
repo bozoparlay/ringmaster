@@ -50,7 +50,7 @@ Update the task scoring service to implement a weighted scoring model. Consider 
 ## [backlog] UI/UX Improvements
 
 ### Speed up Add Task
-**Priority**: High | **Effort**: High | **Value**: High
+**Priority**: Critical | **Effort**: High | **Value**: High
 
 **Description**:
 **Description:**
@@ -129,3 +129,19 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 
 ---
 
+## [backlog] Uncategorized
+
+### Improve Needs Rescope Indicator
+**Priority**: Medium | **Effort**: Medium | **Value**: Medium
+
+**Description**:
+Currently it's just a red dot on the top right, make it a caution sign on the top left in the same style as the star for the up next item
+
+### Improve Column Labels
+**Priority**: Medium | **Effort**: Medium | **Value**: Medium
+
+**Description**:
+Up Next -> Priority
+Ready to Ship -> Ship it
+
+---
