@@ -1,31 +1,5 @@
 # Backlog
 
-## [backlog] Admin Tools
-
-### Fix Task Rescoping
-**Priority**: High | **Effort**: Medium | **Value**: High
-
-**Description**:
-**Description:**
-The AI Rescope functionality is currently broken, preventing administrators from using AI assistance to automatically adjust task scope and requirements. When users click the "AI Rescope" button, the interface shows a loading spinner indefinitely without performing any rescoping operation or providing feedback. This blocks a key administrative workflow for task management and reduces productivity for project managers who rely on AI-assisted task refinement.
-
-**Requirements:**
-- Fix the AI Rescope button to properly trigger the rescoping operation
-- Ensure the loading spinner resolves after the operation completes or fails
-- Display appropriate success/error messages to provide user feedback
-- Verify the rescoped content is properly saved and displayed in the task interface
-- Add proper error handling for API failures, network issues, or timeout scenarios
-- Implement reasonable timeout limits (30-60 seconds) to prevent infinite loading states
-- Ensure the rescoping maintains original task context and intent while improving clarity
-- Add comprehensive logging for debugging future AI integration issues
-- Validate that rescoped content preserves all critical task information
-- Ensure the UI remains responsive during the rescoping process
-
-**Technical Approach:**
-Investigate the frontend event handler for the AI Rescope button and trace the complete API call chain from button click to response handling. Check for broken API endpoints, authentication token issues, or network timeout problems. Examine the AI service integration for proper request formatting, response parsing, and error handling. Review error handling middleware and ensure proper state management for loading states. Inspect the task update mechanism to ensure rescoped content is properly persisted to the database. Add appropriate try-catch blocks and implement exponential backoff for retry logic. Consider adding a progress indicator for long-running AI operations and ensure proper cleanup of event listeners and timers.
-
----
-
 ## [backlog] Infrastructure
 
 ### Setup docker container
@@ -52,35 +26,60 @@ Create a .devcontainer directory in the project root with devcontainer.json conf
 
 ## [backlog] Technical Debt
 
-### Speed up Add Task
-**Priority**: High | **Effort**: Medium | **Value**: High
+### Improve Grading of Tasks
+**Priority**: Medium | **Effort**: Medium | **Value**: Medium
 
 **Description**:
-Optimize the task creation workflow to eliminate performance bottlenecks when adding AI-assisted tasks to the backlog. Currently, users experience significant delays after clicking "Add Task", creating a poor user experience and potentially causing users to abandon task creation or attempt duplicate submissions.
+**Description:**
+The current task scoring algorithm is not responsive to content changes, creating an inaccurate representation of task completeness and quality. Users can remove critical information like titles and descriptions without seeing their task scores decrease appropriately. This undermines the scoring system's purpose of encouraging well-defined, complete tasks and makes it difficult to assess task quality at a glance.
 
 **Requirements:**
-- Reduce "Add Task" response time to under 2 seconds for 95% of requests
-- Implement loading states and user feedback during task processing
-- Ensure AI-generated task data is properly validated before submission
-- Maintain data integrity during the optimization process
-- Add error handling for failed task creation attempts
-- Implement client-side validation to catch issues before server submission
-- Consider implementing optimistic UI updates where appropriate
-- Add performance monitoring to track improvement metrics
+- Task scores must decrease when title is removed or significantly shortened
+- Task scores must decrease when description is removed or substantially reduced
+- Task scores must respond proportionally to changes in acceptance criteria count (removing criteria should lower score)
+- Scoring algorithm should weight different components appropriately (title, description length, acceptance criteria count, etc.)
+- Score changes should be reflected in real-time as users edit tasks
+- Implement minimum thresholds for each component to achieve maximum scoring
+- Ensure scoring remains intuitive and predictable for users
 
 **Technical Approach:**
-Profile the current task creation flow to identify bottlenecks (likely database operations, API calls, or inefficient data processing). Optimize database queries, implement proper indexing, and consider caching strategies. Review the AI assist integration for unnecessary blocking operations. Implement asynchronous processing where possible and add proper loading states in the frontend. Consider batching operations or using background jobs for heavy processing.
-
-**Acceptance Criteria**:
-- [ ] Task creation completes in under 2 seconds consistently
-- [ ] Users receive immediate feedback when clicking "Add Task"
-- [ ] No increase in failed task creation attempts
-- [ ] Performance metrics show measurable improvement
-- [ ] User experience testing confirms smoother workflow
+Update the task scoring service to implement a weighted scoring model. Consider factors like title presence/length, description word count, acceptance criteria count, and any other relevant task attributes. Implement real-time score recalculation on task updates. May need to update both frontend scoring display and backend scoring logic. Consider adding score breakdown tooltips to help users understand how scores are calculated.
 
 ---
 
 ## [backlog] UI/UX Improvements
+
+### Speed up Add Task
+**Priority**: High | **Effort**: High | **Value**: High
+
+**Description**:
+**Description:**
+Optimize the task creation workflow to eliminate performance bottlenecks when adding AI-assisted tasks to the backlog. Currently, users experience significant delays after clicking "Add Task", with the check similarity call taking up to 2 minutes for server response, creating a poor user experience and potentially causing users to abandon task creation or attempt duplicate submissions. This enhancement will implement a progressive similarity checking system with real-time feedback to keep users engaged and informed throughout the process.
+
+**Requirements:**
+- Reduce "Add Task" response time to under 2 seconds for 95% of requests
+- Implement a progress bar visualization showing similarity check progress across all backlog items
+- Break down the similarity check into individual item comparisons with real-time progress updates
+- Display a live list of potentially similar tasks with similarity scores as they are processed
+- Parallelize similarity checking operations to improve overall performance
+- Allow users to view and dismiss similar tasks during the checking process
+- Implement loading states and user feedback during task processing with cancel functionality
+- Ensure AI-generated task data is properly validated before submission
+- Maintain data integrity during the optimization process
+- Add error handling for failed task creation attempts with timeout protection (30-60 seconds max)
+- Implement client-side validation to catch issues before server submission
+- Add performance monitoring to track improvement metrics and identify future bottlenecks
+- Provide clear user feedback when similar tasks are found with options to proceed or modify
+
+**Technical Approach:**
+Profile the current task creation flow and redesign the similarity check as a progressive, parallelized process. Implement a new similarity checking service that processes backlog items in batches, returning results incrementally via WebSocket or Server-Sent Events for real-time progress updates. Create a new frontend component that displays a progress bar showing "Checking similarity against X of Y tasks" with a live-updating list of similar tasks found. Implement worker threads or async processing pools to parallelize similarity comparisons across multiple backlog items simultaneously. Add database indexing on fields used in similarity comparisons and consider pre-computing similarity hashes for faster lookups. Implement proper timeout handling with graceful degradation - if similarity check times out, allow task creation to proceed with a warning. Create a similarity results component that shows tasks with similarity scores above a threshold (e.g., 70%) with options for users to review, dismiss, or modify their task. Add caching mechanisms for recently computed similarities to avoid redundant calculations. Implement optimistic UI updates where the task appears in a "pending" state while similarity checking completes in the background. Add comprehensive error boundaries and retry mechanisms for failed similarity checks.
+
+**Acceptance Criteria**:
+- [ ] Progress bar displays real-time updates showing similarity check progress across all backlog items
+- [ ] Similar tasks are displayed in a live-updating list with similarity scores as they are discovered
+- [ ] Task creation completes within 2 seconds for 95% of requests with similarity checking running asynchronously
+- [ ] Users can cancel the similarity check process and proceed with task creation at any time
+- [ ] Performance monitoring shows measurable improvement in task creation completion rates and user engagement
 
 ### Fix drag and drop
 **Priority**: High | **Effort**: Medium | **Value**: High
@@ -130,12 +129,3 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 
 ---
 
-## [backlog] Uncategorized
-
-### Bad Task
-**Priority**: Medium | **Effort**: Medium | **Value**: Medium
-
-**Description**:
-Words
-
----
