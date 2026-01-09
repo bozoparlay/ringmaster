@@ -23,7 +23,8 @@ export const QUALITY_THRESHOLD = 50; // Tasks below this score show warnings
  */
 export function validateTaskQuality(
   title: string,
-  description: string
+  description: string,
+  acceptanceCriteria?: string[]
 ): QualityCheck {
   const issues: string[] = [];
   let score = 100;
@@ -43,7 +44,10 @@ export function validateTaskQuality(
   // Check 2: Has actionable content (requirements, approach, or success criteria)
   const hasRequirements = /requirements?|must|should|needs? to/i.test(description);
   const hasApproach = /approach|implementation|steps?|how to|technical/i.test(description);
-  const hasCriteria = /success|criteria|acceptance|done when|complete when/i.test(description);
+  // Check both dedicated acceptanceCriteria field AND keywords in description
+  const hasCriteriaField = acceptanceCriteria && acceptanceCriteria.length > 0;
+  const hasCriteriaKeywords = /success|criteria|acceptance|done when|complete when/i.test(description);
+  const hasCriteria = hasCriteriaField || hasCriteriaKeywords;
 
   if (!hasRequirements && !hasApproach && !hasCriteria) {
     issues.push('Missing actionable content (requirements, approach, or success criteria)');

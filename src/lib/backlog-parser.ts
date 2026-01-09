@@ -222,14 +222,23 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       ? reviewFeedbackMatch[1].replace(/^>\s*/gm, '').trim()
       : undefined;
 
-    // Extract acceptance criteria (checkboxes)
+    // Extract acceptance/success criteria (checkboxes or regular bullets)
+    // Supports both "**Acceptance Criteria**:" and "## Success Criteria" formats
     const acceptanceCriteriaMatch = taskContent.match(/\*\*Acceptance Criteria\*\*:\s*\n((?:- \[[ x]\].+\n?)+)/i);
-    const acceptanceCriteria = acceptanceCriteriaMatch
-      ? acceptanceCriteriaMatch[1]
-          .split('\n')
-          .map(line => line.replace(/^- \[[ x]\]\s*/, '').trim())
-          .filter(line => line.length > 0)
-      : undefined;
+    const successCriteriaMatch = taskContent.match(/##\s*Success Criteria\s*\n((?:- .+\n?)+)/i);
+
+    let acceptanceCriteria: string[] | undefined;
+    if (acceptanceCriteriaMatch) {
+      acceptanceCriteria = acceptanceCriteriaMatch[1]
+        .split('\n')
+        .map(line => line.replace(/^- \[[ x]\]\s*/, '').trim())
+        .filter(line => line.length > 0);
+    } else if (successCriteriaMatch) {
+      acceptanceCriteria = successCriteriaMatch[1]
+        .split('\n')
+        .map(line => line.replace(/^- /, '').trim())
+        .filter(line => line.length > 0);
+    }
 
     // Extract notes section
     const notesMatch = taskContent.match(/\*\*Notes\*\*:\s*\n([\s\S]*?)(?=\n\*\*|\n---|\n###|$)/i);
@@ -244,6 +253,7 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       .replace(/>\s*\*\*Review Feedback\*\*:\s*\n((?:>\s*.+\n?)+)/i, '') // Remove review feedback
       .replace(/^-{3,}\s*$/gm, '') // Remove markdown horizontal rules (---)
       .replace(/\*\*Acceptance Criteria\*\*:\s*\n((?:- \[[ x]\].+\n?)+)/i, '') // Remove acceptance criteria
+      .replace(/##\s*Success Criteria\s*\n((?:- .+\n?)+)/i, '') // Remove success criteria section
       .replace(/\*\*Notes\*\*:\s*\n[\s\S]*?(?=\n\*\*|\n---|\n###|$)/i, '') // Remove notes section
       .replace(/\*\*Description\*\*:\s*/i, '') // Remove description label if present
       .replace(/^\s*\n/, '') // Remove leading newline

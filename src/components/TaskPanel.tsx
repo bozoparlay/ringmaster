@@ -228,7 +228,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     }
 
     // Check quality before saving
-    const quality = validateTaskQuality(editedItem.title, editedItem.description || '');
+    const quality = validateTaskQuality(editedItem.title, editedItem.description || '', editedItem.acceptanceCriteria);
 
     // If low quality and not forcing, show warning
     if (!forceIgnoreQuality && quality.score < QUALITY_THRESHOLD) {

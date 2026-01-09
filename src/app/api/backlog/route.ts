@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     // Compute quality scores for each item (catches offline-created tasks)
     const itemsWithQuality = items.map(item => {
-      const quality = validateTaskQuality(item.title, item.description || '');
+      const quality = validateTaskQuality(item.title, item.description || '', item.acceptanceCriteria);
       return {
         ...item,
         qualityScore: quality.score,
