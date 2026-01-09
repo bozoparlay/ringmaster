@@ -108,6 +108,7 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 - [ ] QA testing confirms functionality works for all user scenarios, specifically testing drops near column headers
 - [ ] User can intuitively drop tiles without having to aim for the middle of columns
 
+<<<<<<< Updated upstream
 ### Up Next Should Also Be in Backlog
 **Priority**: Medium | **Effort**: Low | **Value**: Medium
 
@@ -131,4 +132,6 @@ Modify the column filtering logic to include Up Next items in the Backlog query.
 - [ ] Existing column functionality remains intact
 - [ ] Visual indicators clearly communicate dual-column status to users
 
+=======
+>>>>>>> Stashed changes
 ---
