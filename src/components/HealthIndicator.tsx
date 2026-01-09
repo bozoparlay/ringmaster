@@ -56,9 +56,12 @@ const STATUS_CONFIG = {
 export function HealthIndicator({ pollInterval = 15000, onStatusChange }: HealthIndicatorProps) {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
-  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
   const [alert, setAlert] = useState<StatusAlert | null>(null);
   const previousStatusRef = useRef<HealthStatus['status']>('unknown');
+  const consecutiveFailuresRef = useRef(0);
+  // Stable reference to onStatusChange to avoid recreating checkHealth
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
 
   // Auto-dismiss alerts after 8 seconds
   useEffect(() => {
@@ -86,11 +89,11 @@ export function HealthIndicator({ pollInterval = 15000, onStatusChange }: Health
 
       const data: HealthStatus = await response.json();
       setHealth(data);
-      setConsecutiveFailures(0);
+      consecutiveFailuresRef.current = 0;
 
       // Notify on status change
       if (data.status !== previousStatusRef.current && previousStatusRef.current !== 'unknown') {
-        onStatusChange?.(data.status, previousStatusRef.current);
+        onStatusChangeRef.current?.(data.status, previousStatusRef.current);
 
         // Show alert for status changes
         if (data.status === 'unhealthy') {
@@ -114,11 +117,11 @@ export function HealthIndicator({ pollInterval = 15000, onStatusChange }: Health
         }
       }
       previousStatusRef.current = data.status;
-    } catch (error) {
-      setConsecutiveFailures((prev) => prev + 1);
+    } catch {
+      consecutiveFailuresRef.current += 1;
 
       // After 2 consecutive failures, mark as unhealthy
-      if (consecutiveFailures >= 1) {
+      if (consecutiveFailuresRef.current >= 2) {
         const unhealthyStatus: HealthStatus = {
           status: 'unhealthy',
           timestamp: Date.now(),
@@ -128,7 +131,7 @@ export function HealthIndicator({ pollInterval = 15000, onStatusChange }: Health
         setHealth(unhealthyStatus);
 
         if (previousStatusRef.current !== 'unhealthy') {
-          onStatusChange?.('unhealthy', previousStatusRef.current);
+          onStatusChangeRef.current?.('unhealthy', previousStatusRef.current);
           setAlert({
             message: 'Lost connection to server. Some features may not work.',
             type: 'error',
@@ -138,7 +141,7 @@ export function HealthIndicator({ pollInterval = 15000, onStatusChange }: Health
         previousStatusRef.current = 'unhealthy';
       }
     }
-  }, [consecutiveFailures, onStatusChange]);
+  }, []); // No dependencies - uses refs for stable polling
 
   // Initial check and polling
   useEffect(() => {
@@ -252,11 +255,6 @@ export function HealthIndicator({ pollInterval = 15000, onStatusChange }: Health
               </div>
             )}
 
-            {consecutiveFailures > 0 && (
-              <div className="mt-2 pt-2 border-t border-surface-800 text-xs text-red-400">
-                {consecutiveFailures} consecutive health check failures
-              </div>
-            )}
 
             <div className="mt-2 pt-2 border-t border-surface-800 text-xs text-surface-500">
               Click to refresh • Auto-checks every {pollInterval / 1000}s
