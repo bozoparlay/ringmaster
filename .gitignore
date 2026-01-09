@@ -38,3 +38,6 @@ Thumbs.db
 
 # Task worktrees
 .tasks/
+
+# Playwright MCP screenshots/artifacts
+.playwright-mcp/

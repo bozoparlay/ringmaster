@@ -38,16 +38,11 @@ interface UseBacklogReturn {
 }
 
 export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
-  // Initialize from cache for instant load
-  const [items, setItems] = useState<BacklogItem[]>(() => {
-    const cached = loadCachedBacklog(options.path);
-    return cached?.items || [];
-  });
-  const [signals, setSignals] = useState<AuxiliarySignals>(() => {
-    const cached = loadCachedBacklog(options.path);
-    return cached?.signals || DEFAULT_SIGNALS;
-  });
+  // Initialize with empty state for SSR - load from cache in useEffect to avoid hydration mismatch
+  const [items, setItems] = useState<BacklogItem[]>([]);
+  const [signals, setSignals] = useState<AuxiliarySignals>(DEFAULT_SIGNALS);
   const [loading, setLoading] = useState(true);
+  const [hasMounted, setHasMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [fileExists, setFileExists] = useState(false);
@@ -113,6 +108,16 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
       }
     };
   }, [writeToFile]);
+
+  // Load from localStorage cache after mount (client-side only, avoids hydration mismatch)
+  useEffect(() => {
+    setHasMounted(true);
+    const cached = loadCachedBacklog(options.path);
+    if (cached) {
+      setItems(cached.items);
+      setSignals(cached.signals || DEFAULT_SIGNALS);
+    }
+  }, [options.path]);
 
   // Fetch from server and sync with cache
   const fetchItems = useCallback(async () => {
