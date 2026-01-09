@@ -57,7 +57,7 @@ const UP_NEXT_CONFIG = {
   MEDIUM_LIMIT: 3,       // Show 3 items in Up Next
   LARGE_THRESHOLD: 15,   // Backlog size < 15
   LARGE_LIMIT: 4,        // Show 4 items in Up Next
-  // For backlog >= 15, use UP_NEXT_LIMIT (5 items)
+  MAX_LIMIT: 5,          // Maximum for backlog >= 15
 } as const;
 
 function downgradePriority(current: Priority): Priority {
@@ -82,7 +82,7 @@ function calculateUpNextLimit(backlogSize: number): number {
   if (backlogSize < UP_NEXT_CONFIG.SMALL_THRESHOLD) return UP_NEXT_CONFIG.SMALL_LIMIT;
   if (backlogSize < UP_NEXT_CONFIG.MEDIUM_THRESHOLD) return UP_NEXT_CONFIG.MEDIUM_LIMIT;
   if (backlogSize < UP_NEXT_CONFIG.LARGE_THRESHOLD) return UP_NEXT_CONFIG.LARGE_LIMIT;
-  return UP_NEXT_LIMIT; // Maximum for larger backlogs
+  return UP_NEXT_CONFIG.MAX_LIMIT;
 }
 
 interface KanbanBoardProps {
