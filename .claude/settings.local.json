@@ -27,7 +27,10 @@
       "mcp__plugin_playwright_playwright__browser_wait_for",
       "Bash(npm run build:*)",
       "Bash(xargs kill:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr create --title \"Fix Up Next column width and add cache/indicators\" --body \"$\\(cat <<''EOF''\n## Summary\n- Fixed Up Next column width consistency issue\n- Added localStorage cache for better performance\n- Added active task indicator on cards\n- Added auto PR creation functionality\n\n## Changes\n- `KanbanColumn.tsx`: Adjusted column width styling\n- `local-storage-cache.ts`: New caching layer for localStorage operations\n- `TaskCard.tsx`: Added visual indicator for active tasks\n- `api/create-pr/route.ts`: New API endpoint for PR creation\n- `api/review-task/route.ts`: New API endpoint for task review\n- `ReviewModal.tsx`: New review modal component\n- `useBacklog.ts`: Enhanced with caching and PR creation logic\n\n## Test plan\n- [x] Verify Up Next column width matches other columns\n- [x] Test localStorage caching functionality\n- [x] Verify active task indicator displays correctly\n- [x] Test PR creation workflow\nEOF\n\\)\")",
+      "Bash(cat:*)"
     ]
   }
 }
