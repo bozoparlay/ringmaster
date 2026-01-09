@@ -51,7 +51,7 @@ export default function Home() {
     setLastPath(newPath);
   };
 
-  const handleNewTask = async (task: { title: string; description: string; priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday'; effort?: 'low' | 'medium' | 'high' | 'very_high'; value?: 'low' | 'medium' | 'high'; category?: string }) => {
+  const handleNewTask = async (task: { title: string; description: string; priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday'; effort?: 'trivial' | 'low' | 'medium' | 'high' | 'very_high'; value?: 'low' | 'medium' | 'high'; category?: string; acceptanceCriteria?: string[] }) => {
     await addItem(task.title, task.description, task.priority, task.effort, task.value, task.category);
     setIsNewTaskOpen(false);
   };

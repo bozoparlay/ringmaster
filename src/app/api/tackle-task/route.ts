@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import * as fs from 'fs/promises';
 import path from 'path';
 import { execWithTimeout, TimeoutError } from '@/lib/resilience';
+import { buildTaskPrompt } from '@/lib/prompt-builder';
 
 // Timeouts for various operations
 const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
@@ -16,6 +17,11 @@ interface TackleRequest {
   description?: string;
   category?: string;
   priority?: string;
+  tags?: string[];
+  acceptanceCriteria?: string[];
+  notes?: string;
+  effort?: string;
+  value?: string;
   backlogPath?: string;
   worktreePath?: string;  // If already created
   ide?: IdeType;
@@ -39,8 +45,21 @@ function slugify(text: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { taskId, title, description, category, priority, backlogPath, worktreePath, ide = 'vscode' } =
-      await request.json() as TackleRequest;
+    const {
+      taskId,
+      title,
+      description,
+      category,
+      priority,
+      tags,
+      acceptanceCriteria,
+      notes,
+      effort,
+      value,
+      backlogPath,
+      worktreePath,
+      ide = 'vscode'
+    } = await request.json() as TackleRequest;
 
     if (!title || !taskId) {
       return NextResponse.json({ error: 'Title and taskId are required' }, { status: 400 });
@@ -117,26 +136,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // Build the prompt for Claude Code
-    const promptParts = [`Task: ${title}`];
-
-    if (priority) {
-      promptParts.push(`Priority: ${priority}`);
-    }
-
-    if (category) {
-      promptParts.push(`Category: ${category}`);
-    }
-
-    if (branch) {
-      promptParts.push(`Branch: ${branch}`);
-    }
-
-    if (description) {
-      promptParts.push(`\nDescription:\n${description}`);
-    }
-
-    const prompt = promptParts.join('\n');
+    // Build the prompt for Claude Code using the canonical prompt builder
+    const prompt = buildTaskPrompt({
+      title,
+      priority,
+      category,
+      tags,
+      description,
+      acceptanceCriteria,
+      notes,
+      effort,
+      value,
+      branch,
+    });
 
     // Escape single quotes for shell
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
@@ -182,6 +194,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       command: claudeCommand,
+      prompt, // Return the generated prompt for potential client use
       targetDir,
       branch,
       ide,

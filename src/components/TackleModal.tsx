@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { BacklogItem } from '@/types/backlog';
 import { useIdeSettings, IDE_OPTIONS, type IdeType } from '@/hooks/useIdeSettings';
+import { buildTaskPrompt, buildConversationalPrompt } from '@/lib/prompt-builder';
 
 interface TackleModalProps {
   item: BacklogItem | null;
@@ -78,67 +79,28 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
 
   if (!isOpen || !item) return null;
 
-  const generatePlan = () => {
-    const priorityContext = {
-      critical: 'This is a critical priority task that needs immediate attention.',
-      high: 'This is a high priority task that should be addressed soon.',
-      medium: 'This is a medium priority task.',
-      low: 'This is a lower priority task.',
-      someday: 'This task can be addressed when time permits.',
-    };
-
-    return `## Task: ${item.title}
-
-### Priority
-${priorityContext[item.priority]}
-
-### Description
-${item.description || 'No description provided.'}
-
-### Tags
-${item.tags.length > 0 ? item.tags.map(t => `- ${t}`).join('\n') : 'No tags'}
-
-### Suggested Approach
-
-1. **Understand the Requirements**
-   - Review the task description thoroughly
-   - Identify any dependencies or blockers
-   - Clarify any ambiguous requirements
-
-2. **Plan the Implementation**
-   - Break down into smaller subtasks
-   - Identify files that need modification
-   - Consider edge cases and error handling
-
-3. **Execute**
-   - Start with the core functionality
-   - Write tests as you go
-   - Commit changes incrementally
-
-4. **Verify**
-   - Test the implementation
-   - Review for code quality
-   - Update documentation if needed`;
+  // Build task input for the shared prompt builder
+  const taskInput = {
+    title: item.title,
+    priority: item.priority,
+    category: item.category,
+    tags: item.tags,
+    description: item.description,
+    acceptanceCriteria: item.acceptanceCriteria,
+    notes: item.notes,
+    effort: item.effort,
+    value: item.value,
+    branch: item.branch,
   };
 
-  const generatePrompt = () => {
-    return `I need to work on the following task from my backlog:
+  // Generate preview with placeholders shown (for user visibility)
+  const generatePlan = () => buildTaskPrompt(taskInput, {
+    showPlaceholders: true,
+    showBranchPlaceholder: !item.branch,
+  });
 
-**Task:** ${item.title}
-**Priority:** ${item.priority}
-**Tags:** ${item.tags.join(', ') || 'none'}
-
-**Description:**
-${item.description || 'No description provided.'}
-
-Please help me:
-1. Understand what needs to be done
-2. Create a detailed implementation plan
-3. Identify the files that need to be modified
-4. Start implementing the solution
-
-Let's begin by exploring the codebase to understand the current state and then create a plan.`;
-  };
+  // Generate conversational prompt for pasting into existing chats
+  const generatePrompt = () => buildConversationalPrompt(taskInput);
 
   const handleCopy = async () => {
     const text = mode === 'plan' ? generatePlan() : generatePrompt();
@@ -166,6 +128,11 @@ Let's begin by exploring the codebase to understand the current state and then c
           description: item.description,
           category: item.category,
           priority: item.priority,
+          tags: item.tags,
+          acceptanceCriteria: item.acceptanceCriteria,
+          notes: item.notes,
+          effort: item.effort,
+          value: item.value,
           backlogPath,
           worktreePath: item.worktreePath,
           ide: selectedIde,
@@ -264,7 +231,7 @@ Let's begin by exploring the codebase to understand the current state and then c
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative
               ${mode === 'plan' ? 'text-accent' : 'text-surface-400 hover:text-surface-200'}`}
           >
-            Action Plan
+            Task Brief
             {mode === 'plan' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
             )}
