@@ -28,7 +28,9 @@
       "Bash(npm run build:*)",
       "Bash(xargs kill:*)",
       "Bash(curl:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(ps:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

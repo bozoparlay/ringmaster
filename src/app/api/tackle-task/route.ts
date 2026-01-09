@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import path from 'path';
+import { execWithTimeout, TimeoutError } from '@/lib/resilience';
 
-const execAsync = promisify(exec);
+// Timeouts for various operations
+const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
+const GIT_WORKTREE_TIMEOUT_MS = 30000;  // 30s for worktree creation
+const EXTERNAL_APP_TIMEOUT_MS = 5000;   // 5s for opening VS Code, clipboard
 
 interface TackleRequest {
   taskId: string;
@@ -81,14 +83,19 @@ export async function POST(request: Request) {
           // Get default branch
           let defaultBranch = 'main';
           try {
-            const { stdout } = await execAsync('git branch --list main master', { cwd: repoDir });
+            const { stdout } = await execWithTimeout(
+              'git branch --list main master',
+              { cwd: repoDir },
+              GIT_COMMAND_TIMEOUT_MS
+            );
             if (stdout.includes('main')) defaultBranch = 'main';
             else if (stdout.includes('master')) defaultBranch = 'master';
           } catch {}
 
-          await execAsync(
+          await execWithTimeout(
             `git worktree add "${potentialWorktreePath}" -b "${branchName}" ${defaultBranch}`,
-            { cwd: repoDir }
+            { cwd: repoDir },
+            GIT_WORKTREE_TIMEOUT_MS
           );
           targetDir = potentialWorktreePath;
           branch = branchName;
@@ -126,18 +133,36 @@ export async function POST(request: Request) {
     // The command to run claude with the task context
     const claudeCommand = `claude '${escapedPrompt}'`;
 
-    // Copy to clipboard using pbcopy (macOS)
+    // Copy to clipboard using pbcopy (macOS) - non-critical, use short timeout
     try {
-      await execAsync(`echo '${escapedPrompt}' | pbcopy`);
-    } catch {
-      console.warn('Failed to copy to clipboard');
+      await execWithTimeout(
+        `echo '${escapedPrompt}' | pbcopy`,
+        {},
+        EXTERNAL_APP_TIMEOUT_MS
+      );
+    } catch (err) {
+      // Log timeout vs other errors differently
+      if (err instanceof TimeoutError) {
+        console.warn('[tackle-task] Clipboard operation timed out');
+      } else {
+        console.warn('[tackle-task] Failed to copy to clipboard');
+      }
     }
 
     // Open VS Code in a new window at the target directory (worktree or repo)
+    // This can fail if VS Code isn't installed - non-critical
     try {
-      await execAsync(`code -n "${targetDir}"`);
-    } catch {
-      console.warn('Failed to open VS Code');
+      await execWithTimeout(
+        `code -n "${targetDir}"`,
+        {},
+        EXTERNAL_APP_TIMEOUT_MS
+      );
+    } catch (err) {
+      if (err instanceof TimeoutError) {
+        console.warn('[tackle-task] VS Code launch timed out');
+      } else {
+        console.warn('[tackle-task] Failed to open VS Code');
+      }
     }
 
     return NextResponse.json({
@@ -148,7 +173,16 @@ export async function POST(request: Request) {
       message: 'Command copied to clipboard. Open VS Code terminal and paste to start!',
     });
   } catch (error) {
-    console.error('Tackle task error:', error);
+    // Handle timeout errors with appropriate status code
+    if (error instanceof TimeoutError) {
+      console.error(`[tackle-task] Operation timed out: ${error.message}`);
+      return NextResponse.json(
+        { error: 'Operation timed out. Please try again.' },
+        { status: 504 }
+      );
+    }
+
+    console.error('[tackle-task] Error:', error);
     return NextResponse.json(
       { error: 'Failed to prepare task' },
       { status: 500 }

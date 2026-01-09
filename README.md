@@ -6,12 +6,14 @@ A kanban-style backlog management tool with AI-powered task analysis and Claude 
 
 ## Features
 
-- **Kanban Board**: Drag-and-drop tasks across Backlog, Up Next, In Progress, and Done columns
-- **AI Assist**: Analyze and enhance task descriptions with Claude
+- **Kanban Board**: Drag-and-drop tasks across Backlog, Up Next, In Progress, Review, and Ready to Ship columns
+- **AI Assist**: Analyze and enhance task descriptions with Claude via AWS Bedrock
 - **Claude Code Integration**: One-click to open VS Code with task context copied to clipboard
+- **Git Worktrees**: Automatic worktree creation for isolated task development
 - **Smart Prioritization**: Up Next column auto-populates with high-priority items
 - **Search**: Filter tasks by title, description, category, or tags
 - **Markdown Support**: Full markdown rendering in task descriptions
+- **Health Monitoring**: Real-time server health indicator with circuit breaker status
 
 ## Installation
 
@@ -82,6 +84,33 @@ npm run build    # Production build
 npm run lint     # Run linter
 ```
 
+## Architecture
+
+### API Resilience
+
+All API routes are protected with timeouts and circuit breakers to prevent hung processes:
+
+- **Timeouts**: External operations (Bedrock API, git commands) have configurable timeouts
+- **Circuit Breakers**: After repeated failures, circuits "open" to fail fast and allow recovery
+- **Health Endpoint**: `GET /api/health` returns server status and circuit breaker states
+
+The health indicator in the header shows real-time server status:
+- 🟢 Green = Healthy
+- 🟡 Yellow (pulsing) = Degraded (some services unavailable)
+- 🔴 Red (pulsing) = Unhealthy (server not responding)
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Server health and circuit breaker status |
+| `/api/backlog` | GET/POST | Read/write backlog file |
+| `/api/analyze-task` | POST | AI-powered task analysis |
+| `/api/create-worktree` | POST | Create git worktree for task |
+| `/api/tackle-task` | POST | Open VS Code with task context |
+| `/api/ship-task` | POST | Push branch and create PR |
+| `/api/review-task` | POST | AI code review for task |
+
 ## Tech Stack
 
 - Next.js 14 (App Router)
@@ -89,3 +118,22 @@ npm run lint     # Run linter
 - Tailwind CSS
 - @dnd-kit (drag and drop)
 - AWS Bedrock (Claude AI)
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── api/           # API routes
+│   │   ├── health/    # Health check endpoint
+│   │   ├── backlog/   # Backlog CRUD
+│   │   ├── analyze-task/
+│   │   └── ...
+│   └── page.tsx       # Main app
+├── components/        # React components
+│   ├── KanbanBoard.tsx
+│   ├── HealthIndicator.tsx
+│   └── ...
+└── lib/
+    └── resilience.ts  # Timeout, circuit breaker utilities
+```

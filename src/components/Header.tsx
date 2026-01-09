@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { HealthIndicator } from './HealthIndicator';
 
 interface HeaderProps {
   filePath: string | null;
@@ -88,6 +89,21 @@ export function Header({ filePath, fileExists, onNewTask, onRefresh, onChangePat
             <p className="text-xs text-surface-500 font-mono tracking-wide">
               Direct the circus
             </p>
+          </div>
+
+          {/* Health Status Indicator */}
+          <div className="hidden sm:block border-l border-surface-800 pl-4 ml-2">
+            <HealthIndicator
+              pollInterval={15000}
+              onStatusChange={(status, previousStatus) => {
+                // Log status changes for visibility
+                if (status === 'unhealthy') {
+                  console.warn(`[Ringmaster] Server became ${status} (was ${previousStatus})`);
+                } else if (previousStatus === 'unhealthy' && status === 'healthy') {
+                  console.log(`[Ringmaster] Server recovered`);
+                }
+              }}
+            />
           </div>
         </div>
 

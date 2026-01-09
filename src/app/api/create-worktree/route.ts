@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { execWithTimeout, TimeoutError } from '@/lib/resilience';
 
-const execAsync = promisify(exec);
+// Timeouts for git operations
+const GIT_COMMAND_TIMEOUT_MS = 15000;  // 15s for simple git commands
+const GIT_WORKTREE_TIMEOUT_MS = 30000; // 30s for worktree creation (can be slower)
 
 interface CreateWorktreeRequest {
   taskId: string;
@@ -64,16 +65,21 @@ export async function POST(request: Request) {
     // Get the default branch name (usually main or master)
     let defaultBranch = 'main';
     try {
-      const { stdout } = await execAsync(
+      const { stdout } = await execWithTimeout(
         'git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed "s@^refs/remotes/origin/@@"',
-        { cwd: repoDir }
+        { cwd: repoDir },
+        GIT_COMMAND_TIMEOUT_MS
       );
       const branch = stdout.trim();
       if (branch) defaultBranch = branch;
     } catch {
       // Try to detect from local branches
       try {
-        const { stdout } = await execAsync('git branch --list main master', { cwd: repoDir });
+        const { stdout } = await execWithTimeout(
+          'git branch --list main master',
+          { cwd: repoDir },
+          GIT_COMMAND_TIMEOUT_MS
+        );
         if (stdout.includes('main')) defaultBranch = 'main';
         else if (stdout.includes('master')) defaultBranch = 'master';
       } catch {
@@ -82,9 +88,10 @@ export async function POST(request: Request) {
     }
 
     // Create the worktree with a new branch based on default branch
-    await execAsync(
+    await execWithTimeout(
       `git worktree add "${worktreePath}" -b "${branchName}" ${defaultBranch}`,
-      { cwd: repoDir }
+      { cwd: repoDir },
+      GIT_WORKTREE_TIMEOUT_MS
     );
 
     return NextResponse.json({
@@ -96,7 +103,16 @@ export async function POST(request: Request) {
       alreadyExists: false,
     });
   } catch (error) {
-    console.error('Create worktree error:', error);
+    // Log with context about error type
+    if (error instanceof TimeoutError) {
+      console.error(`[create-worktree] Git operation timed out: ${error.message}`);
+      return NextResponse.json(
+        { success: false, error: 'Git operation timed out. The repository may be locked or very large.' },
+        { status: 504 }
+      );
+    }
+
+    console.error('[create-worktree] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { success: false, error: errorMessage },

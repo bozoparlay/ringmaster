@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { fromIni } from '@aws-sdk/credential-providers';
+import {
+  withTimeout,
+  bedrockCircuitBreaker,
+  CircuitOpenError,
+  TimeoutError,
+} from '@/lib/resilience';
+
+// Bedrock API timeout - 30 seconds should be plenty for most requests
+const BEDROCK_TIMEOUT_MS = 30000;
 
 // Initialize Bedrock client with profile support
 const bedrockClient = new BedrockRuntimeClient({
@@ -242,21 +251,29 @@ How this should be implemented (suggested files, patterns, considerations).
 The description should be detailed enough that a developer can implement it without needing to ask clarifying questions. Aim for at least 150-200 words with concrete, specific details.`;
 
     try {
-      const command = new ConverseCommand({
-        modelId: CLAUDE_MODEL_ID,
-        messages: [
-          {
-            role: 'user',
-            content: [{ text: prompt }],
+      // Use circuit breaker + timeout for Bedrock API calls
+      // This prevents hung requests and fails fast if Bedrock is having issues
+      const response = await bedrockCircuitBreaker.execute(async () => {
+        const command = new ConverseCommand({
+          modelId: CLAUDE_MODEL_ID,
+          messages: [
+            {
+              role: 'user',
+              content: [{ text: prompt }],
+            },
+          ],
+          inferenceConfig: {
+            maxTokens: 2048,
+            temperature: 0.3,
           },
-        ],
-        inferenceConfig: {
-          maxTokens: 2048, // Increased to allow for detailed descriptions with all required sections
-          temperature: 0.3,
-        },
-      });
+        });
 
-      const response = await bedrockClient.send(command);
+        return withTimeout(
+          bedrockClient.send(command),
+          BEDROCK_TIMEOUT_MS,
+          'Bedrock API'
+        );
+      });
 
       // Extract text from response
       const responseText = response.output?.message?.content?.[0]?.text || '';
@@ -310,7 +327,14 @@ The description should be detailed enough that a developer can implement it with
         },
       });
     } catch (bedrockError) {
-      console.error('Bedrock API error:', bedrockError);
+      // Log with context about the error type
+      if (bedrockError instanceof CircuitOpenError) {
+        console.warn(`[analyze-task] Circuit breaker open: ${bedrockError.message}`);
+      } else if (bedrockError instanceof TimeoutError) {
+        console.warn(`[analyze-task] Bedrock timeout: ${bedrockError.message}`);
+      } else {
+        console.error('[analyze-task] Bedrock API error:', bedrockError);
+      }
       // Fall back to heuristic analysis if Bedrock fails
       return fallbackAnalysis(title, description);
     }
