@@ -223,7 +223,7 @@ export function KanbanBoard({
   );
 
   // Filter and organize items by column
-  const columnItems = useMemo(() => {
+  const { columnItems, upNextIds } = useMemo(() => {
     // Apply priority filter
     let filtered = priorityFilter === 'all'
       ? items
@@ -269,16 +269,33 @@ export function KanbanBoard({
     // Compute "Up Next" - take top N high-priority items from backlog
     // Only items with critical, high, or medium priority are eligible
     // When searching, disable auto-population so items stay in their actual columns
+    let upNextItemIds = new Set<string>();
     if (!isSearching) {
       const eligibleForUpNext = columns.backlog.filter(
         item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
       );
-      const upNextItems = eligibleForUpNext.slice(0, UP_NEXT_LIMIT);
-      const upNextIds = new Set(upNextItems.map(item => item.id));
 
-      // Move Up Next items from backlog display
+      // Dynamic Up Next limit based on backlog size
+      const backlogSize = columns.backlog.length;
+      let upNextLimit: number;
+      if (backlogSize < 5) {
+        upNextLimit = 1;
+      } else if (backlogSize < 10) {
+        upNextLimit = 3;
+      } else if (backlogSize < 15) {
+        upNextLimit = 4;
+      } else {
+        upNextLimit = UP_NEXT_LIMIT; // 5 for larger backlogs
+      }
+
+      const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
+      upNextItemIds = new Set(upNextItems.map(item => item.id));
+
+      // Set Up Next column items
       columns.up_next = upNextItems;
-      columns.backlog = columns.backlog.filter(item => !upNextIds.has(item.id));
+
+      // Keep Up Next items in backlog too (don't filter them out)
+      // This allows users to see that Up Next items are still part of the backlog
     }
 
     // Sort other columns by priority weight, then by order
@@ -290,7 +307,7 @@ export function KanbanBoard({
       });
     });
 
-    return columns;
+    return { columnItems: columns, upNextIds: upNextItemIds };
   }, [items, priorityFilter, searchQuery, isSearching]);
 
   // Compute items that need rescoping (don't match the strict template)
@@ -689,6 +706,7 @@ export function KanbanBoard({
                 onItemClick={handleItemClick}
                 isLoading={isLoading}
                 activeTaskId={signals?.activeTaskId}
+                upNextIds={upNextIds}
               />
             ))}
           </div>
@@ -699,7 +717,6 @@ export function KanbanBoard({
                 item={activeItem}
                 onClick={() => {}}
                 isDragging
-                isActive={signals?.activeTaskId === activeItem.id}
               />
             ) : null}
           </DragOverlay>

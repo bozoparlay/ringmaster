@@ -42,7 +42,6 @@ export default function Home() {
     updateItem,
     deleteItem,
     reorderItems,
-    setActiveTask,
     updatePRStatus,
     refresh,
   } = useBacklog({ path: backlogPath });
@@ -90,7 +89,6 @@ export default function Home() {
           searchQuery={searchQuery}
           backlogPath={filePath ?? undefined}
           signals={signals}
-          onSetActiveTask={setActiveTask}
           onUpdatePRStatus={updatePRStatus}
         />
       </div>

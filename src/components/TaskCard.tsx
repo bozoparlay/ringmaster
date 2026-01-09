@@ -10,6 +10,7 @@ interface TaskCardProps {
   onClick: () => void;
   isDragging?: boolean;
   isActive?: boolean; // Task is being actively worked on
+  isInUpNext?: boolean; // Task is also in Up Next column
 }
 
 const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }> = {
@@ -20,7 +21,7 @@ const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }
   someday: { bg: 'bg-surface-600/30', text: 'text-surface-400', dot: 'bg-surface-500' },
 };
 
-export function TaskCard({ item, onClick, isDragging, isActive }: TaskCardProps) {
+export function TaskCard({ item, onClick, isDragging, isActive, isInUpNext }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -63,17 +64,6 @@ export function TaskCard({ item, onClick, isDragging, isActive }: TaskCardProps)
         className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priority.dot} opacity-60`}
       />
 
-      {/* Active task indicator - pulsing green dot */}
-      {isActive && (
-        <div
-          className="absolute -top-1.5 -left-1.5 w-4 h-4 z-10"
-          title="Active task - currently being worked on"
-        >
-          <span className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75" />
-          <span className="absolute inset-0.5 rounded-full bg-green-500 shadow-lg" />
-        </div>
-      )}
-
       {/* Low quality warning indicator */}
       {isLowQuality && (
         <div
@@ -82,6 +72,18 @@ export function TaskCard({ item, onClick, isDragging, isActive }: TaskCardProps)
         >
           <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01" />
+          </svg>
+        </div>
+      )}
+
+      {/* Up Next indicator - shows when a backlog item is also in Up Next */}
+      {isInUpNext && (
+        <div
+          className={`absolute ${isLowQuality ? '-top-1 -right-7' : '-top-1 -right-1'} w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center shadow-lg border-2 border-surface-850 z-10`}
+          title="This item is in Up Next"
+        >
+          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
         </div>
       )}
