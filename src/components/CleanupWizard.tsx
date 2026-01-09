@@ -57,21 +57,56 @@ export function CleanupWizard({ isOpen, onClose, items, onUpdateItem, workDir }:
     setEditedSuggestion(null);
     setIsEditing(false);
 
+    // Build a rescope prompt for missing fields
+    const missingFields = [];
+    if (!currentTask.description || currentTask.description.length < 20) {
+      missingFields.push('description');
+    }
+    if (!currentTask.acceptanceCriteria || currentTask.acceptanceCriteria.length === 0) {
+      missingFields.push('acceptance criteria');
+    }
+
+    const rescopePrompt = `This task needs to be reformatted to match the standard template. Missing fields: ${missingFields.join(', ')}. Please provide:
+- A detailed description (at least 150 words) explaining the problem or feature
+- 3-5 specific, testable acceptance criteria
+- Clear requirements and technical approach
+Preserve all existing information while making it actionable and specific.`;
+
+    // Create abort controller for timeout (60 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
     try {
-      const response = await fetch('/api/suggest-cleanup', {
+      const response = await fetch('/api/analyze-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task: currentTask, workDir }),
+        body: JSON.stringify({
+          title: currentTask.title.trim(),
+          description: currentTask.description?.trim() || '',
+          comments: rescopePrompt,
+        }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (response.ok) {
-        const result = await response.json();
-        if (result.suggestion) {
-          setSuggestion(result.suggestion);
-          setEditedSuggestion(result.suggestion);
-        }
+        const analysis = await response.json();
+        // Convert analyze-task response to CleanupSuggestion format
+        const suggestion: CleanupSuggestion = {
+          title: currentTask.title, // Keep title as-is
+          description: analysis.enhancedDescription || currentTask.description || '',
+          acceptanceCriteria: analysis.acceptanceCriteria || currentTask.acceptanceCriteria || [],
+          notes: currentTask.notes,
+          priority: analysis.priority || currentTask.priority,
+          effort: analysis.effort || currentTask.effort,
+          value: analysis.value || currentTask.value,
+        };
+        setSuggestion(suggestion);
+        setEditedSuggestion(suggestion);
       }
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('Failed to fetch suggestion:', error);
     } finally {
       setIsLoading(false);

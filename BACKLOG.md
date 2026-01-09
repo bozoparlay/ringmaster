@@ -129,3 +129,13 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 - [ ] User can intuitively drop tiles without having to aim for the middle of columns
 
 ---
+
+## [backlog] Uncategorized
+
+### Bad Task
+**Priority**: Medium | **Effort**: Medium | **Value**: Medium
+
+**Description**:
+Words
+
+---
