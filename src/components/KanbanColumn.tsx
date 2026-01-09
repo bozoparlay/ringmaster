@@ -38,7 +38,7 @@ export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle }
   const isUpNext = status === 'up_next';
 
   return (
-    <div className={`flex flex-col ${isUpNext ? 'min-w-[280px] max-w-[280px]' : 'min-w-[240px] flex-1'}`}>
+    <div className={`flex flex-col min-w-[240px] flex-1`}>
       {/* Column Header */}
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex flex-col gap-0.5">
