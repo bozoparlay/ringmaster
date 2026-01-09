@@ -78,66 +78,110 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
 
   if (!isOpen || !item) return null;
 
+  /**
+   * Generates a preview prompt that matches the API's canonical format.
+   * Note: Branch will be added by the API after worktree creation.
+   */
   const generatePlan = () => {
-    const priorityContext = {
-      critical: 'This is a critical priority task that needs immediate attention.',
-      high: 'This is a high priority task that should be addressed soon.',
-      medium: 'This is a medium priority task.',
-      low: 'This is a lower priority task.',
-      someday: 'This task can be addressed when time permits.',
-    };
+    const sections: string[] = [];
 
-    return `## Task: ${item.title}
+    // Header
+    sections.push(`# Task: ${item.title}`);
 
-### Priority
-${priorityContext[item.priority]}
+    // Metadata line
+    const metadata: string[] = [];
+    if (item.priority) metadata.push(`Priority: ${item.priority}`);
+    if (item.effort) metadata.push(`Effort: ${item.effort}`);
+    if (item.value) metadata.push(`Value: ${item.value}`);
+    if (metadata.length > 0) {
+      sections.push(metadata.join(' | '));
+    }
 
-### Description
-${item.description || 'No description provided.'}
+    if (item.category) {
+      sections.push(`Category: ${item.category}`);
+    }
 
-### Tags
-${item.tags.length > 0 ? item.tags.map(t => `- ${t}`).join('\n') : 'No tags'}
+    if (item.tags.length > 0) {
+      sections.push(`Tags: ${item.tags.join(', ')}`);
+    }
 
-### Suggested Approach
+    // Branch placeholder - actual branch assigned on launch
+    if (item.branch) {
+      sections.push(`Branch: ${item.branch}`);
+    } else {
+      sections.push(`Branch: (will be assigned on launch)`);
+    }
 
-1. **Understand the Requirements**
-   - Review the task description thoroughly
-   - Identify any dependencies or blockers
-   - Clarify any ambiguous requirements
+    // Description
+    if (item.description) {
+      sections.push('');
+      sections.push('## Description');
+      sections.push(item.description);
+    } else {
+      sections.push('');
+      sections.push('## Description');
+      sections.push('No description provided.');
+    }
 
-2. **Plan the Implementation**
-   - Break down into smaller subtasks
-   - Identify files that need modification
-   - Consider edge cases and error handling
+    // Acceptance Criteria - critical for Claude to understand success
+    if (item.acceptanceCriteria && item.acceptanceCriteria.length > 0) {
+      sections.push('');
+      sections.push('## Acceptance Criteria');
+      item.acceptanceCriteria.forEach((criterion, index) => {
+        sections.push(`${index + 1}. ${criterion}`);
+      });
+    }
 
-3. **Execute**
-   - Start with the core functionality
-   - Write tests as you go
-   - Commit changes incrementally
+    // Notes - additional context
+    if (item.notes) {
+      sections.push('');
+      sections.push('## Notes');
+      sections.push(item.notes);
+    }
 
-4. **Verify**
-   - Test the implementation
-   - Review for code quality
-   - Update documentation if needed`;
+    return sections.join('\n');
   };
 
   const generatePrompt = () => {
-    return `I need to work on the following task from my backlog:
+    const parts: string[] = [];
 
-**Task:** ${item.title}
-**Priority:** ${item.priority}
-**Tags:** ${item.tags.join(', ') || 'none'}
+    parts.push(`I need to work on the following task from my backlog:`);
+    parts.push('');
+    parts.push(`**Task:** ${item.title}`);
+    parts.push(`**Priority:** ${item.priority}`);
+    if (item.effort) parts.push(`**Effort:** ${item.effort}`);
+    if (item.value) parts.push(`**Value:** ${item.value}`);
+    parts.push(`**Tags:** ${item.tags.join(', ') || 'none'}`);
+    parts.push('');
+    parts.push(`**Description:**`);
+    parts.push(item.description || 'No description provided.');
 
-**Description:**
-${item.description || 'No description provided.'}
+    // Include acceptance criteria - this is critical context
+    if (item.acceptanceCriteria && item.acceptanceCriteria.length > 0) {
+      parts.push('');
+      parts.push(`**Acceptance Criteria:**`);
+      item.acceptanceCriteria.forEach((criterion, index) => {
+        parts.push(`${index + 1}. ${criterion}`);
+      });
+    }
 
-Please help me:
-1. Understand what needs to be done
-2. Create a detailed implementation plan
-3. Identify the files that need to be modified
-4. Start implementing the solution
+    // Include notes if present
+    if (item.notes) {
+      parts.push('');
+      parts.push(`**Notes:**`);
+      parts.push(item.notes);
+    }
 
-Let's begin by exploring the codebase to understand the current state and then create a plan.`;
+    parts.push('');
+    parts.push(`Please help me:`);
+    parts.push(`1. Understand what needs to be done`);
+    parts.push(`2. Create a detailed implementation plan`);
+    parts.push(`3. Identify the files that need to be modified`);
+    parts.push(`4. Start implementing the solution`);
+    parts.push('');
+    parts.push(`Let's begin by exploring the codebase to understand the current state and then create a plan.`);
+
+    return parts.join('\n');
   };
 
   const handleCopy = async () => {
@@ -166,6 +210,11 @@ Let's begin by exploring the codebase to understand the current state and then c
           description: item.description,
           category: item.category,
           priority: item.priority,
+          tags: item.tags,
+          acceptanceCriteria: item.acceptanceCriteria,
+          notes: item.notes,
+          effort: item.effort,
+          value: item.value,
           backlogPath,
           worktreePath: item.worktreePath,
           ide: selectedIde,

@@ -16,9 +16,82 @@ interface TackleRequest {
   description?: string;
   category?: string;
   priority?: string;
+  tags?: string[];
+  acceptanceCriteria?: string[];
+  notes?: string;
+  effort?: string;
+  value?: string;
   backlogPath?: string;
   worktreePath?: string;  // If already created
   ide?: IdeType;
+}
+
+/**
+ * Builds the canonical prompt for Claude Code from task data.
+ * This is the single source of truth for prompt generation.
+ */
+function buildTaskPrompt(task: {
+  title: string;
+  priority?: string;
+  category?: string;
+  tags?: string[];
+  description?: string;
+  acceptanceCriteria?: string[];
+  notes?: string;
+  effort?: string;
+  value?: string;
+  branch?: string;
+}): string {
+  const sections: string[] = [];
+
+  // Header
+  sections.push(`# Task: ${task.title}`);
+
+  // Metadata line
+  const metadata: string[] = [];
+  if (task.priority) metadata.push(`Priority: ${task.priority}`);
+  if (task.effort) metadata.push(`Effort: ${task.effort}`);
+  if (task.value) metadata.push(`Value: ${task.value}`);
+  if (metadata.length > 0) {
+    sections.push(metadata.join(' | '));
+  }
+
+  if (task.category) {
+    sections.push(`Category: ${task.category}`);
+  }
+
+  if (task.tags && task.tags.length > 0) {
+    sections.push(`Tags: ${task.tags.join(', ')}`);
+  }
+
+  if (task.branch) {
+    sections.push(`Branch: ${task.branch}`);
+  }
+
+  // Description
+  if (task.description) {
+    sections.push('');
+    sections.push('## Description');
+    sections.push(task.description);
+  }
+
+  // Acceptance Criteria - critical for Claude to understand success
+  if (task.acceptanceCriteria && task.acceptanceCriteria.length > 0) {
+    sections.push('');
+    sections.push('## Acceptance Criteria');
+    task.acceptanceCriteria.forEach((criterion, index) => {
+      sections.push(`${index + 1}. ${criterion}`);
+    });
+  }
+
+  // Notes - additional context
+  if (task.notes) {
+    sections.push('');
+    sections.push('## Notes');
+    sections.push(task.notes);
+  }
+
+  return sections.join('\n');
 }
 
 // IDE launch commands
@@ -39,8 +112,21 @@ function slugify(text: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { taskId, title, description, category, priority, backlogPath, worktreePath, ide = 'vscode' } =
-      await request.json() as TackleRequest;
+    const {
+      taskId,
+      title,
+      description,
+      category,
+      priority,
+      tags,
+      acceptanceCriteria,
+      notes,
+      effort,
+      value,
+      backlogPath,
+      worktreePath,
+      ide = 'vscode'
+    } = await request.json() as TackleRequest;
 
     if (!title || !taskId) {
       return NextResponse.json({ error: 'Title and taskId are required' }, { status: 400 });
@@ -117,26 +203,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // Build the prompt for Claude Code
-    const promptParts = [`Task: ${title}`];
-
-    if (priority) {
-      promptParts.push(`Priority: ${priority}`);
-    }
-
-    if (category) {
-      promptParts.push(`Category: ${category}`);
-    }
-
-    if (branch) {
-      promptParts.push(`Branch: ${branch}`);
-    }
-
-    if (description) {
-      promptParts.push(`\nDescription:\n${description}`);
-    }
-
-    const prompt = promptParts.join('\n');
+    // Build the prompt for Claude Code using the canonical prompt builder
+    const prompt = buildTaskPrompt({
+      title,
+      priority,
+      category,
+      tags,
+      description,
+      acceptanceCriteria,
+      notes,
+      effort,
+      value,
+      branch,
+    });
 
     // Escape single quotes for shell
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
@@ -182,6 +261,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       command: claudeCommand,
+      prompt, // Return the generated prompt for potential client use
       targetDir,
       branch,
       ide,
