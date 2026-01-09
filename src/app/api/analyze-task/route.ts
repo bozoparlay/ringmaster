@@ -181,19 +181,19 @@ Guidelines:
 - **Category**: Choose from: User Management, Season Management, Admin Tools, Notifications, Game Data & Automation, Profile & Achievements, Analytics & Insights, UI/UX Improvements, Security & Privacy, Technical Debt, Infrastructure, Mobile & Future
 
 **IMPORTANT - Enhanced Description Requirements:**
-The description MUST include these sections to pass quality validation:
+The description MUST include these sections to pass quality validation (use bold text for section headers, NOT markdown headings):
 
-## Description
+**Description:**
 Brief overview of what this task accomplishes and why it matters.
 
-## Requirements
+**Requirements:**
 - Bullet list of specific, actionable requirements
 - Each requirement should be verifiable (can determine if it's done)
 
-## Technical Approach
+**Technical Approach:**
 How this should be implemented (suggested files, patterns, considerations).
 
-## Success Criteria
+**Acceptance Criteria:**
 - How we know this task is complete
 - Acceptance conditions that can be checked during code review
 
@@ -222,20 +222,20 @@ Guidelines for assessment:
 - **Category**: Choose from: User Management, Season Management, Admin Tools, Notifications, Game Data & Automation, Profile & Achievements, Analytics & Insights, UI/UX Improvements, Security & Privacy, Technical Debt, Infrastructure, Mobile & Future
 
 **IMPORTANT - Enhanced Description Requirements:**
-The description MUST include these sections to pass quality validation:
+The description MUST include these sections to pass quality validation (use bold text for section headers, NOT markdown headings):
 
-## Description
+**Description:**
 Brief overview of what this task accomplishes and why it matters.
 
-## Requirements
+**Requirements:**
 - Bullet list of specific, actionable requirements
 - Each requirement should be verifiable (can determine if it's done)
 - Include both functional requirements and constraints
 
-## Technical Approach
+**Technical Approach:**
 How this should be implemented (suggested files, patterns, considerations).
 
-## Success Criteria
+**Acceptance Criteria:**
 - How we know this task is complete
 - Acceptance conditions that can be checked during code review
 
