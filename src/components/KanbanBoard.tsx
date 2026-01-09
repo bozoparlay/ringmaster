@@ -49,6 +49,17 @@ interface ReviewResult {
 // Priority levels in order from highest to lowest
 const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
 
+// Up Next sizing configuration - defines thresholds and limits based on backlog size
+const UP_NEXT_CONFIG = {
+  SMALL_THRESHOLD: 5,    // Backlog size < 5
+  SMALL_LIMIT: 1,        // Show 1 item in Up Next
+  MEDIUM_THRESHOLD: 10,  // Backlog size < 10
+  MEDIUM_LIMIT: 3,       // Show 3 items in Up Next
+  LARGE_THRESHOLD: 15,   // Backlog size < 15
+  LARGE_LIMIT: 4,        // Show 4 items in Up Next
+  // For backlog >= 15, use UP_NEXT_LIMIT (5 items)
+} as const;
+
 function downgradePriority(current: Priority): Priority {
   const index = PRIORITY_ORDER.indexOf(current);
   // If already at lowest, stay there
@@ -68,10 +79,10 @@ function upgradePriority(current: Priority): Priority {
  * Uses proportional scaling to avoid overwhelming small backlogs.
  */
 function calculateUpNextLimit(backlogSize: number): number {
-  if (backlogSize < 5) return 1;
-  if (backlogSize < 10) return 3;
-  if (backlogSize < 15) return 4;
-  return UP_NEXT_LIMIT; // 5 for larger backlogs
+  if (backlogSize < UP_NEXT_CONFIG.SMALL_THRESHOLD) return UP_NEXT_CONFIG.SMALL_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.MEDIUM_THRESHOLD) return UP_NEXT_CONFIG.MEDIUM_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.LARGE_THRESHOLD) return UP_NEXT_CONFIG.LARGE_LIMIT;
+  return UP_NEXT_LIMIT; // Maximum for larger backlogs
 }
 
 interface KanbanBoardProps {
@@ -234,7 +245,7 @@ export function KanbanBoard({
   );
 
   // Filter and organize items by column
-  const { columnItems, upNextIds } = useMemo(() => {
+  const columnData = useMemo(() => {
     // Apply priority filter
     let filtered = priorityFilter === 'all'
       ? items
@@ -312,6 +323,8 @@ export function KanbanBoard({
 
     return { columnItems: columns, upNextIds: upNextItemIds };
   }, [items, priorityFilter, searchQuery, isSearching]);
+
+  const { columnItems, upNextIds } = columnData;
 
   // Compute items that need rescoping (don't match the strict template)
   const rescopeItems = useMemo(() => {

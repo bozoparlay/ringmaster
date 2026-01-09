@@ -9,7 +9,6 @@ interface TaskCardProps {
   item: BacklogItem;
   onClick: () => void;
   isDragging?: boolean;
-  isActive?: boolean; // Task is being actively worked on
   isInUpNext?: boolean; // Task is also in Up Next column
 }
 
@@ -21,7 +20,7 @@ const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }
   someday: { bg: 'bg-surface-600/30', text: 'text-surface-400', dot: 'bg-surface-500' },
 };
 
-export function TaskCard({ item, onClick, isDragging, isActive, isInUpNext }: TaskCardProps) {
+export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProps) {
   const {
     attributes,
     listeners,
