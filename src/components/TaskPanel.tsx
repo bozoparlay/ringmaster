@@ -8,7 +8,6 @@ import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backl
 import { PRIORITY_LABELS, STATUS_LABELS, COLUMN_ORDER, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
 import { validateTaskQuality, QUALITY_THRESHOLD } from '@/lib/task-quality';
 import { TaskQualityScore } from './TaskQualityScore';
-import { taskNeedsCleanup } from '@/lib/task-validator';
 import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
 import { InlineOptionSelector } from './InlineOptionSelector';
 
@@ -179,7 +178,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isShipping, setIsShipping] = useState(false);
-  const [isRescoping, setIsRescoping] = useState(false);
   const [preAiItem, setPreAiItem] = useState<BacklogItem | null>(null);
   const [showAiInput, setShowAiInput] = useState(false);
   const [aiComment, setAiComment] = useState('');
@@ -187,6 +185,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const [qualityWarning, setQualityWarning] = useState<{ score: number; issues: string[] } | null>(null);
   const [showSaveWarning, setShowSaveWarning] = useState(false);
   const [pendingQuality, setPendingQuality] = useState<{ score: number; issues: string[] } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const aiInputRef = useRef<HTMLTextAreaElement>(null);
@@ -197,8 +196,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const hasBranch = !!editedItem?.branch;
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
   const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
-  const needsRescope = editedItem ? taskNeedsCleanup(editedItem) : false;
-  const [rescopeDismissed, setRescopeDismissed] = useState(false);
 
   useEffect(() => {
     if (item) {
@@ -211,7 +208,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       setQualityWarning(null);
       setShowSaveWarning(false);
       setPendingQuality(null);
-      setRescopeDismissed(false);
+      setAiError(null);
     }
   }, [item]);
 
@@ -319,8 +316,13 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
 
     setIsAnalyzing(true);
     setShowAiInput(false);
+    setAiError(null);
     // Store current state before AI changes
     setPreAiItem({ ...editedItem });
+
+    // Create abort controller for timeout (60 seconds for AI operations)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
       const response = await fetch('/api/analyze-task', {
@@ -331,7 +333,10 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           description: editedItem.description?.trim() || '',
           comments: aiComment.trim(),
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const analysis = await response.json();
@@ -361,11 +366,25 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           setQualityWarning(null);
         }
       } else {
-        console.error('AI analysis request failed:', response.status);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const errorMessage = errorData.error || `Request failed with status ${response.status}`;
+        console.error('AI analysis request failed:', response.status, errorMessage);
+        setAiError(`AI Assist failed: ${errorMessage}`);
         setPreAiItem(null);
       }
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('AI analysis failed:', error);
+
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          setAiError('AI Assist timed out after 60 seconds. Please try again or simplify your request.');
+        } else {
+          setAiError(`AI Assist failed: ${error.message}`);
+        }
+      } else {
+        setAiError('AI Assist failed due to a network error. Please check your connection and try again.');
+      }
       setPreAiItem(null);
     } finally {
       setIsAnalyzing(false);
@@ -392,13 +411,17 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     if (!editedItem?.title.trim()) return;
 
     setIsAnalyzing(true);
-    setRescopeDismissed(true); // Hide the banner while processing
+    setAiError(null);
     // Store current state before AI changes
     setPreAiItem({ ...editedItem });
 
     // Build a rescope-specific prompt based on quality issues
     const qualityIssues = editedItem.qualityIssues || [];
     const rescopePrompt = `Please improve this task definition to meet quality standards. Current issues: ${qualityIssues.join(', ')}. Add proper Description, Requirements, Technical Approach, and Success Criteria sections. Make it actionable and specific.`;
+
+    // Create abort controller for timeout (60 seconds for AI operations)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
       const response = await fetch('/api/analyze-task', {
@@ -409,7 +432,10 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           description: editedItem.description?.trim() || '',
           comments: rescopePrompt,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const analysis = await response.json();
@@ -441,14 +467,26 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           setQualityWarning(null);
         }
       } else {
-        console.error('Rescope request failed:', response.status);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const errorMessage = errorData.error || `Request failed with status ${response.status}`;
+        console.error('Rescope request failed:', response.status, errorMessage);
+        setAiError(`Rescope failed: ${errorMessage}`);
         setPreAiItem(null);
-        setRescopeDismissed(false); // Show banner again on failure
       }
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('Rescope failed:', error);
+
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          setAiError('Rescope timed out after 60 seconds. Please try again.');
+        } else {
+          setAiError(`Rescope failed: ${error.message}`);
+        }
+      } else {
+        setAiError('Rescope failed due to a network error. Please check your connection and try again.');
+      }
       setPreAiItem(null);
-      setRescopeDismissed(false); // Show banner again on failure
     } finally {
       setIsAnalyzing(false);
     }
@@ -465,48 +503,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       console.error('Ship error:', error);
     } finally {
       setIsShipping(false);
-    }
-  };
-
-  const handleAiRescope = async () => {
-    if (!editedItem) return;
-
-    setIsRescoping(true);
-    setPreAiItem({ ...editedItem });
-
-    try {
-      const workDir = backlogPath ? backlogPath.replace(/\/[^/]+$/, '') : undefined;
-      const response = await fetch('/api/suggest-cleanup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task: editedItem, workDir }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.suggestion) {
-          const suggestion = result.suggestion;
-          setEditedItem({
-            ...editedItem,
-            title: suggestion.title || editedItem.title,
-            description: suggestion.description || editedItem.description,
-            acceptanceCriteria: suggestion.acceptanceCriteria || editedItem.acceptanceCriteria,
-            notes: suggestion.notes || editedItem.notes,
-            priority: (suggestion.priority as Priority) || editedItem.priority,
-            effort: (suggestion.effort as Effort) || editedItem.effort,
-            value: (suggestion.value as Value) || editedItem.value,
-          });
-          setShowDiff(true);
-        }
-      } else {
-        console.error('AI Rescope failed:', response.status);
-        setPreAiItem(null);
-      }
-    } catch (error) {
-      console.error('AI Rescope error:', error);
-      setPreAiItem(null);
-    } finally {
-      setIsRescoping(false);
     }
   };
 
@@ -562,114 +558,34 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* AI Rescope Loading State */}
-          {isRescoping && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-amber-300">AI Rescoping Task...</h4>
-                <span className="text-xs text-surface-500">This may take up to a minute</span>
-              </div>
-              <AiLoadingState />
-            </div>
-          )}
-
-          {/* Rescope Banner for Low Quality Tasks (score-based) */}
-          {isLowQuality && !rescopeDismissed && !isAnalyzing && !showDiff && !isRescoping && (
-            <div className="relative overflow-hidden rounded-xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-orange-500/10 to-red-500/10">
-              {/* Animated background pulse */}
-              <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-orange-500/5 animate-pulse" />
-
-              <div className="relative p-4">
+          {/* AI Error Message */}
+          {aiError && !isAnalyzing && (
+            <div className="relative overflow-hidden rounded-xl border border-red-500/50 bg-gradient-to-r from-red-500/20 via-red-600/20 to-red-500/20">
+              <div className="p-4">
                 <div className="flex items-start gap-3">
-                  {/* Warning icon */}
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                  {/* Error icon */}
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/30 flex items-center justify-center">
                     <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-sm font-semibold text-red-300">Needs Rescoping</h3>
-                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-500/30 text-red-300">
-                        Score: {editedItem.qualityScore}/100
-                      </span>
-                    </div>
-                    <p className="text-xs text-surface-400 mb-3">
-                      This task doesn&apos;t have enough detail to be actionable. Let AI help define proper requirements.
-                    </p>
-
-                    {/* Quality Issues */}
-                    {editedItem.qualityIssues && editedItem.qualityIssues.length > 0 && (
-                      <ul className="text-xs text-surface-500 space-y-0.5 mb-3">
-                        {editedItem.qualityIssues.map((issue, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-red-400/60">•</span>
-                            {issue}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleRescope}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg transition-all shadow-lg hover:shadow-purple-500/25"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        Rescope with AI
-                      </button>
-                      <button
-                        onClick={() => setRescopeDismissed(true)}
-                        className="px-3 py-2 text-xs font-medium text-surface-400 hover:text-surface-200 transition-colors"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
+                    <h3 className="text-sm font-semibold text-red-300 mb-1">AI Operation Failed</h3>
+                    <p className="text-xs text-red-200/80">{aiError}</p>
                   </div>
 
                   {/* Close button */}
                   <button
-                    onClick={() => setRescopeDismissed(true)}
-                    className="flex-shrink-0 p-1 text-surface-500 hover:text-surface-300 transition-colors"
+                    onClick={() => setAiError(null)}
+                    className="flex-shrink-0 p-1 text-red-400 hover:text-red-300 transition-colors"
+                    title="Dismiss"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Needs Rescope Banner (structure-based - missing fields) */}
-          {needsRescope && !isLowQuality && !showDiff && !isRescoping && (
-            <div className="p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-amber-500/20 rounded-lg">
-                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-sm font-medium text-amber-300">Task Needs Rescoping</h4>
-                  <p className="text-xs text-amber-400/70 mt-0.5">
-                    Missing required fields: {!editedItem.description || editedItem.description.length < 20 ? 'description' : ''}
-                    {(!editedItem.description || editedItem.description.length < 20) && (!editedItem.acceptanceCriteria || editedItem.acceptanceCriteria.length === 0) ? ', ' : ''}
-                    {!editedItem.acceptanceCriteria || editedItem.acceptanceCriteria.length === 0 ? 'acceptance criteria' : ''}
-                  </p>
-                </div>
-                <button
-                  onClick={handleAiRescope}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-medium rounded-lg transition-all shadow-lg hover:shadow-amber-500/20"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                  </svg>
-                  AI Rescope
-                </button>
               </div>
             </div>
           )}
@@ -1001,7 +917,14 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                 editedItem.description,
                 editedItem.acceptanceCriteria
               );
-              return <TaskQualityScore score={quality.score} issues={quality.issues} />;
+              return (
+                <TaskQualityScore
+                  score={quality.score}
+                  issues={quality.issues}
+                  onRescope={handleRescope}
+                  isRescoping={isAnalyzing}
+                />
+              );
             })()}
 
             <div className="mt-2 text-xs font-mono text-surface-600 truncate">
