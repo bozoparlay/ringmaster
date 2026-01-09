@@ -49,6 +49,17 @@ interface ReviewResult {
 // Priority levels in order from highest to lowest
 const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
 
+// Up Next sizing configuration - defines thresholds and limits based on backlog size
+const UP_NEXT_CONFIG = {
+  SMALL_THRESHOLD: 5,    // Backlog size < 5
+  SMALL_LIMIT: 1,        // Show 1 item in Up Next
+  MEDIUM_THRESHOLD: 10,  // Backlog size < 10
+  MEDIUM_LIMIT: 3,       // Show 3 items in Up Next
+  LARGE_THRESHOLD: 15,   // Backlog size < 15
+  LARGE_LIMIT: 4,        // Show 4 items in Up Next
+  MAX_LIMIT: 5,          // Maximum for backlog >= 15
+} as const;
+
 function downgradePriority(current: Priority): Priority {
   const index = PRIORITY_ORDER.indexOf(current);
   // If already at lowest, stay there
@@ -61,6 +72,17 @@ function upgradePriority(current: Priority): Priority {
   // If already at highest, stay there
   if (index <= 0) return current;
   return PRIORITY_ORDER[index - 1];
+}
+
+/**
+ * Calculate how many items should be shown in Up Next based on backlog size.
+ * Uses proportional scaling to avoid overwhelming small backlogs.
+ */
+function calculateUpNextLimit(backlogSize: number): number {
+  if (backlogSize < UP_NEXT_CONFIG.SMALL_THRESHOLD) return UP_NEXT_CONFIG.SMALL_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.MEDIUM_THRESHOLD) return UP_NEXT_CONFIG.MEDIUM_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.LARGE_THRESHOLD) return UP_NEXT_CONFIG.LARGE_LIMIT;
+  return UP_NEXT_CONFIG.MAX_LIMIT;
 }
 
 interface KanbanBoardProps {
@@ -223,7 +245,7 @@ export function KanbanBoard({
   );
 
   // Filter and organize items by column
-  const columnItems = useMemo(() => {
+  const columnData = useMemo(() => {
     // Apply priority filter
     let filtered = priorityFilter === 'all'
       ? items
@@ -269,16 +291,25 @@ export function KanbanBoard({
     // Compute "Up Next" - take top N high-priority items from backlog
     // Only items with critical, high, or medium priority are eligible
     // When searching, disable auto-population so items stay in their actual columns
+    let upNextItemIds = new Set<string>();
     if (!isSearching) {
       const eligibleForUpNext = columns.backlog.filter(
         item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
       );
-      const upNextItems = eligibleForUpNext.slice(0, UP_NEXT_LIMIT);
-      const upNextIds = new Set(upNextItems.map(item => item.id));
 
-      // Move Up Next items from backlog display
+      const upNextLimit = calculateUpNextLimit(columns.backlog.length);
+      const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
+      upNextItemIds = new Set(upNextItems.map(item => item.id));
+
+      // Set Up Next column items
       columns.up_next = upNextItems;
-      columns.backlog = columns.backlog.filter(item => !upNextIds.has(item.id));
+
+      // IMPORTANT: Keep Up Next items in backlog too (don't filter them out)
+      // This is the core behavior that enables dual-visibility:
+      // - Users can see all pending work in Backlog (including what's up next)
+      // - Up Next provides a focused view of immediate priorities
+      // - Items get a cyan badge in Backlog to show they're also in Up Next
+      // This transparency helps users understand the relationship between backlog and scheduled work
     }
 
     // Sort other columns by priority weight, then by order
@@ -290,8 +321,10 @@ export function KanbanBoard({
       });
     });
 
-    return columns;
+    return { columnItems: columns, upNextIds: upNextItemIds };
   }, [items, priorityFilter, searchQuery, isSearching]);
+
+  const { columnItems, upNextIds } = columnData;
 
   // Compute items that need rescoping (don't match the strict template)
   const rescopeItems = useMemo(() => {
@@ -689,6 +722,7 @@ export function KanbanBoard({
                 onItemClick={handleItemClick}
                 isLoading={isLoading}
                 activeTaskId={signals?.activeTaskId}
+                upNextIds={upNextIds}
               />
             ))}
           </div>
@@ -699,7 +733,6 @@ export function KanbanBoard({
                 item={activeItem}
                 onClick={() => {}}
                 isDragging
-                isActive={signals?.activeTaskId === activeItem.id}
               />
             ) : null}
           </DragOverlay>

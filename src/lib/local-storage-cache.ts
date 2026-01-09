@@ -3,7 +3,6 @@ import type { BacklogItem } from '@/types/backlog';
 const CACHE_KEY = 'ringmaster-backlog-cache';
 
 export interface AuxiliarySignals {
-  activeTaskId: string | null;
   prStatus: Record<string, 'pending' | 'creating' | 'created' | 'failed'>;
 }
 
@@ -15,7 +14,6 @@ export interface CachedBacklogState {
 }
 
 const DEFAULT_SIGNALS: AuxiliarySignals = {
-  activeTaskId: null,
   prStatus: {},
 };
 

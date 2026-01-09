@@ -13,6 +13,7 @@ interface KanbanColumnProps {
   isLoading?: boolean;
   subtitle?: string;
   activeTaskId?: string | null;
+  upNextIds?: Set<string>;
 }
 
 const columnAccents: Record<Status, string> = {
@@ -31,12 +32,13 @@ const columnDots: Record<Status, string> = {
   ready_to_ship: 'bg-green-500',
 };
 
-export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, activeTaskId }: KanbanColumnProps) {
+export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, activeTaskId, upNextIds }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
 
   const isUpNext = status === 'up_next';
+  const isBacklog = status === 'backlog';
 
   return (
     <div className="flex flex-col min-w-[240px] flex-1">
@@ -84,7 +86,7 @@ export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, 
                   key={item.id}
                   item={item}
                   onClick={() => onItemClick(item)}
-                  isActive={activeTaskId === item.id}
+                  isInUpNext={isBacklog && upNextIds?.has(item.id)}
                 />
               ))
             ) : (

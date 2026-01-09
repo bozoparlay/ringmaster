@@ -12,7 +12,6 @@ import {
 const DEBOUNCE_MS = 2000; // 2 second debounce for file writes
 
 const DEFAULT_SIGNALS: AuxiliarySignals = {
-  activeTaskId: null,
   prStatus: {},
 };
 
@@ -32,7 +31,6 @@ interface UseBacklogReturn {
   deleteItem: (id: string) => Promise<void>;
   moveItem: (id: string, newStatus: Status) => Promise<void>;
   reorderItems: (items: BacklogItem[]) => Promise<void>;
-  setActiveTask: (taskId: string | null) => void;
   updatePRStatus: (taskId: string, status: AuxiliarySignals['prStatus'][string]) => void;
   refresh: () => Promise<void>;
 }
@@ -224,19 +222,6 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
   }, [saveItems]);
 
   // Signal management
-  const setActiveTask = useCallback((taskId: string | null) => {
-    const newSignals = { ...signals, activeTaskId: taskId };
-    setSignals(newSignals);
-
-    // Update cache with new signals
-    saveCachedBacklog({
-      items,
-      signals: newSignals,
-      lastSync: new Date().toISOString(),
-      filePath: filePath || undefined,
-    });
-  }, [items, signals, filePath]);
-
   const updatePRStatus = useCallback((taskId: string, status: AuxiliarySignals['prStatus'][string]) => {
     const newSignals = {
       ...signals,
@@ -265,7 +250,6 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     deleteItem,
     moveItem,
     reorderItems,
-    setActiveTask,
     updatePRStatus,
     refresh: fetchItems,
   };
