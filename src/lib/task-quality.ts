@@ -41,27 +41,47 @@ export function validateTaskQuality(
     score -= 15;
   }
 
-  // Check 2: Has actionable content (requirements, approach, or success criteria)
-  const hasRequirements = /requirements?|must|should|needs? to/i.test(description);
-  const hasApproach = /approach|implementation|steps?|how to|technical/i.test(description);
-  // Check both dedicated acceptanceCriteria field AND keywords in description
-  const hasCriteriaField = acceptanceCriteria && acceptanceCriteria.length > 0;
-  const hasCriteriaKeywords = /success|criteria|acceptance|done when|complete when/i.test(description);
-  const hasCriteria = hasCriteriaField || hasCriteriaKeywords;
+  // Check 2: Acceptance criteria are REQUIRED (no keyword bypass)
+  const hasAcceptanceCriteria = acceptanceCriteria && acceptanceCriteria.length > 0;
 
-  if (!hasRequirements && !hasApproach && !hasCriteria) {
-    issues.push('Missing actionable content (requirements, approach, or success criteria)');
-    score -= 25;
+  if (!hasAcceptanceCriteria) {
+    issues.push('Missing acceptance criteria - these define when the task is "done"');
+    score -= 35; // Heavy penalty - AC is essential for scope
+  } else {
+    // Quality check: penalize very short or vague criteria
+    const vaguePatterns = /^(works?|done|complete|fixed|implemented|tested)$/i;
+    const vagueCriteria = acceptanceCriteria.filter(ac =>
+      ac.trim().length < 15 || vaguePatterns.test(ac.trim())
+    );
+
+    if (vagueCriteria.length > 0) {
+      issues.push(`${vagueCriteria.length} acceptance criteria are too vague or short`);
+      score -= 10;
+    }
+
+    // Bonus for multiple well-defined criteria (indicates thorough scoping)
+    if (acceptanceCriteria.length >= 3) {
+      score += 5; // Small bonus for thorough criteria
+    }
   }
 
-  // Check 3: Has structured sections (markdown formatting indicates thoughtfulness)
+  // Check 3: Has actionable content in description (requirements or approach)
+  const hasRequirements = /requirements?|must|should|needs? to/i.test(description);
+  const hasApproach = /approach|implementation|steps?|how to|technical/i.test(description);
+
+  if (!hasRequirements && !hasApproach) {
+    issues.push('Description lacks clear requirements or approach');
+    score -= 15;
+  }
+
+  // Check 4: Has structured sections (markdown formatting indicates thoughtfulness)
   const hasStructure = /^#{1,4}\s|^\*\*[^*]+\*\*:|^-\s|^\d+\./m.test(description);
   if (!hasStructure && description.length > 100) {
     issues.push('Consider adding structured sections for clarity');
     score -= 10;
   }
 
-  // Check 4: Description expands on title (not just a repeat)
+  // Check 5: Description expands on title (not just a repeat)
   const titleLower = title.toLowerCase();
   const descLower = description.toLowerCase();
 
@@ -71,7 +91,7 @@ export function validateTaskQuality(
     score -= 15;
   }
 
-  // Check 5: Not just a one-liner complaint/symptom
+  // Check 6: Not just a one-liner complaint/symptom
   const isJustSymptom = description.split('\n').filter(l => l.trim()).length === 1 &&
                         description.length < 100 &&
                         !hasRequirements && !hasApproach;

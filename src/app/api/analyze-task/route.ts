@@ -75,6 +75,7 @@ interface AnalysisResult {
   value: 'low' | 'medium' | 'high';
   category: string;
   enhancedDescription: string;
+  acceptanceCriteria?: string[];
 }
 
 interface QualityCheck {
@@ -180,7 +181,8 @@ Provide your response in the following JSON format (and ONLY the JSON, no other 
   "effort": "low" | "medium" | "high" | "very_high",
   "value": "low" | "medium" | "high",
   "category": "<suggested category>",
-  "enhancedDescription": "<the enhanced markdown description integrating user's comments>"
+  "enhancedDescription": "<the enhanced markdown description WITHOUT the acceptance criteria section>",
+  "acceptanceCriteria": ["<criterion 1>", "<criterion 2>", "<criterion 3>"]
 }
 
 Guidelines:
@@ -202,9 +204,9 @@ Brief overview of what this task accomplishes and why it matters.
 **Technical Approach:**
 How this should be implemented (suggested files, patterns, considerations).
 
-**Acceptance Criteria:**
-- How we know this task is complete
-- Acceptance conditions that can be checked during code review
+**IMPORTANT:** Return acceptance criteria as a SEPARATE array field, NOT embedded in the description.
+The "acceptanceCriteria" array should contain 3-5 specific, verifiable conditions that define when this task is complete.
+Each criterion should be a concise statement (not a checkbox or bullet) that can be verified during code review.
 
 Merge the user's comments while ensuring all sections are present. The description should be detailed enough that a developer can implement it without needing to ask clarifying questions.`
       : `You are a technical project manager analyzing a backlog task for a software development project called "Bozo Parlay" - a social betting web application where friends create groups, submit weekly picks, and compete in parlays.
@@ -221,7 +223,8 @@ Provide your analysis in the following JSON format (and ONLY the JSON, no other 
   "effort": "low" | "medium" | "high" | "very_high",
   "value": "low" | "medium" | "high",
   "category": "<suggested category>",
-  "enhancedDescription": "<formatted markdown description>"
+  "enhancedDescription": "<formatted markdown description WITHOUT the acceptance criteria section>",
+  "acceptanceCriteria": ["<criterion 1>", "<criterion 2>", "<criterion 3>"]
 }
 
 Guidelines for assessment:
@@ -244,9 +247,9 @@ Brief overview of what this task accomplishes and why it matters.
 **Technical Approach:**
 How this should be implemented (suggested files, patterns, considerations).
 
-**Acceptance Criteria:**
-- How we know this task is complete
-- Acceptance conditions that can be checked during code review
+**IMPORTANT:** Return acceptance criteria as a SEPARATE array field, NOT embedded in the description.
+The "acceptanceCriteria" array should contain 3-5 specific, verifiable conditions that define when this task is complete.
+Each criterion should be a concise statement (not a checkbox or bullet) that can be verified during code review.
 
 The description should be detailed enough that a developer can implement it without needing to ask clarifying questions. Aim for at least 150-200 words with concrete, specific details.`;
 
@@ -303,6 +306,14 @@ The description should be detailed enough that a developer can implement it with
         enhancedDesc = description;
       }
 
+      // Normalize acceptance criteria - ensure it's an array of non-empty strings
+      let acceptanceCriteria: string[] = [];
+      if (Array.isArray(analysis.acceptanceCriteria)) {
+        acceptanceCriteria = analysis.acceptanceCriteria
+          .filter((ac): ac is string => typeof ac === 'string' && ac.trim().length > 0)
+          .map(ac => ac.trim());
+      }
+
       // Create normalized analysis for quality check
       const normalizedAnalysis: AnalysisResult = {
         priority: validPriorities.includes(analysis.priority) ? analysis.priority as AnalysisResult['priority'] : 'medium',
@@ -310,6 +321,7 @@ The description should be detailed enough that a developer can implement it with
         value: validValues.includes(analysis.value) ? analysis.value as AnalysisResult['value'] : 'medium',
         category: analysis.category || '',
         enhancedDescription: enhancedDesc,
+        acceptanceCriteria,
       };
 
       // Validate quality to prevent downstream rescope issues

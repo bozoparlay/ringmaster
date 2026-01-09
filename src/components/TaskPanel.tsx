@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { TextDiff } from './TextDiff';
 import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, STATUS_LABELS, COLUMN_ORDER, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
-import { validateTaskQuality, QUALITY_THRESHOLD } from '@/lib/task-quality';
+import { validateTaskQuality, QUALITY_THRESHOLD, getQualityLabel, getQualityStyles } from '@/lib/task-quality';
 import { taskNeedsCleanup } from '@/lib/task-validator';
 
 interface TaskPanelProps {
@@ -320,6 +320,9 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           description: (typeof analysis.enhancedDescription === 'string' && analysis.enhancedDescription.trim())
             ? analysis.enhancedDescription
             : editedItem.description,
+          acceptanceCriteria: Array.isArray(analysis.acceptanceCriteria) && analysis.acceptanceCriteria.length > 0
+            ? analysis.acceptanceCriteria
+            : editedItem.acceptanceCriteria,
         });
         setShowDiff(true);
         setAiComment('');
@@ -395,6 +398,9 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           description: (typeof analysis.enhancedDescription === 'string' && analysis.enhancedDescription.trim())
             ? analysis.enhancedDescription
             : editedItem.description,
+          acceptanceCriteria: Array.isArray(analysis.acceptanceCriteria) && analysis.acceptanceCriteria.length > 0
+            ? analysis.acceptanceCriteria
+            : editedItem.acceptanceCriteria,
           // Update quality scores from the new analysis
           qualityScore: analysis.quality?.score,
           qualityIssues: analysis.quality?.issues,
@@ -854,6 +860,82 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             )}
           </div>
 
+          {/* Acceptance Criteria */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider">
+                Acceptance Criteria
+              </label>
+              <span className="text-[10px] text-surface-500">
+                {editedItem.acceptanceCriteria?.length || 0} criteria
+              </span>
+            </div>
+
+            {/* Existing criteria */}
+            <div className="space-y-1.5 mb-2">
+              {(editedItem.acceptanceCriteria || []).map((criterion, index) => (
+                <div
+                  key={index}
+                  className="group flex items-start gap-2 p-2 bg-surface-800/50 border border-surface-700/50 rounded-lg"
+                >
+                  <div className="flex-shrink-0 mt-0.5">
+                    <div className="w-4 h-4 rounded border-2 border-emerald-500/50 flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-sm bg-emerald-500/30" />
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    value={criterion}
+                    onChange={(e) => {
+                      const newCriteria = [...(editedItem.acceptanceCriteria || [])];
+                      newCriteria[index] = e.target.value;
+                      setEditedItem({ ...editedItem, acceptanceCriteria: newCriteria });
+                    }}
+                    className="flex-1 bg-transparent text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none"
+                    placeholder="Describe a verifiable success condition..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newCriteria = (editedItem.acceptanceCriteria || []).filter((_, i) => i !== index);
+                      setEditedItem({ ...editedItem, acceptanceCriteria: newCriteria });
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-surface-500 hover:text-red-400 transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add new criterion */}
+            <button
+              type="button"
+              onClick={() => {
+                const newCriteria = [...(editedItem.acceptanceCriteria || []), ''];
+                setEditedItem({ ...editedItem, acceptanceCriteria: newCriteria });
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-surface-800/30 hover:bg-surface-800/50 border border-dashed border-surface-700 hover:border-surface-600 rounded-lg text-xs text-surface-500 hover:text-surface-400 transition-all"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Criterion
+            </button>
+
+            {/* Hint when empty */}
+            {(!editedItem.acceptanceCriteria || editedItem.acceptanceCriteria.length === 0) && (
+              <p className="mt-2 text-[11px] text-amber-400/70 flex items-center gap-1.5">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Required: Define when this task is "done"
+              </p>
+            )}
+          </div>
+
           {/* Status */}
           <div>
             <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
@@ -1006,6 +1088,60 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               <span>Created: {new Date(editedItem.createdAt).toLocaleDateString()}</span>
               <span>Updated: {new Date(editedItem.updatedAt).toLocaleDateString()}</span>
             </div>
+
+            {/* Quality Score Indicator */}
+            {(() => {
+              const quality = validateTaskQuality(
+                editedItem.title,
+                editedItem.description,
+                editedItem.acceptanceCriteria
+              );
+              const label = getQualityLabel(quality.score);
+              const colorClasses = getQualityStyles(quality.score);
+              const barColor = quality.score >= 70
+                ? 'bg-emerald-500'
+                : quality.score >= QUALITY_THRESHOLD
+                  ? 'bg-amber-500'
+                  : 'bg-red-500';
+              const glowColor = quality.score >= 70
+                ? 'shadow-emerald-500/20'
+                : quality.score >= QUALITY_THRESHOLD
+                  ? 'shadow-amber-500/20'
+                  : 'shadow-red-500/20';
+
+              return (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    {/* Score pill */}
+                    <div className={`flex items-center gap-2 px-2.5 py-1 rounded-md border ${colorClasses}`}>
+                      <span className="text-xs font-semibold tabular-nums">{quality.score}</span>
+                      <span className="text-[10px] uppercase tracking-wider opacity-80">{label}</span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="flex-1 h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${barColor} rounded-full transition-all duration-500 shadow-lg ${glowColor}`}
+                        style={{ width: `${quality.score}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Issues list (if any) */}
+                  {quality.issues.length > 0 && (
+                    <div className="text-[11px] text-surface-500 space-y-0.5 pl-1">
+                      {quality.issues.map((issue, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <span className="text-surface-600 mt-0.5">•</span>
+                          <span>{issue}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="mt-2 text-xs font-mono text-surface-600 truncate">
               ID: {editedItem.id}
             </div>

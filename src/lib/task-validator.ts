@@ -71,15 +71,44 @@ export function validateTask(task: BacklogItem): ValidationResult {
     filledFields++;
   }
 
-  // Required: Acceptance Criteria (at least 1)
+  // Required: Acceptance Criteria (at least 1, must be meaningful)
   if (!task.acceptanceCriteria || task.acceptanceCriteria.length === 0) {
     errors.push({
       field: 'acceptanceCriteria',
-      message: 'At least one acceptance criterion is required',
+      message: 'At least one acceptance criterion is required - these define when the task is "done"',
       severity: 'error',
     });
   } else {
     filledFields++;
+
+    // Check for vague or too-short criteria
+    const vaguePatterns = /^(works?|done|complete|fixed|implemented|tested)$/i;
+    const meaningfulCriteria = task.acceptanceCriteria.filter(
+      (ac) => ac.trim().length >= 15 && !vaguePatterns.test(ac.trim())
+    );
+
+    if (meaningfulCriteria.length === 0) {
+      errors.push({
+        field: 'acceptanceCriteria',
+        message: 'Acceptance criteria must be specific and verifiable (not just "works" or "done")',
+        severity: 'error',
+      });
+    } else if (meaningfulCriteria.length < task.acceptanceCriteria.length) {
+      warnings.push({
+        field: 'acceptanceCriteria',
+        message: 'Some acceptance criteria are too vague - consider making them more specific',
+        severity: 'warning',
+      });
+    }
+
+    // Recommend multiple criteria for better scoping
+    if (task.acceptanceCriteria.length === 1) {
+      warnings.push({
+        field: 'acceptanceCriteria',
+        message: 'Consider adding more acceptance criteria for clearer scope definition',
+        severity: 'warning',
+      });
+    }
   }
 
   const completeness = Math.round((filledFields / totalFields) * 100);
