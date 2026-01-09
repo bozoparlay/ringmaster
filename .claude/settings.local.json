@@ -34,7 +34,8 @@
       "mcp__plugin_playwright_playwright__browser_type",
       "Bash(x\"E\\\\\\(AI\\\\|enhance|rescope\\\\|improve task\\)\"quality)",
       "Bash(jq:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
