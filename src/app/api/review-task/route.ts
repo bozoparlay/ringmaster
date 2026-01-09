@@ -296,6 +296,42 @@ export async function POST(request: Request) {
       console.warn(`[review-task] RESCOPE FLAGGED for task "${title.slice(0, 50)}": ${result.scope.reason || 'No reason provided'}`);
     }
 
+    // Auto-create PR if review passed
+    let prInfo: { prUrl?: string; prNumber?: number; prError?: string } = {};
+    if (result.passed) {
+      console.log('[review-task] Review passed, auto-creating PR...');
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const prResponse = await fetch(`${baseUrl}/api/create-pr`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId,
+            title,
+            description: description || '',
+            branch: targetBranch,
+            baseBranch: defaultBranch,
+            backlogPath,
+          }),
+        });
+
+        const prResult = await prResponse.json();
+        if (prResult.success) {
+          prInfo = {
+            prUrl: prResult.prUrl,
+            prNumber: prResult.prNumber,
+          };
+          console.log(`[review-task] PR created: ${prResult.prUrl}`);
+        } else {
+          prInfo = { prError: prResult.error };
+          console.warn(`[review-task] PR creation failed: ${prResult.error}`);
+        }
+      } catch (prErr) {
+        prInfo = { prError: prErr instanceof Error ? prErr.message : 'PR creation failed' };
+        console.error('[review-task] PR creation error:', prErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       result,
@@ -306,6 +342,7 @@ export async function POST(request: Request) {
         duration,
         timestamp: new Date().toISOString(),
       },
+      ...prInfo, // Include PR info if available
     });
   } catch (error) {
     console.error('Review task error:', error);

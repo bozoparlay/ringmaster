@@ -9,6 +9,7 @@ interface TaskCardProps {
   item: BacklogItem;
   onClick: () => void;
   isDragging?: boolean;
+  isActive?: boolean; // Task is being actively worked on
 }
 
 const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }> = {
@@ -19,7 +20,7 @@ const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }
   someday: { bg: 'bg-surface-600/30', text: 'text-surface-400', dot: 'bg-surface-500' },
 };
 
-export function TaskCard({ item, onClick, isDragging }: TaskCardProps) {
+export function TaskCard({ item, onClick, isDragging, isActive }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -61,6 +62,17 @@ export function TaskCard({ item, onClick, isDragging }: TaskCardProps) {
       <div
         className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priority.dot} opacity-60`}
       />
+
+      {/* Active task indicator - pulsing green dot */}
+      {isActive && (
+        <div
+          className="absolute -top-1.5 -left-1.5 w-4 h-4 z-10"
+          title="Active task - currently being worked on"
+        >
+          <span className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75" />
+          <span className="absolute inset-0.5 rounded-full bg-green-500 shadow-lg" />
+        </div>
+      )}
 
       {/* Low quality warning indicator */}
       {isLowQuality && (

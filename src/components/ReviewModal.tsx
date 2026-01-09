@@ -34,6 +34,9 @@ interface ReviewModalProps {
   onContinue: () => void;  // Move to ready_to_ship on pass
   onRetry: () => void;     // Move back to in_progress on fail
   taskTitle: string;
+  prUrl?: string;
+  prNumber?: number;
+  prError?: string;
 }
 
 const severityStyles = {
@@ -71,6 +74,9 @@ export function ReviewModal({
   onContinue,
   onRetry,
   taskTitle,
+  prUrl,
+  prNumber,
+  prError,
 }: ReviewModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -208,6 +214,58 @@ export function ReviewModal({
               {result.issues.length === 0 && result.passed && (
                 <div className="text-center py-4">
                   <p className="text-surface-400">No issues found. Your code looks good!</p>
+                </div>
+              )}
+
+              {/* PR Status */}
+              {result.passed && (prUrl || prError) && (
+                <div className="mt-4 pt-4 border-t border-surface-700">
+                  <h3 className="text-sm font-medium text-surface-300 mb-3">Pull Request</h3>
+                  {prUrl ? (
+                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-green-300 font-medium">PR #{prNumber} created</p>
+                          <a
+                            href={prUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-green-400 hover:text-green-300 truncate block transition-colors"
+                          >
+                            {prUrl}
+                          </a>
+                        </div>
+                        <a
+                          href={prUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          Open PR
+                        </a>
+                      </div>
+                    </div>
+                  ) : prError ? (
+                    <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-orange-300">PR creation failed</p>
+                          <p className="text-xs text-orange-400/80 mt-1">{prError}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
 

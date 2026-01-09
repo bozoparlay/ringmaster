@@ -18,6 +18,8 @@ interface TaskPanelProps {
   onTackle: (item: BacklogItem) => void;
   onShip?: (item: BacklogItem) => Promise<void>;
   backlogPath?: string;
+  isActive?: boolean;
+  onSetActiveTask?: (taskId: string | null) => void;
 }
 
 // AI Loading State Messages
@@ -148,7 +150,7 @@ const valueColors: Record<Value, string> = {
   high: 'bg-emerald-500',
 };
 
-export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onShip, backlogPath }: TaskPanelProps) {
+export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onShip, backlogPath, isActive, onSetActiveTask }: TaskPanelProps) {
   const [editedItem, setEditedItem] = useState<BacklogItem | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -1063,6 +1065,35 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-14 9V3z" />
                   </svg>
                   Commit & Push
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Mark as Active toggle */}
+          {onSetActiveTask && (
+            <button
+              onClick={() => onSetActiveTask(isActive ? null : editedItem.id)}
+              className={`w-full flex items-center justify-center gap-2 font-medium py-2.5 px-4 rounded-lg transition-all ${
+                isActive
+                  ? 'bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30'
+                  : 'bg-surface-800 text-surface-300 border border-surface-700 hover:bg-surface-700'
+              }`}
+            >
+              {isActive ? (
+                <>
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+                  </span>
+                  Active Task
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Mark as Active
                 </>
               )}
             </button>
