@@ -10,9 +10,10 @@ interface Option<T extends string> {
 interface InlineOptionSelectorProps<T extends string> {
   label: string;
   options: Option<T>[];
-  value: T;
-  onChange: (value: T) => void;
+  value: T | undefined;
+  onChange: (value: T | undefined) => void;
   colorMap?: Record<T, string>;
+  allowDeselect?: boolean;
 }
 
 export function InlineOptionSelector<T extends string>({
@@ -21,6 +22,7 @@ export function InlineOptionSelector<T extends string>({
   value,
   onChange,
   colorMap,
+  allowDeselect = false,
 }: InlineOptionSelectorProps<T>) {
   const [isExpanded, setIsExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,7 +58,9 @@ export function InlineOptionSelector<T extends string>({
   const selectedOption = options.find((o) => o.value === value);
 
   const handleSelect = (optionValue: T) => {
-    if (optionValue !== value) {
+    if (allowDeselect && optionValue === value) {
+      onChange(undefined);
+    } else if (optionValue !== value) {
       onChange(optionValue);
     }
     setIsExpanded(false);
@@ -79,11 +83,11 @@ export function InlineOptionSelector<T extends string>({
         className={`
           w-full py-1.5 px-3 rounded-lg text-xs font-medium text-left
           transition-all duration-200 ease-out
-          ${getColor(value)} text-white shadow-lg
+          ${value ? `${getColor(value)} text-white shadow-lg` : 'bg-surface-800 text-surface-400 border border-surface-700'}
           hover:brightness-110
         `}
       >
-        {selectedOption?.label}
+        {selectedOption?.label || 'Select...'}
       </button>
 
       {/* Expanded Options (appears below) */}

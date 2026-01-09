@@ -30,7 +30,8 @@
       "Bash(curl:*)",
       "Bash(git commit:*)",
       "Bash(ps:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "mcp__plugin_playwright_playwright__browser_type"
     ]
   }
 }

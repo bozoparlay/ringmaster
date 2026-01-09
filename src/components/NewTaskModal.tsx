@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { Priority, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
 import { InlineOptionSelector } from './InlineOptionSelector';
+import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
 
 interface EnhancedTask {
   title: string;
@@ -12,6 +13,7 @@ interface EnhancedTask {
   effort?: Effort;
   value?: Value;
   category?: string;
+  acceptanceCriteria?: string[];
 }
 
 interface SimilarTask {
@@ -38,19 +40,20 @@ const priorityOptions: { value: Priority; label: string }[] = [
   { value: 'someday', label: PRIORITY_LABELS.someday },
 ];
 
-// Effort options with labels
+// Effort options with labels (descending order - highest first)
 const effortOptions: { value: Effort; label: string }[] = [
-  { value: 'low', label: EFFORT_LABELS.low },
-  { value: 'medium', label: EFFORT_LABELS.medium },
-  { value: 'high', label: EFFORT_LABELS.high },
   { value: 'very_high', label: EFFORT_LABELS.very_high },
+  { value: 'high', label: EFFORT_LABELS.high },
+  { value: 'medium', label: EFFORT_LABELS.medium },
+  { value: 'low', label: EFFORT_LABELS.low },
+  { value: 'trivial', label: EFFORT_LABELS.trivial },
 ];
 
-// Value options with labels
+// Value options with labels (descending order - highest first)
 const valueOptions: { value: Value; label: string }[] = [
-  { value: 'low', label: VALUE_LABELS.low },
-  { value: 'medium', label: VALUE_LABELS.medium },
   { value: 'high', label: VALUE_LABELS.high },
+  { value: 'medium', label: VALUE_LABELS.medium },
+  { value: 'low', label: VALUE_LABELS.low },
 ];
 
 // Color maps for each selector (green → yellow → blue → orange → red)
@@ -63,15 +66,16 @@ const priorityColors: Record<Priority, string> = {
 };
 
 const effortColors: Record<Effort, string> = {
-  low: 'bg-green-500',
-  medium: 'bg-yellow-500',
+  trivial: 'bg-green-500',
+  low: 'bg-yellow-500',
+  medium: 'bg-blue-500',
   high: 'bg-orange-500',
   very_high: 'bg-red-500',
 };
 
 const valueColors: Record<Value, string> = {
   low: 'bg-green-500',
-  medium: 'bg-yellow-500',
+  medium: 'bg-blue-500',
   high: 'bg-red-500',
 };
 
@@ -83,10 +87,10 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
   const [value, setValue] = useState<Value>('medium');
   const [category, setCategory] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [similarTasks, setSimilarTasks] = useState<SimilarTask[]>([]);
   const [isCheckingSimilarity, setIsCheckingSimilarity] = useState(false);
   const [showSimilarModal, setShowSimilarModal] = useState(false);
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -97,9 +101,9 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
       setEffort('medium');
       setValue('medium');
       setCategory('');
-      setShowAdvanced(false);
       setSimilarTasks([]);
       setShowSimilarModal(false);
+      setAcceptanceCriteria([]);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -168,7 +172,10 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
         if (typeof analysis.enhancedDescription === 'string' && analysis.enhancedDescription.trim()) {
           setDescription(analysis.enhancedDescription);
         }
-        setShowAdvanced(true);
+        // Apply acceptance criteria from the AI response
+        if (Array.isArray(analysis.acceptanceCriteria) && analysis.acceptanceCriteria.length > 0) {
+          setAcceptanceCriteria(analysis.acceptanceCriteria);
+        }
       } else {
         console.error('AI analysis request failed:', response.status, response.statusText);
       }
@@ -187,11 +194,13 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
       effort,
       value,
       category: category.trim() || undefined,
+      acceptanceCriteria: acceptanceCriteria.filter(ac => ac.trim()),
     });
     setTitle('');
     setDescription('');
     setSimilarTasks([]);
     setShowSimilarModal(false);
+    setAcceptanceCriteria([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -294,26 +303,8 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
               )}
             </button>
 
-            {/* Advanced Options Toggle */}
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex items-center gap-2 text-sm text-surface-400 hover:text-surface-300 transition-colors"
-            >
-              <svg
-                className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              {showAdvanced ? 'Hide' : 'Show'} priority, effort & value
-            </button>
-
-            {/* Advanced Options */}
-            {showAdvanced && (
-              <div className="space-y-4 pt-2 border-t border-surface-800">
+            {/* Task Details */}
+            <div className="space-y-4 pt-2 border-t border-surface-800">
                 {/* Category */}
                 <div>
                   <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
@@ -334,7 +325,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
                     label="Priority"
                     options={priorityOptions}
                     value={priority}
-                    onChange={setPriority}
+                    onChange={(v) => setPriority(v || 'medium')}
                     colorMap={priorityColors}
                   />
 
@@ -342,7 +333,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
                     label="Effort"
                     options={effortOptions}
                     value={effort}
-                    onChange={setEffort}
+                    onChange={(v) => setEffort(v || 'medium')}
                     colorMap={effortColors}
                   />
 
@@ -350,12 +341,18 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
                     label="Value"
                     options={valueOptions}
                     value={value}
-                    onChange={setValue}
+                    onChange={(v) => setValue(v || 'medium')}
                     colorMap={valueColors}
                   />
                 </div>
-              </div>
-            )}
+
+                {/* Acceptance Criteria */}
+                <AcceptanceCriteriaEditor
+                  criteria={acceptanceCriteria}
+                  onChange={setAcceptanceCriteria}
+                  showEmptyWarning
+                />
+            </div>
 
             <div className="flex gap-3 pt-2">
               <button

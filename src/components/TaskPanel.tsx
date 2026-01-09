@@ -9,6 +9,8 @@ import { PRIORITY_LABELS, STATUS_LABELS, COLUMN_ORDER, EFFORT_LABELS, VALUE_LABE
 import { validateTaskQuality, QUALITY_THRESHOLD } from '@/lib/task-quality';
 import { TaskQualityScore } from './TaskQualityScore';
 import { taskNeedsCleanup } from '@/lib/task-validator';
+import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
+import { InlineOptionSelector } from './InlineOptionSelector';
 
 interface TaskPanelProps {
   item: BacklogItem | null;
@@ -125,29 +127,50 @@ function AiLoadingState() {
   );
 }
 
-const priorityOptions: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
-const effortOptions: Effort[] = ['low', 'medium', 'high', 'very_high'];
-const valueOptions: Value[] = ['low', 'medium', 'high'];
+const priorityOptions: { value: Priority; label: string }[] = [
+  { value: 'critical', label: PRIORITY_LABELS.critical },
+  { value: 'high', label: PRIORITY_LABELS.high },
+  { value: 'medium', label: PRIORITY_LABELS.medium },
+  { value: 'low', label: PRIORITY_LABELS.low },
+  { value: 'someday', label: PRIORITY_LABELS.someday },
+];
 
+const effortOptions: { value: Effort; label: string }[] = [
+  { value: 'very_high', label: EFFORT_LABELS.very_high },
+  { value: 'high', label: EFFORT_LABELS.high },
+  { value: 'medium', label: EFFORT_LABELS.medium },
+  { value: 'low', label: EFFORT_LABELS.low },
+  { value: 'trivial', label: EFFORT_LABELS.trivial },
+];
+
+const valueOptions: { value: Value; label: string }[] = [
+  { value: 'high', label: VALUE_LABELS.high },
+  { value: 'medium', label: VALUE_LABELS.medium },
+  { value: 'low', label: VALUE_LABELS.low },
+];
+
+// Color schemes: green → yellow → blue → orange → red (5 options)
+// For 3 options: green → blue → red
 const priorityColors: Record<Priority, string> = {
-  critical: 'bg-red-500',
+  someday: 'bg-green-500',
+  low: 'bg-yellow-500',
+  medium: 'bg-blue-500',
   high: 'bg-orange-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-green-500',
-  someday: 'bg-surface-500',
+  critical: 'bg-red-500',
 };
 
 const effortColors: Record<Effort, string> = {
-  low: 'bg-emerald-600',
+  trivial: 'bg-green-500',
+  low: 'bg-yellow-500',
   medium: 'bg-blue-500',
-  high: 'bg-purple-500',
-  very_high: 'bg-red-600',
+  high: 'bg-orange-500',
+  very_high: 'bg-red-500',
 };
 
 const valueColors: Record<Value, string> = {
-  low: 'bg-surface-600',
+  low: 'bg-green-500',
   medium: 'bg-blue-500',
-  high: 'bg-emerald-500',
+  high: 'bg-red-500',
 };
 
 export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onReview, onShip, backlogPath }: TaskPanelProps) {
@@ -862,80 +885,11 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           </div>
 
           {/* Acceptance Criteria */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider">
-                Acceptance Criteria
-              </label>
-              <span className="text-[10px] text-surface-500">
-                {editedItem.acceptanceCriteria?.length || 0} criteria
-              </span>
-            </div>
-
-            {/* Existing criteria */}
-            <div className="space-y-1.5 mb-2">
-              {(editedItem.acceptanceCriteria || []).map((criterion, index) => (
-                <div
-                  key={index}
-                  className="group flex items-start gap-2 p-2 bg-surface-800/50 border border-surface-700/50 rounded-lg"
-                >
-                  <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-4 h-4 rounded border-2 border-emerald-500/50 flex items-center justify-center">
-                      <div className="w-1.5 h-1.5 rounded-sm bg-emerald-500/30" />
-                    </div>
-                  </div>
-                  <input
-                    type="text"
-                    value={criterion}
-                    onChange={(e) => {
-                      const newCriteria = [...(editedItem.acceptanceCriteria || [])];
-                      newCriteria[index] = e.target.value;
-                      setEditedItem({ ...editedItem, acceptanceCriteria: newCriteria });
-                    }}
-                    className="flex-1 bg-transparent text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none"
-                    placeholder="Describe a verifiable success condition..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newCriteria = (editedItem.acceptanceCriteria || []).filter((_, i) => i !== index);
-                      setEditedItem({ ...editedItem, acceptanceCriteria: newCriteria });
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-surface-500 hover:text-red-400 transition-all"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Add new criterion */}
-            <button
-              type="button"
-              onClick={() => {
-                const newCriteria = [...(editedItem.acceptanceCriteria || []), ''];
-                setEditedItem({ ...editedItem, acceptanceCriteria: newCriteria });
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-surface-800/30 hover:bg-surface-800/50 border border-dashed border-surface-700 hover:border-surface-600 rounded-lg text-xs text-surface-500 hover:text-surface-400 transition-all"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Criterion
-            </button>
-
-            {/* Hint when empty */}
-            {(!editedItem.acceptanceCriteria || editedItem.acceptanceCriteria.length === 0) && (
-              <p className="mt-2 text-[11px] text-amber-400/70 flex items-center gap-1.5">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                Required: Define when this task is "done"
-              </p>
-            )}
-          </div>
+          <AcceptanceCriteriaEditor
+            criteria={editedItem.acceptanceCriteria || []}
+            onChange={(criteria) => setEditedItem({ ...editedItem, acceptanceCriteria: criteria })}
+            showEmptyWarning
+          />
 
           {/* Status */}
           <div>
@@ -961,79 +915,29 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </div>
           </div>
 
-          {/* Priority, Effort, Value Grid */}
+          {/* Priority, Effort, Value */}
           <div className="grid grid-cols-3 gap-4">
-            {/* Priority */}
-            <div>
-              <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                Priority
-              </label>
-              <div className="flex flex-col gap-1">
-                {priorityOptions.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setEditedItem({ ...editedItem, priority: p })}
-                    className={`
-                      py-1.5 px-2 rounded-lg text-xs font-medium capitalize transition-all text-left
-                      ${editedItem.priority === p
-                        ? `${priorityColors[p]} text-white shadow-lg`
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                      }
-                    `}
-                  >
-                    {PRIORITY_LABELS[p]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Effort */}
-            <div>
-              <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                Effort
-              </label>
-              <div className="flex flex-col gap-1">
-                {effortOptions.map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => setEditedItem({ ...editedItem, effort: editedItem.effort === e ? undefined : e })}
-                    className={`
-                      py-1.5 px-2 rounded-lg text-xs font-medium capitalize transition-all text-left
-                      ${editedItem.effort === e
-                        ? `${effortColors[e]} text-white shadow-lg`
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                      }
-                    `}
-                  >
-                    {EFFORT_LABELS[e]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Value */}
-            <div>
-              <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                Value
-              </label>
-              <div className="flex flex-col gap-1">
-                {valueOptions.map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setEditedItem({ ...editedItem, value: editedItem.value === v ? undefined : v })}
-                    className={`
-                      py-1.5 px-2 rounded-lg text-xs font-medium capitalize transition-all text-left
-                      ${editedItem.value === v
-                        ? `${valueColors[v]} text-white shadow-lg`
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                      }
-                    `}
-                  >
-                    {VALUE_LABELS[v]}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <InlineOptionSelector<Priority>
+              label="Priority"
+              options={priorityOptions}
+              value={editedItem.priority}
+              onChange={(value) => setEditedItem({ ...editedItem, priority: value || 'medium' })}
+              colorMap={priorityColors}
+            />
+            <InlineOptionSelector<Effort>
+              label="Effort"
+              options={effortOptions}
+              value={editedItem.effort}
+              onChange={(value) => setEditedItem({ ...editedItem, effort: value || 'medium' })}
+              colorMap={effortColors}
+            />
+            <InlineOptionSelector<Value>
+              label="Value"
+              options={valueOptions}
+              value={editedItem.value}
+              onChange={(value) => setEditedItem({ ...editedItem, value: value || 'medium' })}
+              colorMap={valueColors}
+            />
           </div>
 
           {/* Category */}

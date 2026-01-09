@@ -1,6 +1,6 @@
 export type Priority = 'critical' | 'high' | 'medium' | 'low' | 'someday';
 
-export type Effort = 'low' | 'medium' | 'high' | 'very_high';
+export type Effort = 'trivial' | 'low' | 'medium' | 'high' | 'very_high';
 
 export type Value = 'low' | 'medium' | 'high';
 
@@ -62,6 +62,7 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
 };
 
 export const EFFORT_LABELS: Record<Effort, string> = {
+  trivial: 'Trivial',
   low: 'Low',
   medium: 'Medium',
   high: 'High',
