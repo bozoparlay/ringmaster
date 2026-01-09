@@ -27,7 +27,8 @@
       "mcp__plugin_playwright_playwright__browser_wait_for",
       "Bash(npm run build:*)",
       "Bash(xargs kill:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
