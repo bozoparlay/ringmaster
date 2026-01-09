@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import * as fs from 'fs/promises';
 import path from 'path';
 import { execWithTimeout, TimeoutError } from '@/lib/resilience';
+import { buildTaskPrompt } from '@/lib/prompt-builder';
 
 // Timeouts for various operations
 const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
@@ -24,74 +25,6 @@ interface TackleRequest {
   backlogPath?: string;
   worktreePath?: string;  // If already created
   ide?: IdeType;
-}
-
-/**
- * Builds the canonical prompt for Claude Code from task data.
- * This is the single source of truth for prompt generation.
- */
-function buildTaskPrompt(task: {
-  title: string;
-  priority?: string;
-  category?: string;
-  tags?: string[];
-  description?: string;
-  acceptanceCriteria?: string[];
-  notes?: string;
-  effort?: string;
-  value?: string;
-  branch?: string;
-}): string {
-  const sections: string[] = [];
-
-  // Header
-  sections.push(`# Task: ${task.title}`);
-
-  // Metadata line
-  const metadata: string[] = [];
-  if (task.priority) metadata.push(`Priority: ${task.priority}`);
-  if (task.effort) metadata.push(`Effort: ${task.effort}`);
-  if (task.value) metadata.push(`Value: ${task.value}`);
-  if (metadata.length > 0) {
-    sections.push(metadata.join(' | '));
-  }
-
-  if (task.category) {
-    sections.push(`Category: ${task.category}`);
-  }
-
-  if (task.tags && task.tags.length > 0) {
-    sections.push(`Tags: ${task.tags.join(', ')}`);
-  }
-
-  if (task.branch) {
-    sections.push(`Branch: ${task.branch}`);
-  }
-
-  // Description
-  if (task.description) {
-    sections.push('');
-    sections.push('## Description');
-    sections.push(task.description);
-  }
-
-  // Acceptance Criteria - critical for Claude to understand success
-  if (task.acceptanceCriteria && task.acceptanceCriteria.length > 0) {
-    sections.push('');
-    sections.push('## Acceptance Criteria');
-    task.acceptanceCriteria.forEach((criterion, index) => {
-      sections.push(`${index + 1}. ${criterion}`);
-    });
-  }
-
-  // Notes - additional context
-  if (task.notes) {
-    sections.push('');
-    sections.push('## Notes');
-    sections.push(task.notes);
-  }
-
-  return sections.join('\n');
 }
 
 // IDE launch commands

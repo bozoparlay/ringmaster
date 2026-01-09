@@ -205,9 +205,7 @@ Brief overview of what this task accomplishes and why it matters.
 How this should be implemented (suggested files, patterns, considerations).
 
 **Notes:**
-[Add any relevant links, artifacts, findings, or context here]
-
-This section is a placeholder for the human to fill in - do NOT generate content here, just include the section header with this placeholder text.
+(Additional context, links, or findings to be added by the user)
 
 **IMPORTANT:** Return acceptance criteria as a SEPARATE array field, NOT embedded in the description.
 The "acceptanceCriteria" array should contain 3-5 specific, verifiable conditions that define when this task is complete.
@@ -253,9 +251,7 @@ Brief overview of what this task accomplishes and why it matters.
 How this should be implemented (suggested files, patterns, considerations).
 
 **Notes:**
-[Add any relevant links, artifacts, findings, or context here]
-
-This section is a placeholder for the human to fill in - do NOT generate content here, just include the section header with this placeholder text.
+(Additional context, links, or findings to be added by the user)
 
 **IMPORTANT:** Return acceptance criteria as a SEPARATE array field, NOT embedded in the description.
 The "acceptanceCriteria" array should contain 3-5 specific, verifiable conditions that define when this task is complete.
@@ -416,7 +412,7 @@ function fallbackAnalysis(title: string, description: string) {
   // Enhanced description
   let enhancedDescription = description;
   if (!description || description.length < 50) {
-    enhancedDescription = `**Description:**\n${title}\n\n**Requirements:**\n- [Add requirements]\n\n**Technical Approach:**\n- [Add implementation details]\n\n**Notes:**\n[Add any relevant links, artifacts, findings, or context here]`;
+    enhancedDescription = `**Description:**\n${title}\n\n**Requirements:**\n- [Add requirements]\n\n**Technical Approach:**\n- [Add implementation details]\n\n**Notes:**\n(Additional context, links, or findings to be added by the user)`;
   }
 
   return NextResponse.json({

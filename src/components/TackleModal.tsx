@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { BacklogItem } from '@/types/backlog';
 import { useIdeSettings, IDE_OPTIONS, type IdeType } from '@/hooks/useIdeSettings';
+import { buildTaskPrompt, buildConversationalPrompt } from '@/lib/prompt-builder';
 
 interface TackleModalProps {
   item: BacklogItem | null;
@@ -78,111 +79,28 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
 
   if (!isOpen || !item) return null;
 
-  /**
-   * Generates a preview prompt that matches the API's canonical format.
-   * Note: Branch will be added by the API after worktree creation.
-   */
-  const generatePlan = () => {
-    const sections: string[] = [];
-
-    // Header
-    sections.push(`# Task: ${item.title}`);
-
-    // Metadata line
-    const metadata: string[] = [];
-    if (item.priority) metadata.push(`Priority: ${item.priority}`);
-    if (item.effort) metadata.push(`Effort: ${item.effort}`);
-    if (item.value) metadata.push(`Value: ${item.value}`);
-    if (metadata.length > 0) {
-      sections.push(metadata.join(' | '));
-    }
-
-    if (item.category) {
-      sections.push(`Category: ${item.category}`);
-    }
-
-    if (item.tags.length > 0) {
-      sections.push(`Tags: ${item.tags.join(', ')}`);
-    }
-
-    // Branch placeholder - actual branch assigned on launch
-    if (item.branch) {
-      sections.push(`Branch: ${item.branch}`);
-    } else {
-      sections.push(`Branch: (will be assigned on launch)`);
-    }
-
-    // Description
-    if (item.description) {
-      sections.push('');
-      sections.push('## Description');
-      sections.push(item.description);
-    } else {
-      sections.push('');
-      sections.push('## Description');
-      sections.push('No description provided.');
-    }
-
-    // Acceptance Criteria - critical for Claude to understand success
-    if (item.acceptanceCriteria && item.acceptanceCriteria.length > 0) {
-      sections.push('');
-      sections.push('## Acceptance Criteria');
-      item.acceptanceCriteria.forEach((criterion, index) => {
-        sections.push(`${index + 1}. ${criterion}`);
-      });
-    }
-
-    // Notes - additional context
-    if (item.notes) {
-      sections.push('');
-      sections.push('## Notes');
-      sections.push(item.notes);
-    }
-
-    return sections.join('\n');
+  // Build task input for the shared prompt builder
+  const taskInput = {
+    title: item.title,
+    priority: item.priority,
+    category: item.category,
+    tags: item.tags,
+    description: item.description,
+    acceptanceCriteria: item.acceptanceCriteria,
+    notes: item.notes,
+    effort: item.effort,
+    value: item.value,
+    branch: item.branch,
   };
 
-  const generatePrompt = () => {
-    const parts: string[] = [];
+  // Generate preview with placeholders shown (for user visibility)
+  const generatePlan = () => buildTaskPrompt(taskInput, {
+    showPlaceholders: true,
+    showBranchPlaceholder: !item.branch,
+  });
 
-    parts.push(`I need to work on the following task from my backlog:`);
-    parts.push('');
-    parts.push(`**Task:** ${item.title}`);
-    parts.push(`**Priority:** ${item.priority}`);
-    if (item.effort) parts.push(`**Effort:** ${item.effort}`);
-    if (item.value) parts.push(`**Value:** ${item.value}`);
-    parts.push(`**Tags:** ${item.tags.join(', ') || 'none'}`);
-    parts.push('');
-    parts.push(`**Description:**`);
-    parts.push(item.description || 'No description provided.');
-
-    // Include acceptance criteria - this is critical context
-    if (item.acceptanceCriteria && item.acceptanceCriteria.length > 0) {
-      parts.push('');
-      parts.push(`**Acceptance Criteria:**`);
-      item.acceptanceCriteria.forEach((criterion, index) => {
-        parts.push(`${index + 1}. ${criterion}`);
-      });
-    }
-
-    // Include notes if present
-    if (item.notes) {
-      parts.push('');
-      parts.push(`**Notes:**`);
-      parts.push(item.notes);
-    }
-
-    parts.push('');
-    parts.push(`Please help me:`);
-    parts.push(`1. Understand what needs to be done`);
-    parts.push(`2. Create a detailed implementation plan`);
-    parts.push(`3. Identify the files that need to be modified`);
-    parts.push(`4. Start implementing the solution`);
-    parts.push('');
-    parts.push(`Let's begin by exploring the codebase to understand the current state and then create a plan.`);
-
-    return parts.join('\n');
-  };
+  // Generate conversational prompt for pasting into existing chats
+  const generatePrompt = () => buildConversationalPrompt(taskInput);
 
   const handleCopy = async () => {
     const text = mode === 'plan' ? generatePlan() : generatePrompt();
@@ -313,7 +231,7 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative
               ${mode === 'plan' ? 'text-accent' : 'text-surface-400 hover:text-surface-200'}`}
           >
-            Action Plan
+            Task Brief
             {mode === 'plan' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
             )}
