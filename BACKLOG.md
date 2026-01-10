@@ -120,7 +120,7 @@ Scoring a task that is pretty unique is coming back as having a ton of similarit
 
 ---
 
-## [in_progress] UI/UX Improvements
+## [ready_to_ship] UI/UX Improvements
 
 ### Speed up Add Task
 **Priority**: Critical | **Effort**: High | **Value**: High
