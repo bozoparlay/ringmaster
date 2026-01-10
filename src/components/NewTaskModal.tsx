@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Priority, Effort, Value } from '@/types/backlog';
 import { PRIORITY_LABELS, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
 import { InlineOptionSelector } from './InlineOptionSelector';
 import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
+import { InlineSimilarityProgress } from './InlineSimilarityProgress';
 
 interface EnhancedTask {
   title: string;
@@ -87,12 +88,14 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
   const [value, setValue] = useState<Value>('medium');
   const [category, setCategory] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [similarTasks, setSimilarTasks] = useState<SimilarTask[]>([]);
   const [isCheckingSimilarity, setIsCheckingSimilarity] = useState(false);
+  const [similarTasks, setSimilarTasks] = useState<SimilarTask[]>([]);
   const [showSimilarModal, setShowSimilarModal] = useState(false);
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortCheckRef = useRef<AbortController | null>(null);
 
+  // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
       setTitle('');
@@ -102,54 +105,67 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
       setValue('medium');
       setCategory('');
       setSimilarTasks([]);
+      setIsCheckingSimilarity(false);
       setShowSimilarModal(false);
       setAcceptanceCriteria([]);
+      abortCheckRef.current = null;
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
 
-  const checkSimilarity = async (): Promise<boolean> => {
-    if (!backlogPath || !title.trim()) return true; // Proceed if no path or title
-
-    setIsCheckingSimilarity(true);
-    try {
-      const response = await fetch('/api/check-similarity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          category: category.trim() || undefined,
-          backlogPath,
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.similar && result.similar.length > 0) {
-          setSimilarTasks(result.similar);
-          setShowSimilarModal(true);
-          return false; // Don't proceed, show modal
-        }
-      }
-      return true; // Proceed with task creation
-    } catch (error) {
-      console.error('Similarity check failed:', error);
-      return true; // Proceed on error
-    } finally {
-      setIsCheckingSimilarity(false);
-    }
-  };
-
+  // Handle escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        if (isCheckingSimilarity) {
+          // Cancel check first
+          abortCheckRef.current?.abort();
+          setIsCheckingSimilarity(false);
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
+  }, [isOpen, isCheckingSimilarity, onClose]);
+
+  const submitTask = useCallback(() => {
+    onSubmit({
+      title: title.trim(),
+      description: description.trim(),
+      priority,
+      effort,
+      value,
+      category: category.trim() || undefined,
+      acceptanceCriteria: acceptanceCriteria.filter(ac => ac.trim()),
+    });
+    setTitle('');
+    setDescription('');
+    setSimilarTasks([]);
+    setShowSimilarModal(false);
+    setAcceptanceCriteria([]);
+    setIsCheckingSimilarity(false);
+  }, [title, description, priority, effort, value, category, acceptanceCriteria, onSubmit]);
+
+  // Handle similarity check completion
+  const handleSimilarityComplete = useCallback((foundTasks: SimilarTask[]) => {
+    setIsCheckingSimilarity(false);
+    if (foundTasks.length > 0) {
+      setSimilarTasks(foundTasks);
+      setShowSimilarModal(true);
+    } else {
+      // No similar tasks, proceed with submission
+      submitTask();
+    }
+  }, [submitTask]);
+
+  // Handle similarity check skipped/error
+  const handleSimilaritySkipped = useCallback(() => {
+    setIsCheckingSimilarity(false);
+    // Proceed with submission when skipped
+    submitTask();
+  }, [submitTask]);
 
   const handleAiAssist = async () => {
     if (!title.trim()) return;
@@ -168,11 +184,9 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
         if (analysis.effort) setEffort(analysis.effort);
         if (analysis.value) setValue(analysis.value);
         if (analysis.category) setCategory(analysis.category);
-        // Always set description if enhancedDescription exists and has content
         if (typeof analysis.enhancedDescription === 'string' && analysis.enhancedDescription.trim()) {
           setDescription(analysis.enhancedDescription);
         }
-        // Apply acceptance criteria from the AI response
         if (Array.isArray(analysis.acceptanceCriteria) && analysis.acceptanceCriteria.length > 0) {
           setAcceptanceCriteria(analysis.acceptanceCriteria);
         }
@@ -186,37 +200,29 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
     }
   };
 
-  const submitTask = () => {
-    onSubmit({
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      effort,
-      value,
-      category: category.trim() || undefined,
-      acceptanceCriteria: acceptanceCriteria.filter(ac => ac.trim()),
-    });
-    setTitle('');
-    setDescription('');
-    setSimilarTasks([]);
-    setShowSimilarModal(false);
-    setAcceptanceCriteria([]);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
-    // Check for similar tasks first
-    const shouldProceed = await checkSimilarity();
-    if (shouldProceed) {
+    // If already checking, skip the check and submit immediately
+    if (isCheckingSimilarity) {
+      abortCheckRef.current?.abort();
+      setIsCheckingSimilarity(false);
+      submitTask();
+      return;
+    }
+
+    // Start similarity check if backlog path exists
+    if (backlogPath) {
+      setIsCheckingSimilarity(true);
+      abortCheckRef.current = new AbortController();
+    } else {
       submitTask();
     }
-    // If not proceeding, the similar tasks modal will be shown
   };
 
   const handleForceSubmit = () => {
-    // User chose to add anyway despite similar tasks
+    setShowSimilarModal(false);
     submitTask();
   };
 
@@ -260,7 +266,8 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-surface-800 border border-surface-700 rounded-lg px-4 py-3 text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors"
+                disabled={isCheckingSimilarity}
+                className="w-full bg-surface-800 border border-surface-700 rounded-lg px-4 py-3 text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors disabled:opacity-60"
                 placeholder="What needs to be done?"
               />
             </div>
@@ -273,7 +280,8 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={6}
-                className="w-full bg-surface-800 border border-surface-700 rounded-lg px-4 py-3 text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors resize-y min-h-[120px] font-mono text-sm"
+                disabled={isCheckingSimilarity}
+                className="w-full bg-surface-800 border border-surface-700 rounded-lg px-4 py-3 text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors resize-y min-h-[120px] font-mono text-sm disabled:opacity-60"
                 placeholder="Add some details... (supports markdown)"
               />
             </div>
@@ -282,7 +290,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
             <button
               type="button"
               onClick={handleAiAssist}
-              disabled={!title.trim() || isAnalyzing}
+              disabled={!title.trim() || isAnalyzing || isCheckingSimilarity}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/30 hover:to-blue-600/30 border border-purple-500/30 text-purple-300 font-medium py-2.5 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isAnalyzing ? (
@@ -305,55 +313,69 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
 
             {/* Task Details */}
             <div className="space-y-4 pt-2 border-t border-surface-800">
-                {/* Category */}
-                <div>
-                  <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                    Category
-                  </label>
-                  <input
-                    type="text"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 transition-colors"
-                    placeholder="e.g., Security, UX Improvements"
-                  />
-                </div>
-
-                {/* Priority, Effort & Value - 3 Column Grid */}
-                <div className="grid grid-cols-3 gap-4">
-                  <InlineOptionSelector<Priority>
-                    label="Priority"
-                    options={priorityOptions}
-                    value={priority}
-                    onChange={(v) => setPriority(v || 'medium')}
-                    colorMap={priorityColors}
-                  />
-
-                  <InlineOptionSelector<Effort>
-                    label="Effort"
-                    options={effortOptions}
-                    value={effort}
-                    onChange={(v) => setEffort(v || 'medium')}
-                    colorMap={effortColors}
-                  />
-
-                  <InlineOptionSelector<Value>
-                    label="Value"
-                    options={valueOptions}
-                    value={value}
-                    onChange={(v) => setValue(v || 'medium')}
-                    colorMap={valueColors}
-                  />
-                </div>
-
-                {/* Acceptance Criteria */}
-                <AcceptanceCriteriaEditor
-                  criteria={acceptanceCriteria}
-                  onChange={setAcceptanceCriteria}
-                  showEmptyWarning
+              {/* Category */}
+              <div>
+                <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+                  Category
+                </label>
+                <input
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  disabled={isCheckingSimilarity}
+                  className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 transition-colors disabled:opacity-60"
+                  placeholder="e.g., Security, UX Improvements"
                 />
+              </div>
+
+              {/* Priority, Effort & Value - 3 Column Grid */}
+              <div className="grid grid-cols-3 gap-4">
+                <InlineOptionSelector<Priority>
+                  label="Priority"
+                  options={priorityOptions}
+                  value={priority}
+                  onChange={(v) => setPriority(v || 'medium')}
+                  colorMap={priorityColors}
+                />
+
+                <InlineOptionSelector<Effort>
+                  label="Effort"
+                  options={effortOptions}
+                  value={effort}
+                  onChange={(v) => setEffort(v || 'medium')}
+                  colorMap={effortColors}
+                />
+
+                <InlineOptionSelector<Value>
+                  label="Value"
+                  options={valueOptions}
+                  value={value}
+                  onChange={(v) => setValue(v || 'medium')}
+                  colorMap={valueColors}
+                />
+              </div>
+
+              {/* Acceptance Criteria */}
+              <AcceptanceCriteriaEditor
+                criteria={acceptanceCriteria}
+                onChange={setAcceptanceCriteria}
+                showEmptyWarning
+              />
             </div>
 
+            {/* Inline Similarity Progress - shown when checking */}
+            {isCheckingSimilarity && backlogPath && (
+              <InlineSimilarityProgress
+                title={title.trim()}
+                description={description.trim()}
+                category={category.trim() || undefined}
+                backlogPath={backlogPath}
+                onComplete={handleSimilarityComplete}
+                onSkipped={handleSimilaritySkipped}
+              />
+            )}
+
+            {/* Action Buttons */}
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
@@ -364,16 +386,19 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
               </button>
               <button
                 type="submit"
-                disabled={!title.trim() || isCheckingSimilarity}
-                className="flex-1 bg-accent hover:bg-accent-hover disabled:bg-surface-700 disabled:text-surface-500 text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber disabled:shadow-none"
+                disabled={!title.trim()}
+                className={`flex-1 font-medium py-2.5 px-4 rounded-lg transition-colors ${
+                  isCheckingSimilarity
+                    ? 'bg-surface-600 hover:bg-surface-500 text-surface-200 border border-surface-500'
+                    : 'bg-accent hover:bg-accent-hover disabled:bg-surface-700 disabled:text-surface-500 text-surface-900 shadow-glow-amber-sm hover:shadow-glow-amber disabled:shadow-none'
+                }`}
               >
                 {isCheckingSimilarity ? (
                   <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                     </svg>
-                    Checking...
+                    Skip Checks
                   </span>
                 ) : 'Add Task'}
               </button>

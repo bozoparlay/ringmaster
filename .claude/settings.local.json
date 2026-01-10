@@ -35,7 +35,9 @@
       "Bash(x\"E\\\\\\(AI\\\\|enhance|rescope\\\\|improve task\\)\"quality)",
       "Bash(jq:*)",
       "Bash(kill:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(cat:*)",
+      "mcp__plugin_playwright_playwright__browser_evaluate"
     ]
   }
 }
