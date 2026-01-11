@@ -185,3 +185,110 @@ export interface SyncError {
   message: string;
   retryable: boolean;
 }
+
+// ============================================================================
+// Project Integration Types (Phase 0)
+// ============================================================================
+
+/**
+ * Git provider detected from remote URL
+ */
+export type GitProvider = 'github' | 'gitlab' | 'bitbucket' | 'unknown';
+
+/**
+ * User-level configuration (shared across all projects)
+ * Stored at: 'ringmaster:user:github'
+ */
+export interface UserGitHubConfig {
+  token: string;
+  tokenCreatedAt: string;
+  username?: string;
+}
+
+/**
+ * Project-level configuration (per repository)
+ * Stored at: 'ringmaster:project:{repoUrlHash}'
+ */
+export interface ProjectConfig {
+  // Repository info (detected from git remote)
+  repoUrl: string;
+  owner: string;
+  repo: string;
+  provider: GitProvider;
+
+  // User preferences
+  storageMode: StorageMode;
+
+  // GitHub-specific settings (only used when storageMode === 'github')
+  github?: {
+    syncEnabled: boolean;
+    labelMapping: {
+      'up-next': string;
+      'in-progress': string;
+      'review': string;
+      'ready-to-ship': string;
+    };
+    autoAssign: boolean;
+    linkPRsToIssues: boolean;
+  };
+
+  // Prompt state
+  promptDismissed?: boolean;
+  promptDismissedAt?: string;
+
+  // Metadata
+  configuredAt: string;
+  lastSyncAt?: string;
+}
+
+/**
+ * Response from /api/repo-info endpoint
+ */
+export interface RepoInfoResponse {
+  // Detected from git remote
+  repoUrl: string;
+  owner: string;
+  repo: string;
+  provider: GitProvider;
+
+  // Additional context
+  defaultBranch: string;
+  currentBranch: string;
+
+  // Ringmaster state
+  hasBacklogFile: boolean;
+}
+
+/**
+ * Response from /api/github/status endpoint
+ */
+export interface GitHubStatusResponse {
+  connected: boolean;
+  user?: {
+    login: string;
+    name: string;
+    avatarUrl: string;
+  };
+  repo?: {
+    fullName: string;
+    private: boolean;
+    hasIssues: boolean;
+    defaultBranch: string;
+  };
+  permissions?: {
+    canReadIssues: boolean;
+    canWriteIssues: boolean;
+    canCreatePRs: boolean;
+  };
+  error?: string;
+}
+
+/**
+ * Default label mapping for GitHub workflow sync
+ */
+export const DEFAULT_GITHUB_LABELS = {
+  'up-next': 'priority: up-next',
+  'in-progress': 'status: in-progress',
+  'review': 'status: review',
+  'ready-to-ship': 'status: ready-to-ship',
+} as const;
