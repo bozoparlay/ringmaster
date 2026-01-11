@@ -2,12 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backlog';
-import { v4 as uuidv4 } from 'uuid';
 import {
   loadCachedBacklog,
   saveCachedBacklog,
   type AuxiliarySignals,
 } from '@/lib/local-storage-cache';
+import {
+  createStorageProvider,
+  getStorageMode,
+  type TaskStorageProvider,
+  type StorageMode,
+} from '@/lib/storage';
 
 const DEBOUNCE_MS = 2000; // 2 second debounce for file writes
 
@@ -26,6 +31,7 @@ interface UseBacklogReturn {
   filePath: string | null;
   fileExists: boolean;
   signals: AuxiliarySignals;
+  storageMode: StorageMode;
   addItem: (title: string, description?: string, priority?: Priority, effort?: Effort, value?: Value, category?: string) => Promise<void>;
   updateItem: (item: BacklogItem) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -33,6 +39,7 @@ interface UseBacklogReturn {
   reorderItems: (items: BacklogItem[]) => Promise<void>;
   updatePRStatus: (taskId: string, status: AuxiliarySignals['prStatus'][string]) => void;
   refresh: () => Promise<void>;
+  exportToMarkdown: () => Promise<string>;
 }
 
 export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
@@ -44,39 +51,39 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
   const [error, setError] = useState<string | null>(null);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [fileExists, setFileExists] = useState(false);
+  const [storageMode, setStorageMode] = useState<StorageMode>('local');
 
-  // Ref for debounce timer
+  // Storage provider ref - initialized once on mount
+  const providerRef = useRef<TaskStorageProvider | null>(null);
+
+  // Ref for debounce timer (only used in file mode)
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   // Ref to track pending items for debounced write
   const pendingItemsRef = useRef<BacklogItem[] | null>(null);
 
-  const buildUrl = useCallback((endpoint: string) => {
-    const url = new URL(endpoint, window.location.origin);
-    if (options.path) {
-      url.searchParams.set('path', options.path);
-    }
-    return url.toString();
-  }, [options.path]);
+  // Get repo identifier from path or use default
+  const repoIdentifier = options.path || process.env.NEXT_PUBLIC_REPO_URL || 'default';
 
-  // Debounced write to BACKLOG.md
+  // Debounced write for file mode only
   const writeToFile = useCallback(async (itemsToWrite: BacklogItem[]) => {
+    if (!providerRef.current || providerRef.current.mode !== 'file') {
+      return;
+    }
+
     try {
-      const response = await fetch(buildUrl('/api/backlog'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsToWrite }),
-      });
-      if (!response.ok) {
-        console.error('[backlog] Failed to write to file');
-      } else {
-        console.log('[backlog] Written to file');
-      }
+      await providerRef.current.replaceAll(itemsToWrite);
+      console.log('[backlog] Written to file');
     } catch (err) {
       console.error('[backlog] Write error:', err);
     }
-  }, [buildUrl]);
+  }, []);
 
   const scheduleWrite = useCallback((newItems: BacklogItem[]) => {
+    // Only debounce for file mode
+    if (storageMode !== 'file') {
+      return;
+    }
+
     // Store pending items
     pendingItemsRef.current = newItems;
 
@@ -92,7 +99,7 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
         pendingItemsRef.current = null;
       }
     }, DEBOUNCE_MS);
-  }, [writeToFile]);
+  }, [writeToFile, storageMode]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -107,65 +114,119 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     };
   }, [writeToFile]);
 
-  // Load from localStorage cache after mount (client-side only, avoids hydration mismatch)
+  // Initialize storage provider and load data
   useEffect(() => {
-    setHasMounted(true);
-    const cached = loadCachedBacklog(options.path);
-    if (cached) {
-      setItems(cached.items);
-      setSignals(cached.signals || DEFAULT_SIGNALS);
-    }
-  }, [options.path]);
+    let mounted = true;
 
-  // Fetch from server and sync with cache
-  const fetchItems = useCallback(async () => {
+    async function initialize() {
+      try {
+        setHasMounted(true);
+
+        // Load cached signals first (not related to storage mode)
+        const cached = loadCachedBacklog(options.path);
+        if (cached?.signals) {
+          setSignals(cached.signals);
+        }
+
+        // Get current storage mode
+        const mode = getStorageMode();
+        setStorageMode(mode);
+
+        // Create and initialize storage provider
+        const provider = await createStorageProvider(repoIdentifier);
+        providerRef.current = provider;
+
+        // Load items from storage
+        const loadedItems = await provider.getAll();
+
+        if (mounted) {
+          setItems(loadedItems);
+          setFileExists(loadedItems.length > 0 || provider.mode === 'local');
+          setFilePath(options.path || null);
+          setLoading(false);
+
+          // Update signals cache with current items
+          saveCachedBacklog({
+            items: loadedItems,
+            signals: cached?.signals || DEFAULT_SIGNALS,
+            lastSync: new Date().toISOString(),
+            filePath: options.path,
+          });
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(err instanceof Error ? err.message : 'Unknown error');
+          setLoading(false);
+        }
+      }
+    }
+
+    initialize();
+
+    return () => {
+      mounted = false;
+    };
+  }, [options.path, repoIdentifier]);
+
+  // Refresh from storage
+  const refresh = useCallback(async () => {
+    if (!providerRef.current) {
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(buildUrl('/api/backlog'));
-      if (!response.ok) throw new Error('Failed to fetch backlog');
-      const data = await response.json();
 
-      // Update state
-      setItems(data.items);
-      setFilePath(data.path);
-      setFileExists(data.exists);
+      // For file mode, invalidate cache to force re-fetch
+      if (providerRef.current.mode === 'file' && 'invalidateCache' in providerRef.current) {
+        (providerRef.current as { invalidateCache: () => void }).invalidateCache();
+      }
 
-      // Update cache with fresh data from server
+      const loadedItems = await providerRef.current.getAll();
+      setItems(loadedItems);
+
+      // Update signals cache
       saveCachedBacklog({
-        items: data.items,
+        items: loadedItems,
         signals,
         lastSync: new Date().toISOString(),
-        filePath: data.path,
+        filePath: filePath || undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  }, [buildUrl, signals]);
+  }, [signals, filePath]);
 
-  // Initial fetch from server
-  useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
-
-  // Save items to cache immediately, schedule file write
+  // Save items - uses storage provider directly or schedules write
   const saveItems = useCallback(async (newItems: BacklogItem[]) => {
+    if (!providerRef.current) {
+      console.error('[backlog] Storage provider not initialized');
+      return;
+    }
+
     // Immediate: update React state
     setItems(newItems);
     setFileExists(true);
 
-    // Immediate: save to localStorage cache
+    // Save to appropriate storage
+    if (providerRef.current.mode === 'local') {
+      // LocalStorage mode: write immediately
+      await providerRef.current.replaceAll(newItems);
+    } else if (providerRef.current.mode === 'file') {
+      // File mode: debounce writes
+      scheduleWrite(newItems);
+    }
+
+    // Always update signals cache
     saveCachedBacklog({
       items: newItems,
       signals,
       lastSync: new Date().toISOString(),
       filePath: filePath || undefined,
     });
-
-    // Debounced: write to BACKLOG.md
-    scheduleWrite(newItems);
   }, [signals, filePath, scheduleWrite]);
 
   const addItem = useCallback(async (
@@ -176,9 +237,12 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     value?: Value,
     category?: string
   ) => {
-    const now = new Date().toISOString();
-    const newItem: BacklogItem = {
-      id: uuidv4(),
+    if (!providerRef.current) {
+      console.error('[backlog] Storage provider not initialized');
+      return;
+    }
+
+    const newItem = await providerRef.current.create({
       title,
       description,
       priority,
@@ -187,12 +251,27 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
       status: 'backlog',
       tags: category ? [category] : [],
       category,
-      createdAt: now,
-      updatedAt: now,
       order: Date.now(),
-    };
-    await saveItems([...items, newItem]);
-  }, [items, saveItems]);
+    });
+
+    // Update local state
+    const newItems = [...items, newItem];
+    setItems(newItems);
+    setFileExists(true);
+
+    // File mode needs debounced write since create already wrote
+    if (providerRef.current.mode === 'file') {
+      scheduleWrite(newItems);
+    }
+
+    // Update signals cache
+    saveCachedBacklog({
+      items: newItems,
+      signals,
+      lastSync: new Date().toISOString(),
+      filePath: filePath || undefined,
+    });
+  }, [items, signals, filePath, scheduleWrite]);
 
   const updateItem = useCallback(async (updatedItem: BacklogItem) => {
     const newItems = items.map(item =>
@@ -221,7 +300,7 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     await saveItems(newItems);
   }, [saveItems]);
 
-  // Signal management
+  // Signal management (kept separate from storage)
   const updatePRStatus = useCallback((taskId: string, status: AuxiliarySignals['prStatus'][string]) => {
     const newSignals = {
       ...signals,
@@ -238,6 +317,14 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     });
   }, [items, signals, filePath]);
 
+  // Export to markdown
+  const exportToMarkdown = useCallback(async (): Promise<string> => {
+    if (!providerRef.current) {
+      throw new Error('Storage provider not initialized');
+    }
+    return providerRef.current.exportToMarkdown();
+  }, []);
+
   return {
     items,
     loading,
@@ -245,12 +332,14 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     filePath,
     fileExists,
     signals,
+    storageMode,
     addItem,
     updateItem,
     deleteItem,
     moveItem,
     reorderItems,
     updatePRStatus,
-    refresh: fetchItems,
+    refresh,
+    exportToMarkdown,
   };
 }

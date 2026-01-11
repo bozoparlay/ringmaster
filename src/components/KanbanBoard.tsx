@@ -23,6 +23,8 @@ import { TackleModal } from './TackleModal';
 import { ReviewModal } from './ReviewModal';
 import { Toast, ToastType } from './Toast';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
+import { GitHubSyncService, getGitHubSyncConfig, isGitHubSyncConfigured } from '@/lib/storage/github-sync';
+import { getStorageMode } from '@/lib/storage/factory';
 
 interface ScopeAnalysis {
   aligned: boolean;
@@ -523,6 +525,21 @@ export function KanbanBoard({
         }
       }
 
+      // Close GitHub issue if linked
+      if (item.githubIssueNumber && getStorageMode() === 'github' && isGitHubSyncConfigured()) {
+        try {
+          const config = getGitHubSyncConfig();
+          if (config) {
+            const syncService = new GitHubSyncService(config);
+            await syncService.closeIssue(item.githubIssueNumber);
+            console.log(`[Ringmaster] Closed GitHub Issue #${item.githubIssueNumber}`);
+          }
+        } catch (error) {
+          console.warn('[Ringmaster] Failed to close GitHub issue:', error);
+          // Don't fail the ship operation - GitHub sync is best-effort
+        }
+      }
+
       showToast(`Shipped! Branch ${result.branch} pushed to remote.`, 'success');
     } catch (error) {
       console.error('Ship error:', error);
@@ -568,6 +585,24 @@ export function KanbanBoard({
       await onUpdateItem({ ...item, status: 'in_progress' });
       console.error('Worktree creation failed:', error);
       showToast('Worktree creation failed, but task moved to In Progress', 'error');
+    }
+
+    // Sync status to GitHub if linked
+    if (item.githubIssueNumber && getStorageMode() === 'github' && isGitHubSyncConfigured()) {
+      try {
+        const config = getGitHubSyncConfig();
+        if (config) {
+          const syncService = new GitHubSyncService(config);
+          await syncService.updateIssue(item.githubIssueNumber, {
+            ...item,
+            status: 'in_progress',
+          });
+          console.log(`[Ringmaster] Updated GitHub Issue #${item.githubIssueNumber} to in_progress`);
+        }
+      } catch (error) {
+        console.warn('[Ringmaster] Failed to update GitHub issue status:', error);
+        // Don't fail the tackle operation - GitHub sync is best-effort
+      }
     }
 
     setIsTackleOpen(false);
