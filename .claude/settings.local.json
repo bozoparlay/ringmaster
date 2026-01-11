@@ -38,7 +38,8 @@
       "Bash(git stash:*)",
       "Bash(cat:*)",
       "mcp__plugin_playwright_playwright__browser_evaluate",
-      "Bash(claude plugins update ralph-loop@claude-plugins-official:*)"
+      "Bash(claude plugins update ralph-loop@claude-plugins-official:*)",
+      "mcp__plugin_playwright_playwright__browser_press_key"
     ]
   }
 }
