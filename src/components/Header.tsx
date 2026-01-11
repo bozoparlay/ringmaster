@@ -2,13 +2,21 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { HealthIndicator } from './HealthIndicator';
+import { StorageModeSelector } from './StorageModeSelector';
+import type { StorageMode } from '@/lib/storage';
+import { isGitHubSyncConfigured } from '@/lib/storage';
 
 interface HeaderProps {
   filePath: string | null;
   fileExists: boolean;
+  storageMode?: StorageMode;
   onNewTask: () => void;
   onRefresh: () => void;
   onChangePath: (path: string) => void;
+  onStorageModeChange?: (mode: StorageMode) => void;
+  onExportMarkdown?: () => Promise<string>;
+  onSync?: () => Promise<void>;
+  isSyncing?: boolean;
   onCleanup?: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -33,7 +41,7 @@ function addRecentPath(path: string): void {
   localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT_PATHS)));
 }
 
-export function Header({ filePath, fileExists, onNewTask, onRefresh, onChangePath, onCleanup, searchQuery, onSearchChange }: HeaderProps) {
+export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange }: HeaderProps) {
   const [showPathPicker, setShowPathPicker] = useState(false);
   const [pathInput, setPathInput] = useState('');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
@@ -107,20 +115,56 @@ export function Header({ filePath, fileExists, onNewTask, onRefresh, onChangePat
           </div>
         </div>
 
-        {/* File Status with Picker */}
-        <div className="hidden md:block relative" ref={dropdownRef}>
-          <button
-            onClick={() => setShowPathPicker(!showPathPicker)}
-            className="flex items-center gap-3 px-4 py-2 rounded-lg bg-surface-900/50 border border-surface-800 hover:border-surface-700 transition-colors"
-          >
-            <div className={`w-2 h-2 rounded-full ${fileExists ? 'bg-green-500' : 'bg-yellow-500'}`} />
-            <span className="text-xs text-surface-400 font-mono truncate max-w-[250px]">
-              {filePath ? filePath.split('/').slice(-2).join('/') : 'No file loaded'}
-            </span>
-            <svg className={`w-3 h-3 text-surface-500 transition-transform ${showPathPicker ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+        {/* Storage Mode & File Status */}
+        <div className="hidden md:flex items-center gap-3">
+          {/* Storage Mode Selector */}
+          <StorageModeSelector
+            compact
+            onModeChange={(mode) => {
+              onStorageModeChange?.(mode);
+              // Refresh data when mode changes
+              onRefresh();
+            }}
+            onExport={onExportMarkdown}
+          />
+
+          {/* Sync Button (only shown in github mode when configured) */}
+          {storageMode === 'github' && onSync && (
+            <button
+              onClick={onSync}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-900/50 border border-surface-800 hover:border-surface-700 transition-colors disabled:opacity-50"
+              title="Sync with GitHub"
+            >
+              <svg
+                className={`w-4 h-4 text-surface-400 ${isSyncing ? 'animate-spin' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="text-xs text-surface-400">
+                {isSyncing ? 'Syncing...' : 'Sync'}
+              </span>
+            </button>
+          )}
+
+          {/* File Status with Picker (only shown in file mode) */}
+          {storageMode === 'file' && (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowPathPicker(!showPathPicker)}
+                className="flex items-center gap-3 px-4 py-2 rounded-lg bg-surface-900/50 border border-surface-800 hover:border-surface-700 transition-colors"
+              >
+                <div className={`w-2 h-2 rounded-full ${fileExists ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                <span className="text-xs text-surface-400 font-mono truncate max-w-[250px]">
+                  {filePath ? filePath.split('/').slice(-2).join('/') : 'No file loaded'}
+                </span>
+                <svg className={`w-3 h-3 text-surface-500 transition-transform ${showPathPicker ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
           {/* Path Picker Dropdown */}
           {showPathPicker && (
@@ -186,6 +230,8 @@ export function Header({ filePath, fileExists, onNewTask, onRefresh, onChangePat
                   Refresh Current File
                 </button>
               </div>
+            </div>
+          )}
             </div>
           )}
         </div>

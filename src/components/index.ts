@@ -9,3 +9,7 @@ export { CleanupWizard } from './CleanupWizard';
 export { Toast } from './Toast';
 export type { ToastType } from './Toast';
 export { ProjectSelector } from './ProjectSelector';
+export { StorageModeSelector } from './StorageModeSelector';
+export { GitHubSettingsModal } from './GitHubSettingsModal';
+export { SyncConflictModal } from './SyncConflictModal';
+export { MigrationWizard } from './MigrationWizard';
