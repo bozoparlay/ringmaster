@@ -41,3 +41,4 @@ Thumbs.db
 
 # Playwright MCP screenshots/artifacts
 .playwright-mcp/
+.claude/settings.local.json
