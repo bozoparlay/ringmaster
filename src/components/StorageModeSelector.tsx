@@ -23,6 +23,10 @@ interface StorageModeSelectorProps {
    * Compact mode for embedding in headers/toolbars
    */
   compact?: boolean;
+  /**
+   * Pre-detected repo from git remote (auto-filled in GitHub modal)
+   */
+  detectedRepo?: { owner: string; repo: string };
 }
 
 /**
@@ -33,7 +37,7 @@ interface StorageModeSelectorProps {
  * - File (BACKLOG.md, backwards compatible)
  * - GitHub Issues (future, disabled)
  */
-export function StorageModeSelector({ onModeChange, onExport, compact = false }: StorageModeSelectorProps) {
+export function StorageModeSelector({ onModeChange, onExport, compact = false, detectedRepo }: StorageModeSelectorProps) {
   const [currentMode, setCurrentMode] = useState<StorageMode>('local');
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -235,6 +239,7 @@ export function StorageModeSelector({ onModeChange, onExport, compact = false }:
           isOpen={isGitHubModalOpen}
           onClose={() => setIsGitHubModalOpen(false)}
           onConnect={handleGitHubConnect}
+          detectedRepo={detectedRepo}
         />
       </div>
     );

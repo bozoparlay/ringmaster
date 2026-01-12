@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Header, KanbanBoard, NewTaskModal, CleanupWizard, ProjectSelector } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
+import { useProjectConfig } from '@/hooks/useProjectConfig';
 import { GitHubSyncService, getGitHubSyncConfig } from '@/lib/storage/github-sync';
 
 const LAST_PATH_KEY = 'ringmaster-last-path';
@@ -25,6 +26,9 @@ export default function Home() {
   const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Auto-detect project from git remote
+  const { project, isLoading: isProjectLoading } = useProjectConfig();
 
   // Load last path from localStorage on mount
   useEffect(() => {
@@ -125,6 +129,7 @@ export default function Home() {
         onCleanup={() => setIsCleanupOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
       />
 
       {/* Error banner */}

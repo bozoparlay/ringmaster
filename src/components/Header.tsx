@@ -20,6 +20,8 @@ interface HeaderProps {
   onCleanup?: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  /** Auto-detected repo from git remote */
+  detectedRepo?: { owner: string; repo: string };
 }
 
 const RECENT_PATHS_KEY = 'ringmaster-recent-paths';
@@ -41,7 +43,7 @@ function addRecentPath(path: string): void {
   localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT_PATHS)));
 }
 
-export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange }: HeaderProps) {
+export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange, detectedRepo }: HeaderProps) {
   const [showPathPicker, setShowPathPicker] = useState(false);
   const [pathInput, setPathInput] = useState('');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
@@ -126,6 +128,7 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
               onRefresh();
             }}
             onExport={onExportMarkdown}
+            detectedRepo={detectedRepo}
           />
 
           {/* Sync Button (only shown in github mode when configured) */}

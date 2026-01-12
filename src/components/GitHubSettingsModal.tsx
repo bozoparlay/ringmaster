@@ -13,6 +13,8 @@ interface GitHubSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConnect?: () => void;
+  /** Pre-detected repo from git remote (auto-filled) */
+  detectedRepo?: { owner: string; repo: string };
 }
 
 /**
@@ -25,7 +27,7 @@ interface GitHubSettingsModalProps {
  * - Test the connection
  * - Disconnect from GitHub
  */
-export function GitHubSettingsModal({ isOpen, onClose, onConnect }: GitHubSettingsModalProps) {
+export function GitHubSettingsModal({ isOpen, onClose, onConnect, detectedRepo }: GitHubSettingsModalProps) {
   const [token, setToken] = useState('');
   const [repo, setRepo] = useState('');
   const [apiUrl, setApiUrl] = useState('');
@@ -34,7 +36,7 @@ export function GitHubSettingsModal({ isOpen, onClose, onConnect }: GitHubSettin
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Load existing config on mount
+  // Load existing config on mount, or pre-fill with detected repo
   useEffect(() => {
     if (isOpen) {
       const config = getGitHubSyncConfig();
@@ -45,13 +47,14 @@ export function GitHubSettingsModal({ isOpen, onClose, onConnect }: GitHubSettin
         setIsConnected(true);
       } else {
         setToken('');
-        setRepo('');
+        // Pre-fill with detected repo if available
+        setRepo(detectedRepo ? `${detectedRepo.owner}/${detectedRepo.repo}` : '');
         setApiUrl('');
         setIsConnected(false);
       }
       setTestResult(null);
     }
-  }, [isOpen]);
+  }, [isOpen, detectedRepo]);
 
   const handleTestConnection = async () => {
     if (!token || !repo) {
@@ -206,6 +209,11 @@ export function GitHubSettingsModal({ isOpen, onClose, onConnect }: GitHubSettin
           <div>
             <label className="block text-sm font-medium text-surface-200 mb-2">
               Repository
+              {detectedRepo && repo === `${detectedRepo.owner}/${detectedRepo.repo}` && (
+                <span className="ml-2 text-xs text-green-400 font-normal">
+                  ✓ Auto-detected
+                </span>
+              )}
             </label>
             <input
               type="text"
