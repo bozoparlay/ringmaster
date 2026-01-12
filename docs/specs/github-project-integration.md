@@ -1,9 +1,9 @@
 # GitHub Project Integration Specification
 
-> **Status**: Draft
+> **Status**: ✅ Implemented (PR #9)
 > **Author**: Principal Engineer
 > **Created**: 2026-01-11
-> **Last Updated**: 2026-01-11
+> **Last Updated**: 2026-01-12
 
 ## Executive Summary
 
@@ -22,6 +22,33 @@ This specification defines the enhancement of Ringmaster's GitHub integration fr
 2. **Per-Project Config**: Each project remembers its storage mode independently
 3. **Workflow Integration**: Tackle assigns issues, Ship links PRs to issues
 4. **Smart Onboarding**: First-visit prompt offers GitHub connection
+
+---
+
+## Implementation Summary
+
+> **Merged**: PR #9 on 2026-01-12
+
+### Files Added/Modified
+
+| File | Purpose |
+|------|---------|
+| `src/app/api/repo-info/route.ts` | Auto-detect repo from git remote |
+| `src/app/api/github/status/route.ts` | Validate PAT and return connection status |
+| `src/app/api/github/tackle/route.ts` | Assign issue + apply labels on Tackle |
+| `src/app/api/github/ship/route.ts` | Link PRs to issues on Ship |
+| `src/hooks/useProjectConfig.ts` | Central hook for project config management |
+| `src/components/GitHubConnectionPrompt.tsx` | First-time connection prompt |
+| `src/lib/storage/project-config.ts` | Per-project config storage helpers |
+| `src/lib/storage/github-sync.ts` | GitHub sync utilities |
+| `src/lib/storage/types.ts` | Type definitions for storage layer |
+
+### Key Implementation Notes
+
+1. **Stale Detection**: Config cached for 24h with manual refresh button in header
+2. **GitHub Status in Header**: Shows connection state, sync timestamp, user avatar
+3. **Label-Based Workflow**: Tasks sync state via GitHub labels (configurable)
+4. **Migration**: Existing global PAT migrated to user-level storage automatically
 
 ---
 
@@ -440,8 +467,9 @@ Shows connection status in the header area.
 
 ## Phases
 
-### Phase 0: Backend Foundation
+### Phase 0: Backend Foundation ✅
 **Goal**: Add repo detection API, establish data layer
+**Implemented**: Commit `a1bc6e4`
 
 **Tasks**:
 
@@ -457,8 +485,9 @@ Shows connection status in the header area.
 **Estimated Complexity**: Low-Medium
 **Dependencies**: None
 
-### Phase 1: Per-Project Configuration
+### Phase 1: Per-Project Configuration ✅
 **Goal**: Migrate from global config to per-project, add auto-detection
+**Implemented**: Commits `f129e7c`, `ddc442d`
 
 **Tasks**:
 
@@ -475,8 +504,9 @@ Shows connection status in the header area.
 **Estimated Complexity**: Medium
 **Dependencies**: Phase 0
 
-### Phase 2: First-Time Experience
+### Phase 2: First-Time Experience ✅
 **Goal**: Smart onboarding for new projects
+**Implemented**: Commit `fc6d927`
 
 **Tasks**:
 
@@ -492,8 +522,9 @@ Shows connection status in the header area.
 **Estimated Complexity**: Medium
 **Dependencies**: Phase 1
 
-### Phase 3: Workflow Integration
+### Phase 3: Workflow Integration ✅
 **Goal**: Tackle and Ship interact with GitHub Issues
+**Implemented**: Commit `9cc8fd8`
 
 **Tasks**:
 
@@ -513,8 +544,9 @@ Shows connection status in the header area.
 **Estimated Complexity**: High
 **Dependencies**: Phase 1
 
-### Phase 4: Header Integration & Polish
+### Phase 4: Header Integration & Polish ✅
 **Goal**: Visible status, edge cases, polish
+**Implemented**: Commit `9cc8fd8`
 
 **Tasks**:
 
