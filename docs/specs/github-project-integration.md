@@ -351,25 +351,50 @@ interface GitHubStatusResponse {
 }
 ```
 
-### POST /api/github/sync-task
+### POST /api/github/tackle
 
-Syncs a single task with GitHub Issues.
+Handles GitHub integration when tackling a task (assigns issue, adds label).
 
 **Request**:
 ```typescript
-interface SyncTaskRequest {
-  taskId: string;
-  action: 'create' | 'update' | 'close';
-  task: BacklogItem;
+interface TackleRequest {
+  issueNumber: number;
+  repo: string;                    // "owner/repo"
+  inProgressLabel?: string;        // Default: "status: in-progress"
 }
 ```
 
 **Response**:
 ```typescript
-interface SyncTaskResponse {
+interface TackleResponse {
   success: boolean;
-  issueNumber?: number;
-  issueUrl?: string;
+  assigned: boolean;
+  labeled: boolean;
+  username?: string;
+  error?: string;
+}
+```
+
+### POST /api/github/ship
+
+Handles GitHub integration when shipping a task (updates labels).
+
+**Request**:
+```typescript
+interface ShipRequest {
+  issueNumber: number;
+  repo: string;                    // "owner/repo"
+  fromLabel?: string;              // Default: "status: in-progress"
+  toLabel?: string;                // Default: "status: review"
+}
+```
+
+**Response**:
+```typescript
+interface ShipResponse {
+  success: boolean;
+  removedLabel: boolean;
+  addedLabel: boolean;
   error?: string;
 }
 ```
@@ -381,6 +406,7 @@ interface SyncTaskResponse {
 ### useProjectConfig Hook
 
 Central hook for accessing and managing project configuration.
+**Implementation**: `src/hooks/useProjectConfig.ts`
 
 ```typescript
 interface UseProjectConfigReturn {
@@ -391,6 +417,8 @@ interface UseProjectConfigReturn {
     repoUrl: string;
     provider: 'github' | 'gitlab' | 'bitbucket' | 'unknown';
     defaultBranch: string;
+    currentBranch: string;
+    hasBacklogFile: boolean;
   } | null;
 
   // Configuration state
@@ -400,21 +428,22 @@ interface UseProjectConfigReturn {
   // GitHub-specific
   isGitHubRepo: boolean;
   isGitHubConnected: boolean;
-  gitHubUser: { login: string; avatarUrl: string } | null;
+  gitHubUser: { login: string; name: string; avatarUrl: string } | null;
+
+  // Prompt state
+  showGitHubPrompt: boolean;
 
   // Actions
   setStorageMode: (mode: StorageMode) => void;
   connectGitHub: (token: string) => Promise<boolean>;
   disconnectGitHub: () => void;
   refreshProject: () => Promise<void>;
+  dismissPrompt: (permanent?: boolean) => void;
 
   // Status
   isLoading: boolean;
+  isStale: boolean;
   error: string | null;
-}
-
-function useProjectConfig(): UseProjectConfigReturn {
-  // Implementation in Phase 1
 }
 ```
 
@@ -609,14 +638,14 @@ Shows connection status in the header area.
 
 ### Manual Testing Checklist
 
-- [ ] Fresh install shows prompt for GitHub repo
-- [ ] Non-GitHub repo (GitLab, local) doesn't show GitHub prompt
-- [ ] PAT entered once, works across page refreshes
-- [ ] Different projects have independent storage modes
-- [ ] Tackle assigns issue (with valid PAT)
-- [ ] Ship references issue in PR
-- [ ] Sync error shows clear message
-- [ ] Offline mode queues changes
+- [x] Fresh install shows prompt for GitHub repo
+- [x] Non-GitHub repo (GitLab, local) doesn't show GitHub prompt
+- [x] PAT entered once, works across page refreshes
+- [x] Different projects have independent storage modes
+- [x] Tackle assigns issue (with valid PAT)
+- [x] Ship updates issue labels
+- [x] Sync error shows clear message
+- [ ] ~~Offline mode queues changes~~ (deferred to future work)
 
 ---
 
