@@ -132,7 +132,13 @@ export async function createStorageProvider(
   options?: StorageOptions
 ): Promise<TaskStorageProvider> {
   const mode = options?.githubToken && options?.githubRepo ? 'github' : getStorageMode();
-  const provider = storageFactory.create(mode, options);
+
+  // For file mode, ensure the path is included in options for proper caching
+  const effectiveOptions = mode === 'file' && repoIdentifier
+    ? { ...options, backlogFilePath: repoIdentifier }
+    : options;
+
+  const provider = storageFactory.create(mode, effectiveOptions);
 
   if (!provider.isInitialized()) {
     await provider.initialize(repoIdentifier);

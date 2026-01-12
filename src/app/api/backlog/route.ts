@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import os from 'os';
 import { parseBacklogMd, serializeBacklogMd } from '@/lib/backlog-parser';
 import { validateTaskQuality } from '@/lib/task-quality';
 import type { BacklogItem } from '@/types/backlog';
@@ -10,9 +11,23 @@ import type { BacklogItem } from '@/types/backlog';
 // When running from worktree (.tasks/task-xxx), go up two levels to find main BACKLOG.md
 const DEFAULT_BACKLOG_PATH = process.env.BACKLOG_PATH || './BACKLOG.md';
 
+/**
+ * Expand tilde (~) to user's home directory
+ */
+function expandTilde(filePath: string): string {
+  if (filePath.startsWith('~/')) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  if (filePath === '~') {
+    return os.homedir();
+  }
+  return filePath;
+}
+
 function getBacklogPath(customPath?: string | null): string {
   if (customPath) {
-    return path.resolve(process.cwd(), customPath);
+    const expanded = expandTilde(customPath);
+    return path.resolve(process.cwd(), expanded);
   }
   return path.resolve(process.cwd(), DEFAULT_BACKLOG_PATH);
 }
