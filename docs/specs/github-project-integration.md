@@ -9,14 +9,16 @@
 
 This specification defines the enhancement of Ringmaster's GitHub integration from a **manual, single-repo configuration** to an **auto-detected, per-project system** with seamless workflow integration.
 
-### Current State Problems
+### Problems Solved
 
-1. **Manual Configuration**: Users must manually enter `owner/repo` despite the app running in a git repository
-2. **Global PAT**: Single token/repo pair stored globally, not per-project
-3. **No Workflow Integration**: Tackle/Ship don't interact with GitHub Issues
-4. **Silent Fallback**: No guidance when GitHub sync would benefit the user
+> *These issues existed before PR #9 and are now resolved.*
 
-### Target State
+1. ~~**Manual Configuration**~~: ✅ Repo auto-detected from `git remote get-url origin`
+2. ~~**Global PAT**~~: ✅ Per-project config with shared user-level token
+3. ~~**No Workflow Integration**~~: ✅ Tackle assigns issues, Ship updates labels
+4. ~~**Silent Fallback**~~: ✅ First-visit prompt guides GitHub connection
+
+### Shipped Features
 
 1. **Auto-Detection**: Repo detected from `git remote get-url origin` on page load
 2. **Per-Project Config**: Each project remembers its storage mode independently
