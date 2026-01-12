@@ -50,6 +50,27 @@ This specification defines the enhancement of Ringmaster's GitHub integration fr
 3. **Label-Based Workflow**: Tasks sync state via GitHub labels (configurable)
 4. **Migration**: Existing global PAT migrated to user-level storage automatically
 
+### Implementation Deviations
+
+| Spec Item | Status | Notes |
+|-----------|--------|-------|
+| P3-2: Link existing issues | ⏳ Deferred | Complex matching logic; manual linking preferred for v1 |
+| P3-5: PR references issue | ✅ Via existing flow | Handled in `/api/create-pr`, not `/api/github/ship` |
+| P3-9: Sync conflict handling | ⏳ Deferred | v1 uses last-write-wins; conflicts rare for single-user |
+| P4-5: GitHub Enterprise | ⏳ Deferred | Requires custom API URL configuration |
+| P4-6: Offline mode | ⏳ Deferred | localStorage works offline; GitHub sync is opportunistic |
+| P4-7: Keyboard shortcut | ⏳ Deferred | Low priority; header button sufficient |
+
+### Future Work
+
+Items deferred to future iterations:
+
+1. **Issue Linking UI** (P3-2): Bulk match local tasks to existing GitHub issues by title similarity
+2. **Conflict Resolution** (P3-9): Detect divergent changes, offer merge/overwrite options
+3. **GitHub Enterprise** (P4-5): Custom `apiUrl` in project config for enterprise deployments
+4. **Offline Queue** (P4-6): Queue mutations when offline, sync when reconnected
+5. **Bi-directional Sync**: Poll GitHub for issue updates, import new issues to Ringmaster
+
 ---
 
 ## Architecture
@@ -677,19 +698,23 @@ function migrateGitHubConfig(): void {
 
 ---
 
-## Open Questions
+## Open Questions (Resolved)
 
 1. **Multi-account support**: Should we support multiple GitHub accounts (personal + work)?
-   - *Current answer*: No, v1 uses single PAT. Revisit based on user feedback.
+   - *Decision*: **No** — Single PAT stored at user level. Works for most developers.
+   - *Revisit trigger*: Enterprise users requesting work/personal separation.
 
 2. **GitLab/Bitbucket support**: Should we support other providers?
-   - *Current answer*: Detect provider but only implement GitHub sync for v1.
+   - *Decision*: **Detect only** — Provider detected in `/api/repo-info` but only GitHub sync implemented.
+   - *Revisit trigger*: Significant user demand for GitLab/Bitbucket.
 
 3. **Bi-directional sync**: Should changes on GitHub sync back to Ringmaster?
-   - *Current answer*: Yes, but as pull-only (user-initiated). No webhooks for v1.
+   - *Decision*: **Not in v1** — Tackle/Ship push to GitHub; no pull-back implemented.
+   - *Revisit trigger*: Team workflows where multiple people edit the same issues.
 
 4. **Issue templates**: Should we use GitHub issue templates when creating?
-   - *Current answer*: Not for v1. Just create basic issues with title/description.
+   - *Decision*: **No** — Tasks use simple title/description. Templates add complexity.
+   - *Revisit trigger*: Users requesting structured issue creation.
 
 ---
 
