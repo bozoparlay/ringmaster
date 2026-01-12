@@ -450,6 +450,7 @@ interface UseProjectConfigReturn {
 ### GitHubConnectionPrompt Component
 
 Non-blocking prompt shown on first visit to a GitHub-hosted project.
+**Implementation**: `src/components/GitHubConnectionPrompt.tsx`
 
 ```typescript
 interface GitHubConnectionPromptProps {
@@ -482,6 +483,7 @@ interface GitHubConnectionPromptProps {
 ### Enhanced GitHubSettingsModal
 
 Updated modal with auto-detected repo and better UX.
+**Implementation**: `src/components/GitHubSettingsModal.tsx`
 
 **Changes from Current**:
 1. **Auto-populated repo**: Pre-fill with detected `owner/repo`
@@ -504,6 +506,7 @@ interface GitHubSettingsModalProps {
 ### Header GitHub Status Indicator
 
 Shows connection status in the header area.
+**Implementation**: `src/components/Header.tsx` (lines 203-231)
 
 **States**:
 ```
@@ -523,14 +526,14 @@ Shows connection status in the header area.
 
 **Tasks**:
 
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| P0-1 | Create `/api/repo-info` endpoint | Returns owner, repo, provider parsed from git remote |
-| P0-2 | Handle SSH and HTTPS URL formats | Both `git@github.com:o/r.git` and `https://github.com/o/r` work |
-| P0-3 | Detect default branch | Returns actual default branch, not hardcoded "main" |
-| P0-4 | Add `/api/github/status` endpoint | Validates PAT, returns user info and permissions |
-| P0-5 | Create `ProjectConfig` type definitions | Types defined in `src/lib/storage/types.ts` |
-| P0-6 | Add project config localStorage helpers | `getProjectConfig()`, `setProjectConfig()` functions |
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| P0-1 | Create `/api/repo-info` endpoint | ✅ | `src/app/api/repo-info/route.ts` |
+| P0-2 | Handle SSH and HTTPS URL formats | ✅ | Both formats supported |
+| P0-3 | Detect default branch | ✅ | Via git symbolic-ref |
+| P0-4 | Add `/api/github/status` endpoint | ✅ | `src/app/api/github/status/route.ts` |
+| P0-5 | Create `ProjectConfig` type definitions | ✅ | `src/lib/storage/types.ts` |
+| P0-6 | Add project config localStorage helpers | ✅ | `src/lib/storage/project-config.ts` |
 
 **Estimated Complexity**: Low-Medium
 **Dependencies**: None
@@ -541,15 +544,15 @@ Shows connection status in the header area.
 
 **Tasks**:
 
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| P1-1 | Create `useProjectConfig` hook | Hook provides project info, config, and actions |
-| P1-2 | Fetch repo-info on app mount | `/api/repo-info` called once, cached for 24h |
-| P1-3 | Migrate PAT to user-level storage | Move from `ringmaster:github:*` to `ringmaster:user:github` |
-| P1-4 | Key project config by repo hash | Each project has isolated config |
-| P1-5 | Pre-fill GitHubSettingsModal with detected repo | Repo field shows detected value, editable |
-| P1-6 | Add "Refresh" button for stale detection | Manual override if remote changed |
-| P1-7 | Migrate existing configs on first load | One-time migration preserves user data |
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| P1-1 | Create `useProjectConfig` hook | ✅ | `src/hooks/useProjectConfig.ts` |
+| P1-2 | Fetch repo-info on app mount | ✅ | Cached for 24h |
+| P1-3 | Migrate PAT to user-level storage | ✅ | `ringmaster:user:github` key |
+| P1-4 | Key project config by repo hash | ✅ | Per-project isolation |
+| P1-5 | Pre-fill GitHubSettingsModal with detected repo | ✅ | Auto-populated from detection |
+| P1-6 | Add "Refresh" button for stale detection | ✅ | Header refresh button |
+| P1-7 | Migrate existing configs on first load | ✅ | `migrateOldGitHubConfig()` |
 
 **Estimated Complexity**: Medium
 **Dependencies**: Phase 0
@@ -560,14 +563,14 @@ Shows connection status in the header area.
 
 **Tasks**:
 
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| P2-1 | Create `GitHubConnectionPrompt` component | Non-blocking banner with Connect/Dismiss |
-| P2-2 | Show prompt on first visit to GitHub project | Only if: GitHub repo detected AND not configured AND not dismissed |
-| P2-3 | Track prompt dismissal per-project | Dismissal persists in localStorage |
-| P2-4 | Add "permanent dismiss" option | "Don't ask again for this project" |
-| P2-5 | Auto-hide after 10 seconds | Timer with smooth fade-out |
-| P2-6 | Add "Connect to GitHub" to storage dropdown | Entry point after dismissing prompt |
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| P2-1 | Create `GitHubConnectionPrompt` component | ✅ | `src/components/GitHubConnectionPrompt.tsx` |
+| P2-2 | Show prompt on first visit to GitHub project | ✅ | `shouldShowPrompt()` logic |
+| P2-3 | Track prompt dismissal per-project | ✅ | localStorage persistence |
+| P2-4 | Add "permanent dismiss" option | ✅ | `dismissPrompt(permanent)` |
+| P2-5 | Auto-hide after 10 seconds | ✅ | Timer with fade animation |
+| P2-6 | Add "Connect to GitHub" to storage dropdown | ✅ | StorageModeSelector option |
 
 **Estimated Complexity**: Medium
 **Dependencies**: Phase 1
@@ -578,18 +581,18 @@ Shows connection status in the header area.
 
 **Tasks**:
 
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| P3-1 | Store GitHub issue number on tasks | `BacklogItem.githubIssueNumber` field |
-| P3-2 | Link existing issues on first sync | Match by title, offer merge UI |
-| P3-3 | **Tackle**: Assign issue to current user | When Tackling, if GitHub mode, assign issue |
-| P3-4 | **Tackle**: Add "in-progress" label | Label applied via GitHub API |
-| P3-5 | **Ship**: Reference issue in PR description | PR body includes "Closes #123" |
-| P3-6 | **Ship**: Update issue labels | Remove "in-progress", add "review" |
-| P3-7 | Add sync status to TaskCard | Show linked issue number, sync indicator |
-| P3-8 | Add GitHub link to TaskPanel | Click to open issue in GitHub |
-| P3-9 | Handle sync conflicts | If issue changed on GitHub, show conflict UI |
-| P3-10 | Label mapping configuration | Users can customize which labels map to states |
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| P3-1 | Store GitHub issue number on tasks | ✅ | `BacklogItem.githubIssueNumber` field |
+| P3-2 | Link existing issues on first sync | ⏳ | Deferred - manual linking for v1 |
+| P3-3 | **Tackle**: Assign issue to current user | ✅ | `/api/github/tackle` endpoint |
+| P3-4 | **Tackle**: Add "in-progress" label | ✅ | Via GitHub API |
+| P3-5 | **Ship**: Reference issue in PR description | ✅ | Via `/api/create-pr` |
+| P3-6 | **Ship**: Update issue labels | ✅ | `/api/github/ship` endpoint |
+| P3-7 | Add sync status to TaskCard | ✅ | Shows linked issue indicator |
+| P3-8 | Add GitHub link to TaskPanel | ✅ | Opens issue in GitHub |
+| P3-9 | Handle sync conflicts | ⏳ | Deferred - last-write-wins for v1 |
+| P3-10 | Label mapping configuration | ✅ | Default labels, customizable |
 
 **Estimated Complexity**: High
 **Dependencies**: Phase 1
@@ -600,16 +603,16 @@ Shows connection status in the header area.
 
 **Tasks**:
 
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| P4-1 | Add GitHub status to header | Shows connected state, user avatar |
-| P4-2 | Manual sync button | "Sync Now" pulls latest from GitHub |
-| P4-3 | Last sync timestamp | Shows "Synced 5m ago" in header |
-| P4-4 | Handle token expiration | Graceful error, prompt to re-authenticate |
-| P4-5 | Support GitHub Enterprise URLs | Custom API URL in settings |
-| P4-6 | Offline mode graceful degradation | Queue syncs, apply when online |
-| P4-7 | Add keyboard shortcut for sync | `Cmd+Shift+S` triggers sync |
-| P4-8 | Sync error recovery | Retry logic, clear error states |
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| P4-1 | Add GitHub status to header | ✅ | Avatar, username, connection state |
+| P4-2 | Manual sync button | ✅ | Refresh button in header |
+| P4-3 | Last sync timestamp | ✅ | "Synced Xm ago" display |
+| P4-4 | Handle token expiration | ✅ | Error message + re-auth prompt |
+| P4-5 | Support GitHub Enterprise URLs | ⏳ | Deferred - requires custom API URL |
+| P4-6 | Offline mode graceful degradation | ⏳ | Deferred - localStorage works offline |
+| P4-7 | Add keyboard shortcut for sync | ⏳ | Deferred - low priority |
+| P4-8 | Sync error recovery | ✅ | Error states cleared on retry |
 
 **Estimated Complexity**: Medium
 **Dependencies**: Phase 3
