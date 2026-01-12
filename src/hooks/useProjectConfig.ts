@@ -59,6 +59,7 @@ export interface UseProjectConfigReturn {
 
   // Status
   isLoading: boolean;
+  isStale: boolean;
   error: string | null;
 }
 
@@ -89,6 +90,7 @@ export function useProjectConfig(): UseProjectConfigReturn {
   const isGitHubRepo = project?.provider === 'github';
   const isGitHubConnected = config?.storageMode === 'github' && !!getUserGitHubConfig()?.token;
   const storageMode = config?.storageMode || 'local';
+  const isStale = config ? isProjectConfigStale(config) : false;
 
   /**
    * Fetch repo info from backend
@@ -321,6 +323,7 @@ export function useProjectConfig(): UseProjectConfigReturn {
     refreshProject,
     dismissPrompt,
     isLoading,
+    isStale,
     error,
   };
 }

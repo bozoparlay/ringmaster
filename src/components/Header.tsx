@@ -22,6 +22,10 @@ interface HeaderProps {
   onSearchChange: (query: string) => void;
   /** Auto-detected repo from git remote */
   detectedRepo?: { owner: string; repo: string };
+  /** Project config is stale (>24h) */
+  isProjectStale?: boolean;
+  /** Refresh project detection */
+  onRefreshProject?: () => Promise<void>;
 }
 
 const RECENT_PATHS_KEY = 'ringmaster-recent-paths';
@@ -43,11 +47,22 @@ function addRecentPath(path: string): void {
   localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT_PATHS)));
 }
 
-export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange, detectedRepo }: HeaderProps) {
+export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange, detectedRepo, isProjectStale, onRefreshProject }: HeaderProps) {
   const [showPathPicker, setShowPathPicker] = useState(false);
   const [pathInput, setPathInput] = useState('');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
+  const [isRefreshingProject, setIsRefreshingProject] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleRefreshProject = async () => {
+    if (!onRefreshProject || isRefreshingProject) return;
+    setIsRefreshingProject(true);
+    try {
+      await onRefreshProject();
+    } finally {
+      setIsRefreshingProject(false);
+    }
+  };
 
   useEffect(() => {
     setRecentPaths(getRecentPaths());
@@ -130,6 +145,28 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
             onExport={onExportMarkdown}
             detectedRepo={detectedRepo}
           />
+
+          {/* Stale Detection Warning */}
+          {isProjectStale && onRefreshProject && (
+            <button
+              onClick={handleRefreshProject}
+              disabled={isRefreshingProject}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 hover:border-yellow-500/50 transition-colors disabled:opacity-50"
+              title="Project detection is stale. Click to refresh."
+            >
+              <svg
+                className={`w-4 h-4 text-yellow-400 ${isRefreshingProject ? 'animate-spin' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="text-xs text-yellow-400">
+                {isRefreshingProject ? 'Refreshing...' : 'Stale'}
+              </span>
+            </button>
+          )}
 
           {/* Sync Button (only shown in github mode when configured) */}
           {storageMode === 'github' && onSync && (

@@ -28,7 +28,7 @@ export default function Home() {
   const [syncError, setSyncError] = useState<string | null>(null);
 
   // Auto-detect project from git remote
-  const { project, isLoading: isProjectLoading } = useProjectConfig();
+  const { project, isStale: isProjectStale, refreshProject, isLoading: isProjectLoading } = useProjectConfig();
 
   // Load last path from localStorage on mount
   useEffect(() => {
@@ -130,6 +130,8 @@ export default function Home() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
+        isProjectStale={isProjectStale}
+        onRefreshProject={refreshProject}
       />
 
       {/* Error banner */}
