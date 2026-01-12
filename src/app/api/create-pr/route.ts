@@ -12,6 +12,8 @@ interface CreatePRRequest {
   branch: string;
   baseBranch?: string;
   backlogPath?: string;
+  /** GitHub issue number to link - adds "Closes #N" to PR body */
+  githubIssueNumber?: number;
 }
 
 interface PRResult {
@@ -24,7 +26,7 @@ interface PRResult {
 export async function POST(request: Request): Promise<NextResponse<PRResult>> {
   try {
     const body = await request.json() as CreatePRRequest;
-    const { taskId, title, description, branch, baseBranch = 'main', backlogPath } = body;
+    const { taskId, title, description, branch, baseBranch = 'main', backlogPath, githubIssueNumber } = body;
 
     if (!taskId || !title || !branch) {
       return NextResponse.json(
@@ -103,8 +105,13 @@ export async function POST(request: Request): Promise<NextResponse<PRResult>> {
       // Continue to create PR
     }
 
-    // Build PR body
-    const prBody = description || `Automated PR for task: ${title}`;
+    // Build PR body with optional GitHub issue reference
+    let prBody = description || `Automated PR for task: ${title}`;
+
+    // Add "Closes #N" to link the PR to the GitHub issue
+    if (githubIssueNumber) {
+      prBody = `Closes #${githubIssueNumber}\n\n${prBody}`;
+    }
 
     // Escape title and body for shell
     const escapedTitle = title.replace(/"/g, '\\"').replace(/`/g, '\\`');

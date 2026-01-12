@@ -25,6 +25,7 @@ import { Toast, ToastType } from './Toast';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
 import { GitHubSyncService, getGitHubSyncConfig, isGitHubSyncConfigured } from '@/lib/storage/github-sync';
 import { getStorageMode } from '@/lib/storage/factory';
+import { getUserGitHubConfig, getProjectConfig } from '@/lib/storage/project-config';
 
 interface ScopeAnalysis {
   aligned: boolean;
@@ -155,6 +156,7 @@ export function KanbanBoard({
           branch: item.branch,
           worktreePath: item.worktreePath,
           backlogPath,
+          githubIssueNumber: item.githubIssueNumber, // Pass for "Closes #N" in PR
         }),
       });
 
@@ -181,6 +183,41 @@ export function KanbanBoard({
     if (!reviewItem) return;
     // Move to ready_to_ship
     await onUpdateItem({ ...reviewItem, status: 'ready_to_ship' });
+
+    // Update GitHub labels if linked (remove "in-progress", add "review")
+    if (reviewItem.githubIssueNumber && getStorageMode() === 'github') {
+      const userConfig = getUserGitHubConfig();
+      const syncConfig = getGitHubSyncConfig();
+
+      if (userConfig?.token && syncConfig?.repo) {
+        try {
+          const shipResponse = await fetch('/api/github/ship', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userConfig.token}`,
+            },
+            body: JSON.stringify({
+              issueNumber: reviewItem.githubIssueNumber,
+              repo: syncConfig.repo,
+              fromLabel: 'status: in-progress',
+              toLabel: 'status: review',
+            }),
+          });
+
+          const shipResult = await shipResponse.json();
+          if (shipResult.success) {
+            console.log(`[Ringmaster] Updated GitHub Issue #${reviewItem.githubIssueNumber} labels for review`);
+          } else {
+            console.warn('[Ringmaster] Ship label update returned error:', shipResult.error);
+          }
+        } catch (error) {
+          console.warn('[Ringmaster] Failed to update GitHub issue labels:', error);
+          // Don't fail the review operation - GitHub sync is best-effort
+        }
+      }
+    }
+
     setIsReviewOpen(false);
     setReviewItem(null);
     showToast('Task moved to Ready to Ship!', 'success');
@@ -525,18 +562,43 @@ export function KanbanBoard({
         }
       }
 
-      // Close GitHub issue if linked
-      if (item.githubIssueNumber && getStorageMode() === 'github' && isGitHubSyncConfigured()) {
-        try {
-          const config = getGitHubSyncConfig();
-          if (config) {
-            const syncService = new GitHubSyncService(config);
-            await syncService.closeIssue(item.githubIssueNumber);
-            console.log(`[Ringmaster] Closed GitHub Issue #${item.githubIssueNumber}`);
+      // Update GitHub issue labels and close if linked
+      if (item.githubIssueNumber && getStorageMode() === 'github') {
+        const userConfig = getUserGitHubConfig();
+        const syncConfig = getGitHubSyncConfig();
+
+        if (userConfig?.token && syncConfig?.repo) {
+          // First, update labels (remove in-progress/review, add ready-to-ship)
+          try {
+            await fetch('/api/github/ship', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${userConfig.token}`,
+              },
+              body: JSON.stringify({
+                issueNumber: item.githubIssueNumber,
+                repo: syncConfig.repo,
+                fromLabel: 'status: review',
+                toLabel: 'status: ready-to-ship',
+              }),
+            });
+            console.log(`[Ringmaster] Updated GitHub Issue #${item.githubIssueNumber} labels for ship`);
+          } catch (error) {
+            console.warn('[Ringmaster] Failed to update GitHub issue labels:', error);
           }
-        } catch (error) {
-          console.warn('[Ringmaster] Failed to close GitHub issue:', error);
-          // Don't fail the ship operation - GitHub sync is best-effort
+
+          // Then close the issue
+          try {
+            if (isGitHubSyncConfigured() && syncConfig) {
+              const syncService = new GitHubSyncService(syncConfig);
+              await syncService.closeIssue(item.githubIssueNumber);
+              console.log(`[Ringmaster] Closed GitHub Issue #${item.githubIssueNumber}`);
+            }
+          } catch (error) {
+            console.warn('[Ringmaster] Failed to close GitHub issue:', error);
+            // Don't fail the ship operation - GitHub sync is best-effort
+          }
         }
       }
 
@@ -588,20 +650,49 @@ export function KanbanBoard({
     }
 
     // Sync status to GitHub if linked
-    if (item.githubIssueNumber && getStorageMode() === 'github' && isGitHubSyncConfigured()) {
-      try {
-        const config = getGitHubSyncConfig();
-        if (config) {
-          const syncService = new GitHubSyncService(config);
-          await syncService.updateIssue(item.githubIssueNumber, {
-            ...item,
-            status: 'in_progress',
+    if (item.githubIssueNumber && getStorageMode() === 'github') {
+      const userConfig = getUserGitHubConfig();
+      const syncConfig = getGitHubSyncConfig();
+
+      if (userConfig?.token && syncConfig?.repo) {
+        try {
+          // Call the tackle endpoint to assign and label the issue
+          const tackleResponse = await fetch('/api/github/tackle', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userConfig.token}`,
+            },
+            body: JSON.stringify({
+              issueNumber: item.githubIssueNumber,
+              repo: syncConfig.repo,
+            }),
           });
-          console.log(`[Ringmaster] Updated GitHub Issue #${item.githubIssueNumber} to in_progress`);
+
+          const tackleResult = await tackleResponse.json();
+          if (tackleResult.success) {
+            console.log(`[Ringmaster] Tackled GitHub Issue #${item.githubIssueNumber} - assigned to ${tackleResult.username}, labeled: ${tackleResult.labeled}`);
+          } else {
+            console.warn('[Ringmaster] Tackle API returned error:', tackleResult.error);
+          }
+        } catch (error) {
+          console.warn('[Ringmaster] Failed to tackle GitHub issue:', error);
+          // Don't fail the tackle operation - GitHub sync is best-effort
         }
-      } catch (error) {
-        console.warn('[Ringmaster] Failed to update GitHub issue status:', error);
-        // Don't fail the tackle operation - GitHub sync is best-effort
+
+        // Also update the issue status
+        try {
+          if (isGitHubSyncConfigured() && syncConfig) {
+            const syncService = new GitHubSyncService(syncConfig);
+            await syncService.updateIssue(item.githubIssueNumber, {
+              ...item,
+              status: 'in_progress',
+            });
+            console.log(`[Ringmaster] Updated GitHub Issue #${item.githubIssueNumber} status to in_progress`);
+          }
+        } catch (error) {
+          console.warn('[Ringmaster] Failed to update GitHub issue status:', error);
+        }
       }
     }
 

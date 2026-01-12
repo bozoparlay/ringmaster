@@ -38,6 +38,8 @@ export default function Home() {
     dismissPrompt,
     connectGitHub,
     isGitHubRepo,
+    isGitHubConnected,
+    gitHubUser,
   } = useProjectConfig();
 
   // Load last path from localStorage on mount
@@ -151,6 +153,9 @@ export default function Home() {
         detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
         isProjectStale={isProjectStale}
         onRefreshProject={refreshProject}
+        gitHubUser={gitHubUser}
+        isGitHubConnected={isGitHubConnected}
+        onOpenGitHubSettings={() => setIsGitHubSettingsOpen(true)}
       />
 
       {/* Error banner */}
