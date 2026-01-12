@@ -55,6 +55,7 @@ export function StorageModeSelector({ onModeChange, onExport, compact = false, d
   const handleModeSelect = (mode: StorageMode) => {
     // If selecting GitHub mode and not configured, open settings first
     if (mode === 'github' && !isGitHubConfigured) {
+      setIsOpen(false); // Close dropdown before opening modal
       setIsGitHubModalOpen(true);
       return;
     }
