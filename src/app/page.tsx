@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Header, KanbanBoard, NewTaskModal, CleanupWizard, ProjectSelector } from '@/components';
+import { Header, KanbanBoard, NewTaskModal, CleanupWizard, ProjectSelector, GitHubConnectionPrompt, GitHubSettingsModal } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
+import { useProjectConfig } from '@/hooks/useProjectConfig';
 import { GitHubSyncService, getGitHubSyncConfig } from '@/lib/storage/github-sync';
 
 const LAST_PATH_KEY = 'ringmaster-last-path';
@@ -21,10 +22,25 @@ export default function Home() {
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [isCleanupOpen, setIsCleanupOpen] = useState(false);
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
+  const [isGitHubSettingsOpen, setIsGitHubSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Auto-detect project from git remote
+  const {
+    project,
+    isStale: isProjectStale,
+    refreshProject,
+    isLoading: isProjectLoading,
+    showGitHubPrompt,
+    dismissPrompt,
+    connectGitHub,
+    isGitHubRepo,
+    isGitHubConnected,
+    gitHubUser,
+  } = useProjectConfig();
 
   // Load last path from localStorage on mount
   useEffect(() => {
@@ -105,9 +121,18 @@ export default function Home() {
   };
 
   return (
-    <main className="h-screen flex flex-col bg-surface-950 relative overflow-hidden">
-      {/* Header */}
-      <Header
+    <>
+      {/* GitHub Connection Prompt (first-time experience) - outside main for z-index */}
+      <GitHubConnectionPrompt
+        isOpen={showGitHubPrompt && isGitHubRepo}
+        repo={project ? { owner: project.owner, repo: project.repo } : undefined}
+        onConnect={() => setIsGitHubSettingsOpen(true)}
+        onDismiss={dismissPrompt}
+      />
+
+      <main className="h-screen flex flex-col bg-surface-950 relative overflow-hidden">
+        {/* Header */}
+        <Header
         filePath={filePath}
         fileExists={fileExists}
         storageMode={storageMode}
@@ -125,6 +150,12 @@ export default function Home() {
         onCleanup={() => setIsCleanupOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
+        isProjectStale={isProjectStale}
+        onRefreshProject={refreshProject}
+        gitHubUser={gitHubUser}
+        isGitHubConnected={isGitHubConnected}
+        onOpenGitHubSettings={() => setIsGitHubSettingsOpen(true)}
       />
 
       {/* Error banner */}
@@ -189,6 +220,19 @@ export default function Home() {
         currentPath={filePath}
         onSelectPath={handleChangePath}
       />
+
+      {/* GitHub Settings Modal */}
+      <GitHubSettingsModal
+        isOpen={isGitHubSettingsOpen}
+        onClose={() => setIsGitHubSettingsOpen(false)}
+        onConnect={() => {
+          setIsGitHubSettingsOpen(false);
+          // Refresh to pick up the new storage mode
+          window.location.reload();
+        }}
+        detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
+      />
     </main>
+    </>
   );
 }

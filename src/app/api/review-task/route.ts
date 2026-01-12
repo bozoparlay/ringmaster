@@ -24,6 +24,8 @@ interface ReviewRequest {
   branch?: string;
   worktreePath?: string;
   backlogPath?: string;
+  /** GitHub issue number to link in PR (for "Closes #N") */
+  githubIssueNumber?: number;
 }
 
 interface ReviewIssue {
@@ -186,7 +188,7 @@ Focus on real bugs and issues, not style preferences.`;
 
 export async function POST(request: Request) {
   try {
-    const { taskId, title, description, branch, worktreePath, backlogPath } =
+    const { taskId, title, description, branch, worktreePath, backlogPath, githubIssueNumber } =
       await request.json() as ReviewRequest;
 
     if (!taskId || !title) {
@@ -294,6 +296,7 @@ export async function POST(request: Request) {
             branch: targetBranch,
             baseBranch: defaultBranch,
             backlogPath,
+            githubIssueNumber, // Link PR to GitHub issue with "Closes #N"
           }),
         });
 

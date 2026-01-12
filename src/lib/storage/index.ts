@@ -32,7 +32,15 @@ export type {
   SyncResult,
   SyncError,
   GitHubIssueData,
+  // Project Integration Types (Phase 0)
+  GitProvider,
+  UserGitHubConfig,
+  ProjectConfig,
+  RepoInfoResponse,
+  GitHubStatusResponse,
 } from './types';
+
+export { DEFAULT_GITHUB_LABELS } from './types';
 
 // Storage Providers
 export { LocalStorageTaskStore, getStorageKey, hasLocalStorageData, clearLocalStorageData } from './local-storage';
@@ -69,3 +77,29 @@ export {
   clearGitHubSyncConfig,
   type GitHubSyncConfig,
 } from './github-sync';
+
+// Project Configuration (Phase 0)
+export {
+  // User-level config
+  getUserGitHubConfig,
+  setUserGitHubConfig,
+  clearUserGitHubConfig,
+  hasUserGitHubConfig,
+  // Project-level config
+  getProjectConfig,
+  setProjectConfig,
+  updateProjectConfig,
+  deleteProjectConfig,
+  getProjectKey,
+  isProjectConfigStale,
+  createProjectConfig,
+  initializeGitHubSettings,
+  // Migration
+  migrateOldGitHubConfig,
+  // Prompt helpers
+  dismissProjectPrompt,
+  shouldShowPrompt,
+  // Debug helpers
+  getAllProjectConfigs,
+  clearAllProjectConfigs,
+} from './project-config';

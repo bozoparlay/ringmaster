@@ -364,6 +364,115 @@ export class GitHubSyncService {
   }
 
   /**
+   * Assign an issue to a user
+   * Used when tackling a task to indicate who is working on it
+   */
+  async assignIssue(issueNumber: number, assignees: string[]): Promise<void> {
+    await this.request(
+      `/repos/${this.config.repo}/issues/${issueNumber}/assignees`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ assignees }),
+      }
+    );
+  }
+
+  /**
+   * Add labels to an issue without removing existing ones
+   * Used for adding "in-progress" label when tackling
+   */
+  async addLabels(issueNumber: number, labels: string[]): Promise<void> {
+    await this.request(
+      `/repos/${this.config.repo}/issues/${issueNumber}/labels`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ labels }),
+      }
+    );
+  }
+
+  /**
+   * Remove labels from an issue
+   * Used for removing "in-progress" when shipping
+   */
+  async removeLabel(issueNumber: number, label: string): Promise<void> {
+    try {
+      await this.request(
+        `/repos/${this.config.repo}/issues/${issueNumber}/labels/${encodeURIComponent(label)}`,
+        {
+          method: 'DELETE',
+        }
+      );
+    } catch (error) {
+      // Ignore 404 errors (label wasn't on the issue)
+      if (error instanceof Error && error.message.includes('404')) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Handle tackle workflow: assign user and add in-progress label
+   * @param issueNumber The GitHub issue number
+   * @param username The GitHub username to assign
+   * @param inProgressLabel The label to add (default: "status: in-progress")
+   */
+  async handleTackle(
+    issueNumber: number,
+    username: string,
+    inProgressLabel: string = 'status: in-progress'
+  ): Promise<{ assigned: boolean; labeled: boolean }> {
+    const result = { assigned: false, labeled: false };
+
+    try {
+      await this.assignIssue(issueNumber, [username]);
+      result.assigned = true;
+    } catch (error) {
+      console.error('[GitHubSync] Failed to assign issue:', error);
+    }
+
+    try {
+      await this.addLabels(issueNumber, [inProgressLabel]);
+      result.labeled = true;
+    } catch (error) {
+      console.error('[GitHubSync] Failed to add label:', error);
+    }
+
+    return result;
+  }
+
+  /**
+   * Handle ship workflow: update labels for review/ready state
+   * @param issueNumber The GitHub issue number
+   * @param fromLabel Label to remove (e.g., "status: in-progress")
+   * @param toLabel Label to add (e.g., "status: review")
+   */
+  async handleShip(
+    issueNumber: number,
+    fromLabel: string = 'status: in-progress',
+    toLabel: string = 'status: review'
+  ): Promise<{ removedLabel: boolean; addedLabel: boolean }> {
+    const result = { removedLabel: false, addedLabel: false };
+
+    try {
+      await this.removeLabel(issueNumber, fromLabel);
+      result.removedLabel = true;
+    } catch (error) {
+      console.error('[GitHubSync] Failed to remove label:', error);
+    }
+
+    try {
+      await this.addLabels(issueNumber, [toLabel]);
+      result.addedLabel = true;
+    } catch (error) {
+      console.error('[GitHubSync] Failed to add label:', error);
+    }
+
+    return result;
+  }
+
+  /**
    * Perform a full sync between local tasks and GitHub
    */
   async sync(localTasks: BacklogItem[]): Promise<SyncResult> {

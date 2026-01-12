@@ -20,10 +20,43 @@ interface HeaderProps {
   onCleanup?: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  /** Auto-detected repo from git remote */
+  detectedRepo?: { owner: string; repo: string };
+  /** Project config is stale (>24h) */
+  isProjectStale?: boolean;
+  /** Refresh project detection */
+  onRefreshProject?: () => Promise<void>;
+  /** Connected GitHub user info */
+  gitHubUser?: { login: string; name: string; avatarUrl: string } | null;
+  /** Whether GitHub connection is active */
+  isGitHubConnected?: boolean;
+  /** Open GitHub settings */
+  onOpenGitHubSettings?: () => void;
+  /** Last sync timestamp */
+  lastSyncAt?: string;
 }
 
 const RECENT_PATHS_KEY = 'ringmaster-recent-paths';
 const MAX_RECENT_PATHS = 5;
+
+/**
+ * Format a timestamp as a relative time string (e.g., "5m ago", "2h ago")
+ */
+function formatRelativeTime(isoString: string): string {
+  const now = Date.now();
+  const then = new Date(isoString).getTime();
+  const diffMs = now - then;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffSec < 60) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHour < 24) return `${diffHour}h ago`;
+  if (diffDay === 1) return 'yesterday';
+  return `${diffDay}d ago`;
+}
 
 function getRecentPaths(): string[] {
   if (typeof window === 'undefined') return [];
@@ -41,11 +74,22 @@ function addRecentPath(path: string): void {
   localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT_PATHS)));
 }
 
-export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange }: HeaderProps) {
+export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange, detectedRepo, isProjectStale, onRefreshProject, gitHubUser, isGitHubConnected, onOpenGitHubSettings, lastSyncAt }: HeaderProps) {
   const [showPathPicker, setShowPathPicker] = useState(false);
   const [pathInput, setPathInput] = useState('');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
+  const [isRefreshingProject, setIsRefreshingProject] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleRefreshProject = async () => {
+    if (!onRefreshProject || isRefreshingProject) return;
+    setIsRefreshingProject(true);
+    try {
+      await onRefreshProject();
+    } finally {
+      setIsRefreshingProject(false);
+    }
+  };
 
   useEffect(() => {
     setRecentPaths(getRecentPaths());
@@ -126,7 +170,69 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
               onRefresh();
             }}
             onExport={onExportMarkdown}
+            detectedRepo={detectedRepo}
           />
+
+          {/* Stale Detection Warning */}
+          {isProjectStale && onRefreshProject && (
+            <button
+              onClick={handleRefreshProject}
+              disabled={isRefreshingProject}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 hover:border-yellow-500/50 transition-colors disabled:opacity-50"
+              title="Project detection is stale. Click to refresh."
+            >
+              <svg
+                className={`w-4 h-4 text-yellow-400 ${isRefreshingProject ? 'animate-spin' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="text-xs text-yellow-400">
+                {isRefreshingProject ? 'Refreshing...' : 'Stale'}
+              </span>
+            </button>
+          )}
+
+          {/* GitHub Status Indicator */}
+          {storageMode === 'github' && (
+            <button
+              onClick={onOpenGitHubSettings}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                isGitHubConnected
+                  ? 'bg-green-500/10 border border-green-500/30 hover:border-green-500/50'
+                  : 'bg-surface-900/50 border border-surface-800 hover:border-surface-700'
+              }`}
+              title={isGitHubConnected ? `Connected as ${gitHubUser?.login || 'unknown'}` : 'Connect to GitHub'}
+            >
+              {isGitHubConnected && gitHubUser?.avatarUrl ? (
+                <img
+                  src={gitHubUser.avatarUrl}
+                  alt={gitHubUser.login}
+                  className="w-5 h-5 rounded-full"
+                />
+              ) : (
+                <div className={`w-2 h-2 rounded-full ${isGitHubConnected ? 'bg-green-500' : 'bg-surface-500'}`} />
+              )}
+              <span className={`text-xs ${isGitHubConnected ? 'text-green-400' : 'text-surface-400'}`}>
+                {isGitHubConnected ? (gitHubUser?.login || 'Connected') : 'Connect'}
+              </span>
+              {/* Connection status dot */}
+              {isGitHubConnected && (
+                <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+              )}
+            </button>
+          )}
+
+          {/* Last Sync Timestamp */}
+          {storageMode === 'github' && isGitHubConnected && lastSyncAt && (
+            <span className="text-xs text-surface-500" title={`Last synced: ${new Date(lastSyncAt).toLocaleString()}`}>
+              Synced {formatRelativeTime(lastSyncAt)}
+            </span>
+          )}
 
           {/* Sync Button (only shown in github mode when configured) */}
           {storageMode === 'github' && onSync && (
