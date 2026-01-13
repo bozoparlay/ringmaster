@@ -1,14 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Header, KanbanBoard, NewTaskModal, CleanupWizard, ProjectSelector, GitHubConnectionPrompt, GitHubSettingsModal, SyncConflictModal } from '@/components';
+import { useState, useEffect } from 'react';
+import {
+  Header,
+  NewTaskModal,
+  CleanupWizard,
+  ProjectSelector,
+  GitHubConnectionPrompt,
+  GitHubSettingsModal,
+  SourceSelector,
+  BacklogView,
+  GitHubIssuesView,
+  QuickTasksView,
+} from '@/components';
+import type { DataSource } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
 import { useProjectConfig } from '@/hooks/useProjectConfig';
-import { useAutoSync } from '@/hooks/useAutoSync';
-import { getGitHubSyncConfig } from '@/lib/storage/github-sync';
-import type { SyncConflict } from '@/lib/storage/types';
+import { getUserGitHubConfig } from '@/lib/storage/project-config';
 
 const LAST_PATH_KEY = 'ringmaster-last-path';
+const LAST_SOURCE_KEY = 'ringmaster-last-source';
 
 function getLastPath(): string | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -20,6 +31,16 @@ function setLastPath(path: string): void {
   localStorage.setItem(LAST_PATH_KEY, path);
 }
 
+function getLastSource(): DataSource {
+  if (typeof window === 'undefined') return 'backlog';
+  return (localStorage.getItem(LAST_SOURCE_KEY) as DataSource) || 'backlog';
+}
+
+function setLastSource(source: DataSource): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAST_SOURCE_KEY, source);
+}
+
 export default function Home() {
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [isCleanupOpen, setIsCleanupOpen] = useState(false);
@@ -27,29 +48,28 @@ export default function Home() {
   const [isGitHubSettingsOpen, setIsGitHubSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
+  const [activeSource, setActiveSource] = useState<DataSource>('backlog');
 
   // Auto-detect project from git remote
   const {
     project,
     isStale: isProjectStale,
     refreshProject,
-    isLoading: isProjectLoading,
     showGitHubPrompt,
     dismissPrompt,
-    connectGitHub,
     isGitHubRepo,
     isGitHubConnected,
     gitHubUser,
   } = useProjectConfig();
 
-  // Load last path from localStorage on mount
+  // Load last path and source from localStorage on mount
   useEffect(() => {
     const savedPath = getLastPath();
     if (savedPath) {
       setBacklogPath(savedPath);
     }
+    const savedSource = getLastSource();
+    setActiveSource(savedSource);
   }, []);
 
   const {
@@ -61,44 +81,22 @@ export default function Home() {
     signals,
     storageMode,
     addItem,
-    importItem,
     updateItem,
     deleteItem,
     reorderItems,
     updatePRStatus,
     refresh,
     exportToMarkdown,
-    flushPendingWrites,
   } = useBacklog({ path: backlogPath });
-
-  // Auto-sync with GitHub
-  const {
-    status: syncStatus,
-    lastSyncAt,
-    error: autoSyncError,
-    isOnline,
-    sync: handleSync,
-    pendingCount,
-    conflicts: autoSyncConflicts,
-  } = useAutoSync({
-    items,
-    onUpdateItem: updateItem,
-    onImportItem: importItem,
-    enabled: isGitHubConnected,
-    onConflicts: (conflicts) => setSyncConflicts(conflicts),
-    onFlushWrites: flushPendingWrites,
-  });
-
-  // Update syncError from autoSync
-  useEffect(() => {
-    if (autoSyncError) {
-      setSyncError(autoSyncError);
-    }
-  }, [autoSyncError]);
 
   const handleChangePath = (newPath: string) => {
     setBacklogPath(newPath);
     setLastPath(newPath);
+  };
+
+  const handleSourceChange = (source: DataSource) => {
+    setActiveSource(source);
+    setLastSource(source);
   };
 
   const handleNewTask = async (task: { title: string; description: string; priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday'; effort?: 'trivial' | 'low' | 'medium' | 'high' | 'very_high'; value?: 'low' | 'medium' | 'high'; category?: string; acceptanceCriteria?: string[] }) => {
@@ -106,39 +104,28 @@ export default function Home() {
     setIsNewTaskOpen(false);
   };
 
-  // Handle conflict resolution
-  const handleResolveConflict = useCallback(async (taskId: string, resolution: 'local' | 'remote') => {
-    const conflict = syncConflicts.find(c => c.taskId === taskId);
-    if (!conflict) return;
+  // Get GitHub token for the GitHub view
+  const githubConfig = getUserGitHubConfig();
 
-    const config = getGitHubSyncConfig();
-    if (!config) return;
+  // Calculate counts for each source
+  const sourceCounts = {
+    backlog: items.length,
+    github: 0, // Will be updated by GitHubIssuesView internally
+    quick: 0, // Will be updated by QuickTasksView internally
+  };
 
-    if (resolution === 'local') {
-      // Keep local: push local version to GitHub (force update)
-      const localTask = items.find(t => t.id === taskId);
-      if (localTask) {
-        // Clear lastLocalModifiedAt to allow push
-        await updateItem({
-          ...localTask,
-          lastSyncedAt: undefined, // Clear sync timestamp to force push
-        }, { fromSync: true });
-        // Re-sync to push the local version
-        await handleSync();
+  // Try to get quick tasks count from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('ringmaster:quick-tasks');
+      if (stored) {
+        const tasks = JSON.parse(stored);
+        sourceCounts.quick = tasks.length;
       }
-    } else {
-      // Keep remote: update local with remote version
-      await updateItem({
-        ...conflict.remoteVersion,
-        syncStatus: 'synced',
-        lastSyncedAt: new Date().toISOString(),
-      }, { fromSync: true });
+    } catch {
+      // Ignore errors
     }
-
-    // Remove this conflict from the list
-    setSyncConflicts(prev => prev.filter(c => c.taskId !== taskId));
-    setSyncError(null);
-  }, [syncConflicts, items, updateItem, handleSync]);
+  }, [activeSource]);
 
   return (
     <>
@@ -153,114 +140,108 @@ export default function Home() {
       <main className="h-screen flex flex-col bg-surface-950 relative overflow-hidden">
         {/* Header */}
         <Header
-        filePath={filePath}
-        fileExists={fileExists}
-        storageMode={storageMode}
-        onNewTask={() => setIsNewTaskOpen(true)}
-        onRefresh={refresh}
-        onChangePath={handleChangePath}
-        onStorageModeChange={() => {
-          // Storage mode changed - page will reload data via refresh
-          // The useBacklog hook will reinitialize with the new mode
-          window.location.reload();
-        }}
-        onExportMarkdown={exportToMarkdown}
-        onSync={handleSync}
-        isSyncing={syncStatus === 'syncing'}
-        onCleanup={() => setIsCleanupOpen(true)}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
-        isProjectStale={isProjectStale}
-        onRefreshProject={refreshProject}
-        gitHubUser={gitHubUser}
-        isGitHubConnected={isGitHubConnected}
-        onOpenGitHubSettings={() => setIsGitHubSettingsOpen(true)}
-      />
+          filePath={filePath}
+          fileExists={fileExists}
+          storageMode={storageMode}
+          onNewTask={() => setIsNewTaskOpen(true)}
+          onRefresh={refresh}
+          onChangePath={handleChangePath}
+          onStorageModeChange={() => {
+            window.location.reload();
+          }}
+          onExportMarkdown={exportToMarkdown}
+          onSync={undefined} // No auto-sync in new architecture
+          isSyncing={false}
+          onCleanup={() => setIsCleanupOpen(true)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
+          isProjectStale={isProjectStale}
+          onRefreshProject={refreshProject}
+          gitHubUser={gitHubUser}
+          isGitHubConnected={isGitHubConnected}
+          onOpenGitHubSettings={() => setIsGitHubSettingsOpen(true)}
+        />
 
-      {/* Error banner */}
-      {error && (
-        <div className="px-6 py-3 bg-red-500/10 border-b border-red-500/20">
-          <p className="text-sm text-red-400">{error}</p>
+        {/* Source Selector Tabs */}
+        <SourceSelector
+          source={activeSource}
+          onSourceChange={handleSourceChange}
+          counts={sourceCounts}
+        />
+
+        {/* Error banner */}
+        {error && activeSource === 'backlog' && (
+          <div className="px-6 py-3 bg-red-500/10 border-b border-red-500/20">
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Content based on active source */}
+        <div className="flex-1 overflow-hidden">
+          {activeSource === 'backlog' && (
+            <BacklogView
+              items={items}
+              onUpdateItem={updateItem}
+              onDeleteItem={deleteItem}
+              onReorderItems={reorderItems}
+              onNewTask={() => setIsNewTaskOpen(true)}
+              isLoading={loading}
+              searchQuery={searchQuery}
+              backlogPath={filePath ?? undefined}
+              signals={signals}
+              onUpdatePRStatus={updatePRStatus}
+            />
+          )}
+
+          {activeSource === 'github' && (
+            <GitHubIssuesView
+              repo={project ? { owner: project.owner, repo: project.repo } : undefined}
+              token={githubConfig?.token}
+            />
+          )}
+
+          {activeSource === 'quick' && (
+            <QuickTasksView />
+          )}
         </div>
-      )}
 
-      {/* Sync error banner */}
-      {syncError && (
-        <div className="px-6 py-3 bg-yellow-500/10 border-b border-yellow-500/20 flex items-center justify-between">
-          <p className="text-sm text-yellow-400">{syncError}</p>
-          <button
-            onClick={() => setSyncError(null)}
-            className="text-yellow-400 hover:text-yellow-300 p-1"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
+        {/* New Task Modal (from header button) */}
+        <NewTaskModal
+          isOpen={isNewTaskOpen}
+          onClose={() => setIsNewTaskOpen(false)}
+          onSubmit={handleNewTask}
+          backlogPath={filePath ?? undefined}
+        />
 
-      {/* Board */}
-      <div className="flex-1 overflow-hidden">
-        <KanbanBoard
+        {/* Cleanup Wizard */}
+        <CleanupWizard
+          isOpen={isCleanupOpen}
+          onClose={() => setIsCleanupOpen(false)}
           items={items}
           onUpdateItem={updateItem}
-          onDeleteItem={deleteItem}
-          onReorderItems={reorderItems}
-          onNewTask={() => setIsNewTaskOpen(true)}
-          isLoading={loading}
-          searchQuery={searchQuery}
-          backlogPath={filePath ?? undefined}
-          signals={signals}
-          onUpdatePRStatus={updatePRStatus}
+          workDir={filePath ? filePath.replace(/\/[^/]+$/, '') : undefined}
         />
-      </div>
 
-      {/* New Task Modal (from header button) */}
-      <NewTaskModal
-        isOpen={isNewTaskOpen}
-        onClose={() => setIsNewTaskOpen(false)}
-        onSubmit={handleNewTask}
-        backlogPath={filePath ?? undefined}
-      />
+        {/* Project Selector */}
+        <ProjectSelector
+          isOpen={isProjectSelectorOpen}
+          onClose={() => setIsProjectSelectorOpen(false)}
+          currentPath={filePath}
+          onSelectPath={handleChangePath}
+        />
 
-      {/* Cleanup Wizard */}
-      <CleanupWizard
-        isOpen={isCleanupOpen}
-        onClose={() => setIsCleanupOpen(false)}
-        items={items}
-        onUpdateItem={updateItem}
-        workDir={filePath ? filePath.replace(/\/[^/]+$/, '') : undefined}
-      />
-
-      {/* Project Selector */}
-      <ProjectSelector
-        isOpen={isProjectSelectorOpen}
-        onClose={() => setIsProjectSelectorOpen(false)}
-        currentPath={filePath}
-        onSelectPath={handleChangePath}
-      />
-
-      {/* GitHub Settings Modal */}
-      <GitHubSettingsModal
-        isOpen={isGitHubSettingsOpen}
-        onClose={() => setIsGitHubSettingsOpen(false)}
-        onConnect={() => {
-          setIsGitHubSettingsOpen(false);
-          // Refresh to pick up the new storage mode
-          window.location.reload();
-        }}
-        detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
-      />
-
-      {/* Sync Conflict Resolution Modal */}
-      <SyncConflictModal
-        isOpen={syncConflicts.length > 0}
-        onClose={() => setSyncConflicts([])}
-        conflicts={syncConflicts}
-        onResolve={handleResolveConflict}
-      />
-    </main>
+        {/* GitHub Settings Modal */}
+        <GitHubSettingsModal
+          isOpen={isGitHubSettingsOpen}
+          onClose={() => setIsGitHubSettingsOpen(false)}
+          onConnect={() => {
+            setIsGitHubSettingsOpen(false);
+            window.location.reload();
+          }}
+          detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
+        />
+      </main>
     </>
   );
 }

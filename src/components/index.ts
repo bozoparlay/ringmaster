@@ -14,3 +14,6 @@ export { GitHubSettingsModal } from './GitHubSettingsModal';
 export { GitHubConnectionPrompt } from './GitHubConnectionPrompt';
 export { SyncConflictModal } from './SyncConflictModal';
 export { MigrationWizard } from './MigrationWizard';
+export { SourceSelector } from './SourceSelector';
+export type { DataSource } from './SourceSelector';
+export { BacklogView, GitHubIssuesView, QuickTasksView } from './views';

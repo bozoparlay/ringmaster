@@ -1,0 +1,292 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { TaskCard } from '../TaskCard';
+import { Toast, ToastType } from '../Toast';
+import type { BacklogItem, Priority, Effort, Status } from '@/types/backlog';
+
+interface GitHubIssue {
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+  labels: Array<{ name: string; color: string }>;
+  assignee: { login: string } | null;
+  user: { login: string };
+}
+
+// Convert GitHub issue to BacklogItem format for display
+function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
+  // Extract priority from labels if present
+  let priority: Priority = 'medium';
+  const priorityLabel = issue.labels.find(l => l.name.startsWith('priority:'));
+  if (priorityLabel) {
+    const p = priorityLabel.name.replace('priority:', '').trim().toLowerCase();
+    if (['critical', 'high', 'medium', 'low', 'someday'].includes(p)) {
+      priority = p as Priority;
+    }
+  }
+
+  // Extract effort from labels if present
+  let effort: Effort | undefined;
+  const effortLabel = issue.labels.find(l => l.name.startsWith('effort:'));
+  if (effortLabel) {
+    const e = effortLabel.name.replace('effort:', '').trim().toLowerCase().replace(' ', '_');
+    if (['trivial', 'low', 'medium', 'high', 'very_high'].includes(e)) {
+      effort = e as Effort;
+    }
+  }
+
+  // Determine status from labels
+  let status: Status = 'backlog';
+  if (issue.labels.some(l => l.name === 'status: in-progress')) {
+    status = 'in_progress';
+  } else if (issue.labels.some(l => l.name === 'status: review')) {
+    status = 'review';
+  } else if (issue.labels.some(l => l.name === 'status: ready-to-ship')) {
+    status = 'ready_to_ship';
+  }
+
+  // Extract tags from other labels
+  const tags = issue.labels
+    .filter(l => !l.name.startsWith('priority:') && !l.name.startsWith('effort:') && !l.name.startsWith('status:'))
+    .map(l => l.name);
+
+  return {
+    id: `github-${issue.number}`,
+    title: issue.title,
+    description: issue.body || '',
+    priority,
+    effort,
+    status,
+    tags,
+    category: 'GitHub Issues',
+    createdAt: issue.created_at,
+    updatedAt: issue.updated_at,
+    order: issue.number,
+    githubIssueNumber: issue.number,
+    githubIssueUrl: issue.html_url,
+  };
+}
+
+interface GitHubIssuesViewProps {
+  repo?: { owner: string; repo: string };
+  token?: string;
+  onTackle?: (item: BacklogItem) => void;
+}
+
+export function GitHubIssuesView({ repo, token, onTackle }: GitHubIssuesViewProps) {
+  const [issues, setIssues] = useState<GitHubIssue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<BacklogItem | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+
+  const showToast = (message: string, type: ToastType) => {
+    setToast({ message, type });
+  };
+
+  const fetchIssues = useCallback(async () => {
+    if (!repo) {
+      setLoading(false);
+      setError('No repository configured. Open Settings to connect GitHub.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(
+        `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues?state=open&per_page=100`,
+        { headers }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('GitHub authentication failed. Check your token in Settings.');
+        } else if (response.status === 404) {
+          throw new Error(`Repository ${repo.owner}/${repo.repo} not found.`);
+        } else if (response.status === 403) {
+          throw new Error('API rate limit exceeded. Try again later or add a GitHub token.');
+        }
+        throw new Error(`GitHub API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      // Filter out pull requests (they also come through the issues API)
+      const issuesOnly = data.filter((issue: GitHubIssue & { pull_request?: unknown }) => !issue.pull_request);
+      setIssues(issuesOnly);
+    } catch (err) {
+      console.error('Failed to fetch GitHub issues:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch issues');
+    } finally {
+      setLoading(false);
+    }
+  }, [repo, token]);
+
+  useEffect(() => {
+    fetchIssues();
+  }, [fetchIssues]);
+
+  const items = issues.map(issueToBacklogItem);
+
+  // Group by status
+  const backlogItems = items.filter(i => i.status === 'backlog');
+  const inProgressItems = items.filter(i => i.status === 'in_progress');
+  const reviewItems = items.filter(i => i.status === 'review');
+  const readyToShipItems = items.filter(i => i.status === 'ready_to_ship');
+
+  const handleItemClick = (item: BacklogItem) => {
+    setSelectedItem(item);
+    // Open the GitHub issue in a new tab
+    if (item.githubIssueUrl) {
+      window.open(item.githubIssueUrl, '_blank');
+    }
+  };
+
+  const handleTackle = (item: BacklogItem) => {
+    if (onTackle) {
+      onTackle(item);
+    } else {
+      showToast('Tackle from GitHub view coming in Phase 3!', 'info');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          <p className="text-surface-400 text-sm">Loading GitHub issues...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center">
+          <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+            <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <p className="text-surface-300">{error}</p>
+          <button
+            onClick={fetchIssues}
+            className="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-200 rounded-lg text-sm transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center">
+          <div className="w-12 h-12 rounded-full bg-surface-800 flex items-center justify-center">
+            <svg className="w-6 h-6 text-surface-400" fill="currentColor" viewBox="0 0 24 24">
+              <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10Z" />
+            </svg>
+          </div>
+          <p className="text-surface-300">No open issues found</p>
+          <p className="text-surface-500 text-sm">
+            {repo ? `in ${repo.owner}/${repo.repo}` : 'Connect a repository to see issues'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-surface-800/50">
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-surface-500 uppercase tracking-wider">
+            {repo?.owner}/{repo?.repo}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-xs text-surface-500">
+          <span className="font-mono">{items.length} open issues</span>
+          <button
+            onClick={fetchIssues}
+            className="p-1.5 hover:bg-surface-800 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Issues Grid */}
+      <div className="flex-1 overflow-auto p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {/* In Progress Section */}
+          {inProgressItems.length > 0 && (
+            <div className="col-span-full">
+              <h3 className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
+                In Progress ({inProgressItems.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+                {inProgressItems.map(item => (
+                  <TaskCard
+                    key={item.id}
+                    item={item}
+                    onClick={() => handleItemClick(item)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Backlog Section */}
+          {backlogItems.length > 0 && (
+            <div className="col-span-full">
+              <h3 className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-surface-500" />
+                Open ({backlogItems.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {backlogItems.map(item => (
+                  <TaskCard
+                    key={item.id}
+                    item={item}
+                    onClick={() => handleItemClick(item)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </div>
+  );
+}
