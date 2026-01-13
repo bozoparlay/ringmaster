@@ -11,6 +11,8 @@ import { getGitHubSyncConfig } from '@/lib/storage/github-sync';
 import { TaskQualityScore } from './TaskQualityScore';
 import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
 import { InlineOptionSelector } from './InlineOptionSelector';
+import { GitHubIssuePicker } from './GitHubIssuePicker';
+import { getUserGitHubConfig } from '@/lib/storage/project-config';
 
 // Helper to get configured GitHub repo
 function getGitHubRepo(): string | null {
@@ -950,6 +952,45 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               placeholder="Add tag and press Enter..."
             />
           </div>
+
+          {/* GitHub Issue Link - Only show for Backlog view (not GitHub view) */}
+          {!isGitHubView && (
+            <div>
+              <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+                GitHub Issue
+              </label>
+              {(() => {
+                const repo = getGitHubRepo();
+                const githubConfig = getUserGitHubConfig();
+                const token = githubConfig?.token;
+
+                if (!repo || !token) {
+                  return (
+                    <div className="px-3 py-2 bg-surface-800/50 border border-surface-700/50 rounded-lg">
+                      <p className="text-xs text-surface-500">
+                        Configure GitHub in Settings to link issues
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <GitHubIssuePicker
+                    repo={repo}
+                    token={token}
+                    value={editedItem.githubIssueNumber}
+                    onChange={(issueNumber, issueUrl) => {
+                      setEditedItem({
+                        ...editedItem,
+                        githubIssueNumber: issueNumber,
+                        githubIssueUrl: issueUrl,
+                      });
+                    }}
+                  />
+                );
+              })()}
+            </div>
+          )}
 
           {/* Metadata */}
           <div className="pt-4 border-t border-surface-800">
