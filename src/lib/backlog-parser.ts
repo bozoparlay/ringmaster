@@ -3,9 +3,11 @@ import type { BacklogItem, Priority, Status, Effort, Value } from '@/types/backl
 
 /**
  * Regex to parse ringmaster metadata comment
- * Format: <!-- ringmaster:id=uuid github=123 synced=2026-01-12T03:00:00Z status=synced -->
+ * New simplified format: <!-- ringmaster:id=uuid github=123 -->
+ * Legacy format also supported for backward compatibility: <!-- ringmaster:id=uuid github=123 synced=... status=... -->
+ * The synced and status fields are ignored during parsing (not used in new architecture)
  */
-const RINGMASTER_META_REGEX = /<!--\s*ringmaster:id=([^\s]+)(?:\s+github=(\d+))?(?:\s+synced=([^\s]+))?(?:\s+status=([^\s]+))?\s*-->/;
+const RINGMASTER_META_REGEX = /<!--\s*ringmaster:id=([^\s]+)(?:\s+github=(\d+))?(?:\s+synced=[^\s]+)?(?:\s+status=[^\s]+)?\s*-->/;
 
 /**
  * Parses a BACKLOG.md file into BacklogItem objects
@@ -250,26 +252,16 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
     const notesMatch = taskContent.match(/\*\*Notes\*\*:\s*\n([\s\S]*?)(?=\n\*\*|\n---|\n###|$)/i);
     const notes = notesMatch ? notesMatch[1].trim() : undefined;
 
-    // Extract ringmaster metadata comment (preserves id, github issue, sync info)
+    // Extract ringmaster metadata comment (preserves id and github issue reference)
+    // Note: synced and status fields in legacy comments are ignored (not used in new architecture)
     const ringmasterMetaMatch = taskContent.match(RINGMASTER_META_REGEX);
     let taskId: string | undefined;
     let githubIssueNumber: number | undefined;
-    let lastSyncedAt: string | undefined;
-    let syncStatus: 'synced' | 'pending' | 'conflict' | 'error' | 'local-only' | undefined;
 
     if (ringmasterMetaMatch) {
       taskId = ringmasterMetaMatch[1];
       if (ringmasterMetaMatch[2]) {
         githubIssueNumber = parseInt(ringmasterMetaMatch[2], 10);
-      }
-      if (ringmasterMetaMatch[3]) {
-        lastSyncedAt = ringmasterMetaMatch[3];
-      }
-      if (ringmasterMetaMatch[4]) {
-        const statusVal = ringmasterMetaMatch[4] as typeof syncStatus;
-        if (['synced', 'pending', 'conflict', 'error', 'local-only'].includes(statusVal || '')) {
-          syncStatus = statusVal;
-        }
       }
     }
 
@@ -320,10 +312,8 @@ function extractTasksFromCategory(category: CategorySection, order: number): { i
       branch,
       worktreePath,
       reviewFeedback,
-      // GitHub sync fields (preserved from metadata comment)
+      // GitHub issue reference (for linking, not sync)
       githubIssueNumber,
-      lastSyncedAt,
-      syncStatus,
     });
   }
 
@@ -410,16 +400,11 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
       for (const item of sorted) {
         lines.push(`### ${item.title}`);
 
-        // Write ringmaster metadata comment to preserve id, github issue, sync info
+        // Write ringmaster metadata comment to preserve id and github issue reference
+        // Note: sync fields (synced=, status=) are no longer written in new architecture
         const metaCommentParts = [`ringmaster:id=${item.id}`];
         if (item.githubIssueNumber) {
           metaCommentParts.push(`github=${item.githubIssueNumber}`);
-        }
-        if (item.lastSyncedAt) {
-          metaCommentParts.push(`synced=${item.lastSyncedAt}`);
-        }
-        if (item.syncStatus) {
-          metaCommentParts.push(`status=${item.syncStatus}`);
         }
         lines.push(`<!-- ${metaCommentParts.join(' ')} -->`);
 

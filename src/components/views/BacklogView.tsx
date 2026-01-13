@@ -579,8 +579,6 @@ export function BacklogView({
             ...item,
             githubIssueNumber: undefined,
             githubIssueUrl: undefined,
-            lastSyncedAt: undefined,
-            syncStatus: undefined,
           });
           showToast(`Unlinked task from GitHub Issue #${item.githubIssueNumber}`, 'info');
           setSelectedItem(null);

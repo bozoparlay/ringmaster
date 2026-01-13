@@ -293,17 +293,13 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     }
   }, [items, saveItems]);
 
-  const updateItem = useCallback(async (updatedItem: BacklogItem, options?: { fromSync?: boolean }) => {
+  const updateItem = useCallback(async (updatedItem: BacklogItem) => {
     const now = new Date().toISOString();
     const newItems = items.map(item =>
       item.id === updatedItem.id
         ? {
             ...updatedItem,
-            // Don't update updatedAt for sync operations - preserve existing value
-            // This prevents false "local modified" detection on next sync
-            updatedAt: options?.fromSync ? (item.updatedAt || now) : now,
-            // Only set lastLocalModifiedAt for non-sync updates
-            lastLocalModifiedAt: options?.fromSync ? item.lastLocalModifiedAt : now,
+            updatedAt: now,
           }
         : item
     );

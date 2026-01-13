@@ -556,14 +556,12 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
-                        if (confirm(`Unlink this task from GitHub Issue #${editedItem.githubIssueNumber}? The issue will remain on GitHub but won't sync with this task.`)) {
+                        if (confirm(`Unlink this task from GitHub Issue #${editedItem.githubIssueNumber}? The issue will remain on GitHub but won't be linked to this task.`)) {
                           await onUnlinkGitHub(editedItem);
                           setEditedItem({
                             ...editedItem,
                             githubIssueNumber: undefined,
                             githubIssueUrl: undefined,
-                            lastSyncedAt: undefined,
-                            syncStatus: undefined,
                           });
                         }
                       }}

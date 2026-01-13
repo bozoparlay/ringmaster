@@ -26,14 +26,9 @@ export interface BacklogItem {
   branch?: string;           // Git branch name (e.g., "task/abc12345-feature-name")
   worktreePath?: string;     // Path to git worktree (e.g., ".tasks/task-abc12345")
   reviewFeedback?: string;   // Feedback from code review if it failed
-  // GitHub sync fields
-  githubIssueNumber?: number;    // Linked GitHub issue number
+  // GitHub issue reference (for linking, not sync)
+  githubIssueNumber?: number;    // Linked GitHub issue number (simple reference)
   githubIssueUrl?: string;       // Full URL for quick access
-  lastSyncedAt?: string;         // ISO timestamp of last successful sync
-  lastLocalModifiedAt?: string;  // ISO timestamp of last local change
-  lastRemoteModifiedAt?: string; // ISO timestamp from GitHub's updated_at
-  syncStatus?: 'synced' | 'pending' | 'conflict' | 'error' | 'local-only';
-  syncError?: string;            // Last sync error message if any
   // Quality tracking (computed on load, not persisted)
   qualityScore?: number;     // 0-100 quality score
   qualityIssues?: string[];  // List of quality issues found
