@@ -101,9 +101,10 @@ interface GitHubIssuesViewProps {
   repo?: { owner: string; repo: string };
   token?: string;
   onTackle?: (item: BacklogItem) => void;
+  onAddToBacklog?: (item: BacklogItem) => Promise<void>;
 }
 
-export function GitHubIssuesView({ repo, token, onTackle }: GitHubIssuesViewProps) {
+export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitHubIssuesViewProps) {
   const [issues, setIssues] = useState<GitHubIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -469,6 +470,11 @@ export function GitHubIssuesView({ repo, token, onTackle }: GitHubIssuesViewProp
           showToast('Close issues directly on GitHub', 'info');
         }}
         onTackle={handleTackle}
+        onAddToBacklog={onAddToBacklog ? async (item) => {
+          await onAddToBacklog(item);
+          showToast(`Added "${item.title}" to Backlog`, 'success');
+          setIsPanelOpen(false);
+        } : undefined}
         isGitHubView
       />
 

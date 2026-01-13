@@ -22,6 +22,8 @@ import { TackleModal } from '../TackleModal';
 import { ReviewModal } from '../ReviewModal';
 import { Toast, ToastType } from '../Toast';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
+import { getGitHubSyncConfig } from '@/lib/storage/github-sync';
+import { getUserGitHubConfig } from '@/lib/storage/project-config';
 
 // Priority levels in order from highest to lowest
 const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
@@ -583,6 +585,45 @@ export function BacklogView({
           showToast(`Unlinked task from GitHub Issue #${item.githubIssueNumber}`, 'info');
           setSelectedItem(null);
           setIsPanelOpen(false);
+        }}
+        onSendToGitHub={async (item) => {
+          const syncConfig = getGitHubSyncConfig();
+          const userConfig = getUserGitHubConfig();
+          const repo = syncConfig?.repo;
+          const token = userConfig?.token;
+
+          if (!repo || !token) {
+            showToast('Configure GitHub in settings to send items', 'error');
+            throw new Error('GitHub not configured');
+          }
+
+          const response = await fetch('/api/github/create-issue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: item.title,
+              body: item.description || '',
+              labels: item.tags || [],
+              repo,
+              token,
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            showToast(data.error || 'Failed to create issue', 'error');
+            throw new Error(data.error || 'Failed to create issue');
+          }
+
+          // Update the item with the new GitHub link
+          await onUpdateItem({
+            ...item,
+            githubIssueNumber: data.issue.number,
+            githubIssueUrl: data.issue.url,
+          });
+
+          showToast(`Created GitHub Issue #${data.issue.number}`, 'success');
+          return { issueNumber: data.issue.number, issueUrl: data.issue.url };
         }}
         backlogPath={backlogPath}
       />

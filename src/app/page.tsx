@@ -81,6 +81,7 @@ export default function Home() {
     signals,
     storageMode,
     addItem,
+    importItem,
     updateItem,
     deleteItem,
     reorderItems,
@@ -198,11 +199,18 @@ export default function Home() {
             <GitHubIssuesView
               repo={project ? { owner: project.owner, repo: project.repo } : undefined}
               token={githubConfig?.token}
+              onAddToBacklog={async (item) => {
+                await importItem(item);
+              }}
             />
           )}
 
           {activeSource === 'quick' && (
-            <QuickTasksView />
+            <QuickTasksView
+              onPromoteToBacklog={async (item) => {
+                await importItem(item);
+              }}
+            />
           )}
         </div>
 

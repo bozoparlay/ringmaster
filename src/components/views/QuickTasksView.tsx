@@ -432,6 +432,15 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
         onSave={handleSaveTask}
         onDelete={handleDeleteTask}
         onTackle={handleTackle}
+        onAddToBacklog={onPromoteToBacklog ? async (item) => {
+          onPromoteToBacklog(item);
+          // Remove from quick tasks after promoting
+          setTasks(prev => prev.filter(t => t.id !== item.id));
+          showToast(`Promoted "${item.title}" to Backlog`, 'success');
+          setIsPanelOpen(false);
+          setSelectedItem(null);
+        } : undefined}
+        isQuickTaskView
       />
 
       {/* Tackle Modal */}
