@@ -229,9 +229,9 @@ const sync = useCallback(async () => {
 
 ### Phase 3: Recovery & Cleanup Tools
 
-- [ ] **T3.1**: Add CLI command to deduplicate GitHub issues
-- [ ] **T3.2**: Add "unlink task from GitHub" action in UI
-- [ ] **T3.3**: Add "sync health check" diagnostic endpoint
+- [x] **T3.1**: Add CLI command to deduplicate GitHub issues
+- [x] **T3.2**: Add "unlink task from GitHub" action in UI
+- [x] **T3.3**: Add "sync health check" diagnostic endpoint
 
 ---
 

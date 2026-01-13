@@ -784,6 +784,19 @@ export function KanbanBoard({
         onTackle={handleTackle}
         onReview={triggerReview}
         onShip={handleShip}
+        onUnlinkGitHub={async (item) => {
+          // Clear GitHub sync fields and save
+          await onUpdateItem({
+            ...item,
+            githubIssueNumber: undefined,
+            githubIssueUrl: undefined,
+            lastSyncedAt: undefined,
+            syncStatus: undefined,
+          });
+          showToast(`Unlinked task from GitHub Issue #${item.githubIssueNumber}`, 'info');
+          setSelectedItem(null);
+          setIsPanelOpen(false);
+        }}
         backlogPath={backlogPath}
       />
 
