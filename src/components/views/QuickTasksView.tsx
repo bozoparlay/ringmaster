@@ -395,6 +395,7 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
                 isLoading={loading}
                 activeTaskId={undefined}
                 upNextIds={upNextIds}
+                onAddItem={status === 'backlog' ? onNewTask : undefined}
               />
             ))}
           </div>

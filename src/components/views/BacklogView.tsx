@@ -550,6 +550,7 @@ export function BacklogView({
                 isLoading={isLoading}
                 activeTaskId={undefined}
                 upNextIds={upNextIds}
+                onAddItem={status === 'backlog' ? onNewTask : undefined}
               />
             ))}
           </div>
