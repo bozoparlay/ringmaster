@@ -110,11 +110,6 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleStartWork = () => {
-    onStartWork(item);
-    onClose();
-  };
-
   const handleLaunch = async () => {
     if (!item) return;
 
@@ -325,43 +320,31 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
             )}
           </button>
 
-          {/* Secondary actions */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleCopy}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all
-                ${copied
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                  : 'bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700'
-                }`}
-            >
-              {copied ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Copy Plan
-                </>
-              )}
-            </button>
-            <button
-              onClick={handleStartWork}
-              className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Mark In Progress
-            </button>
-          </div>
+          {/* Secondary action */}
+          <button
+            onClick={handleCopy}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all
+              ${copied
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                : 'bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700'
+              }`}
+          >
+            {copied ? (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy Plan
+              </>
+            )}
+          </button>
         </div>
       </div>
     </>
