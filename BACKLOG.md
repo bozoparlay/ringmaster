@@ -3,7 +3,7 @@
 ## [backlog] Infrastructure
 
 ### Setup docker container
-<!-- ringmaster:id=9c61fdbe-e455-48a7-bd78-0da67e0b6a5e github=402 synced=2026-01-13T16:35:32.231Z status=synced -->
+<!-- ringmaster:id=9c61fdbe-e455-48a7-bd78-0da67e0b6a5e github=402 -->
 **Priority**: High | **Effort**: Medium
 
 **Description**:
@@ -28,7 +28,7 @@ Create a .devcontainer directory in the project root with devcontainer.json conf
 ## [backlog] Technical Debt
 
 ### Improve Grading of Tasks
-<!-- ringmaster:id=fecf956f-234f-454a-bbfe-3d2702f9a0db github=403 synced=2026-01-13T05:05:26.948Z status=synced -->
+<!-- ringmaster:id=fecf956f-234f-454a-bbfe-3d2702f9a0db github=403 -->
 **Priority**: Medium | **Effort**: Medium
 
 **Description**:
@@ -52,7 +52,7 @@ Update the task scoring service to implement a weighted scoring model. Consider 
 ## [backlog] UI/UX Improvements
 
 ### Fix drag and drop
-<!-- ringmaster:id=6707b0dd-edf4-4b69-86a0-65f2d1bcd1c9 github=404 synced=2026-01-13T05:09:14.088Z status=synced -->
+<!-- ringmaster:id=6707b0dd-edf4-4b69-86a0-65f2d1bcd1c9 github=404 -->
 **Priority**: High | **Effort**: Medium
 
 **Description**:
@@ -103,14 +103,14 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 ## [backlog] Uncategorized
 
 ### Improve Needs Rescope Indicator
-<!-- ringmaster:id=248b5807-1beb-49eb-8507-175c771a1ec8 github=405 synced=2026-01-13T05:05:15.912Z status=synced -->
+<!-- ringmaster:id=248b5807-1beb-49eb-8507-175c771a1ec8 github=405 -->
 **Priority**: Medium | **Effort**: Medium
 
 **Description**:
 Currently it's just a red dot on the top right, make it a caution sign on the top left in the same style as the star for the up next item
 
 ### Improve Column Labels
-<!-- ringmaster:id=7b266aba-1375-4d05-881a-fce535992397 github=406 synced=2026-01-13T05:03:03.852Z status=synced -->
+<!-- ringmaster:id=7b266aba-1375-4d05-881a-fce535992397 github=406 -->
 **Priority**: Medium | **Effort**: Medium
 
 **Description**:
@@ -118,39 +118,45 @@ Up Next -> Priority
 Ready to Ship -> Ship it
 
 ### Improve Similarity Scoring
-<!-- ringmaster:id=10b8dbdc-0a16-46dd-9883-37c45157764f github=407 synced=2026-01-13T04:59:03.951Z status=synced -->
+<!-- ringmaster:id=10b8dbdc-0a16-46dd-9883-37c45157764f github=407 -->
 **Priority**: Medium | **Effort**: Medium | **Value**: Medium
 
 **Description**:
 Scoring a task that is pretty unique is coming back as having a ton of similarity. We should probably make things more strict as far as similarity goes
 
 ### Add favicon
-<!-- ringmaster:id=354819bc-54e5-4fbb-b226-d3fc30e58f09 github=409 synced=2026-01-13T16:44:17.979Z status=synced -->
+<!-- ringmaster:id=354819bc-54e5-4fbb-b226-d3fc30e58f09 github=409 -->
 **Priority**: Medium | **Effort**: Medium
 
 **Description**:
 Create a nice looking favicon and apply it. Use the frontend design skill
 
 ### Integration Test Task
-<!-- ringmaster:id=d6c06278-7ee6-4e4d-92f5-74a3930e7350 github=411 synced=2026-01-13T17:09:33.276Z status=synced -->
+<!-- ringmaster:id=d6c06278-7ee6-4e4d-92f5-74a3930e7350 github=411 -->
 **Priority**: Medium | **Effort**: Medium
 
 **Description**:
----
 *Priority: medium*
 *Effort: medium*
 *Value: medium*
 
 ---
 
+## [in_progress] Quick Tasks
+
+### Test task for tackle workflow
+<!-- ringmaster:id=80e1ff4e-d7b2-478c-9e30-fe1bdab13c06 -->
+**Priority**: Medium
+
+---
+
 ## [ready_to_ship] Uncategorized
 
 ### Integration Test Task
-<!-- ringmaster:id=46f4d7ae-6373-4f31-8257-e2dab375ee3c github=410 synced=2026-01-13T17:04:33.640Z status=synced -->
+<!-- ringmaster:id=46f4d7ae-6373-4f31-8257-e2dab375ee3c github=410 -->
 **Priority**: Medium | **Effort**: Medium
 
 **Description**:
----
 *Priority: medium*
 *Effort: medium*
 *Value: medium*
