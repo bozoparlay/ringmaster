@@ -3,7 +3,8 @@
 ## [backlog] Infrastructure
 
 ### Setup docker container
-**Priority**: High | **Effort**: Medium | **Value**: High
+<!-- ringmaster:id=9c61fdbe-e455-48a7-bd78-0da67e0b6a5e github=402 synced=2026-01-13T05:03:08.499Z status=synced -->
+**Priority**: High | **Effort**: Medium
 
 **Description**:
 **Description:**
@@ -27,7 +28,8 @@ Create a .devcontainer directory in the project root with devcontainer.json conf
 ## [backlog] Technical Debt
 
 ### Improve Grading of Tasks
-**Priority**: Medium | **Effort**: Medium | **Value**: Medium
+<!-- ringmaster:id=fecf956f-234f-454a-bbfe-3d2702f9a0db github=403 synced=2026-01-13T05:05:26.948Z status=synced -->
+**Priority**: Medium | **Effort**: Medium
 
 **Description**:
 **Description:**
@@ -50,7 +52,8 @@ Update the task scoring service to implement a weighted scoring model. Consider 
 ## [backlog] UI/UX Improvements
 
 ### Fix drag and drop
-**Priority**: High | **Effort**: Medium | **Value**: High
+<!-- ringmaster:id=6707b0dd-edf4-4b69-86a0-65f2d1bcd1c9 github=404 synced=2026-01-13T05:09:14.088Z status=synced -->
+**Priority**: High | **Effort**: Medium
 
 **Description**:
 Fix the broken drag and drop functionality that prevents users from moving betting tiles between the "Up Next" and "In Progress" sections. The current implementation has a usability issue where users must drag tiles to the middle of the target column rather than being able to drop them near the top where the emoji/header is located. This core interaction is essential for users to manage their parlay picks and organize their betting workflow within the Bozo Parlay application.
@@ -100,19 +103,22 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 ## [backlog] Uncategorized
 
 ### Improve Needs Rescope Indicator
-**Priority**: Medium | **Effort**: Medium | **Value**: Medium
+<!-- ringmaster:id=248b5807-1beb-49eb-8507-175c771a1ec8 github=405 synced=2026-01-13T05:05:15.912Z status=synced -->
+**Priority**: Medium | **Effort**: Medium
 
 **Description**:
 Currently it's just a red dot on the top right, make it a caution sign on the top left in the same style as the star for the up next item
 
 ### Improve Column Labels
-**Priority**: Medium | **Effort**: Medium | **Value**: Medium
+<!-- ringmaster:id=7b266aba-1375-4d05-881a-fce535992397 github=406 synced=2026-01-13T05:03:03.852Z status=synced -->
+**Priority**: Medium | **Effort**: Medium
 
 **Description**:
 Up Next -> Priority
 Ready to Ship -> Ship it
 
 ### Improve Similarity Scoring
+<!-- ringmaster:id=10b8dbdc-0a16-46dd-9883-37c45157764f github=407 synced=2026-01-13T04:59:03.951Z status=synced -->
 **Priority**: Medium | **Effort**: Medium | **Value**: Medium
 
 **Description**:

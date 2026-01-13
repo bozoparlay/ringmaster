@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { BacklogItem } from '@/types/backlog';
 import type { SyncConflict } from '@/lib/storage/types';
 
@@ -26,23 +26,45 @@ export function SyncConflictModal({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isResolving, setIsResolving] = useState(false);
 
+  // Reset index when modal closes to prevent stale state on reopen
+  useEffect(() => {
+    if (!isOpen) {
+      setCurrentIndex(0);
+    }
+  }, [isOpen]);
+
+  // Clamp index when conflicts array shrinks (e.g., conflict resolved by parent)
+  useEffect(() => {
+    if (conflicts.length > 0 && currentIndex >= conflicts.length) {
+      setCurrentIndex(conflicts.length - 1);
+    }
+  }, [conflicts.length, currentIndex]);
+
+  // Auto-close modal when all conflicts are resolved
+  useEffect(() => {
+    if (isOpen && conflicts.length === 0) {
+      onClose();
+    }
+  }, [isOpen, conflicts.length, onClose]);
+
   if (!isOpen || conflicts.length === 0) return null;
 
   const currentConflict = conflicts[currentIndex];
   const totalConflicts = conflicts.length;
 
+  // Guard: if currentIndex is out of bounds (parent removed a conflict during render)
+  if (!currentConflict) {
+    return null;
+  }
+
   const handleResolve = async (resolution: 'local' | 'remote') => {
     setIsResolving(true);
     try {
       await onResolve(currentConflict.taskId, resolution);
-
-      // Move to next conflict or close if done
-      if (currentIndex < totalConflicts - 1) {
-        setCurrentIndex(currentIndex + 1);
-      } else {
-        onClose();
-        setCurrentIndex(0);
-      }
+      // Don't change index - the resolved conflict is removed by parent,
+      // so the next conflict slides into the current position.
+      // The useEffect clamps index if we were at the end.
+      // Modal auto-closes when conflicts.length === 0 via early return.
     } finally {
       setIsResolving(false);
     }

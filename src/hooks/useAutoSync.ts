@@ -102,6 +102,7 @@ export function useAutoSync({
   const itemsRef = useRef(items);
   const isSyncingRef = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const syncRef = useRef<() => Promise<void>>();
 
   // Rate limiting state
   const consecutiveErrorsRef = useRef(0);
@@ -295,6 +296,11 @@ export function useAutoSync({
     }
   }, [isOnline, onUpdateItem, onAddItem, onConflicts, onFlushWrites]);
 
+  // Keep sync ref updated (avoids recreating intervals when sync callback changes)
+  useEffect(() => {
+    syncRef.current = sync;
+  }, [sync]);
+
   // Auto-sync on interval
   useEffect(() => {
     if (!enabled || !isOnline) return;
@@ -303,12 +309,12 @@ export function useAutoSync({
 
     // Initial sync after mount
     const initialTimeout = setTimeout(() => {
-      sync();
+      syncRef.current?.();
     }, 3000); // 3 second delay for initial sync
 
     // Interval sync
     intervalRef.current = setInterval(() => {
-      sync();
+      syncRef.current?.();
     }, effectiveInterval);
 
     return () => {
@@ -317,7 +323,7 @@ export function useAutoSync({
         clearInterval(intervalRef.current);
       }
     };
-  }, [enabled, isOnline, syncInterval, sync]);
+  }, [enabled, isOnline, syncInterval]); // Note: sync removed from deps, using syncRef instead
 
   // Sync on tab focus (visibility change)
   useEffect(() => {
@@ -332,7 +338,7 @@ export function useAutoSync({
 
         // Only sync if more than 1 minute since last sync
         if (timeSinceLastSync > 60000) {
-          sync();
+          syncRef.current?.();
         }
       }
     };
@@ -341,18 +347,18 @@ export function useAutoSync({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, isOnline, lastSyncAt, sync]);
+  }, [enabled, isOnline, lastSyncAt]);
 
   // Sync when coming back online
   useEffect(() => {
     if (isOnline && status === 'offline') {
       // Small delay to ensure network is stable
       const timeout = setTimeout(() => {
-        sync();
+        syncRef.current?.();
       }, 1000);
       return () => clearTimeout(timeout);
     }
-  }, [isOnline, status, sync]);
+  }, [isOnline, status]);
 
   // Calculate pending count (tasks with pending sync status)
   const pendingCount = items.filter(t => t.syncStatus === 'pending').length;

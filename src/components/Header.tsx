@@ -80,7 +80,13 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
   const [pathInput, setPathInput] = useState('');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [isRefreshingProject, setIsRefreshingProject] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Track mount state to prevent hydration mismatch for client-only UI
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const handleRefreshProject = async () => {
     if (!onRefreshProject || isRefreshingProject) return;
@@ -228,33 +234,11 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
             </button>
           )}
 
-          {/* Last Sync Timestamp */}
-          {storageMode === 'github' && isGitHubConnected && lastSyncAt && (
+          {/* Last Sync Timestamp (after mount to avoid hydration mismatch) */}
+          {hasMounted && isGitHubConnected && lastSyncAt && (
             <span className="text-xs text-surface-500" title={`Last synced: ${new Date(lastSyncAt).toLocaleString()}`}>
               Synced {formatRelativeTime(lastSyncAt)}
             </span>
-          )}
-
-          {/* Sync Button (shown when GitHub is connected) */}
-          {isGitHubConnected && onSync && (
-            <button
-              onClick={onSync}
-              disabled={isSyncing}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-900/50 border border-surface-800 hover:border-surface-700 transition-colors disabled:opacity-50"
-              title="Sync with GitHub"
-            >
-              <svg
-                className={`w-4 h-4 text-surface-400 ${isSyncing ? 'animate-spin' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span className="text-xs text-surface-400">
-                {isSyncing ? 'Syncing...' : 'Sync'}
-              </span>
-            </button>
           )}
 
           {/* File Status with Picker (only shown in file mode) */}
@@ -340,6 +324,28 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
             </div>
           )}
             </div>
+          )}
+
+          {/* Sync Button (shown when GitHub is connected, after mount to avoid hydration mismatch) */}
+          {hasMounted && isGitHubConnected && onSync && (
+            <button
+              onClick={onSync}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-900/50 border border-surface-800 hover:border-surface-700 transition-colors disabled:opacity-50"
+              title="Sync with GitHub"
+            >
+              <svg
+                className={`w-4 h-4 text-surface-400 ${isSyncing ? 'animate-spin' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="text-xs text-surface-400">
+                {isSyncing ? 'Syncing...' : 'Sync'}
+              </span>
+            </button>
           )}
         </div>
 

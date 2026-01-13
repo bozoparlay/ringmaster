@@ -94,11 +94,10 @@ export function useProjectConfig(): UseProjectConfigReturn {
 
   // Derived state
   const isGitHubRepo = project?.provider === 'github';
-  // Connected if: (1) in github mode AND (2) have token from localStorage OR server
-  // Check both project config storageMode AND global storageMode (they can be out of sync)
+  // Connected if: have token from localStorage OR server (sync works in any storage mode)
   const hasLocalToken = !!getUserGitHubConfig()?.token;
   const effectiveStorageMode = globalStorageMode || config?.storageMode || 'local';
-  const isGitHubConnected = effectiveStorageMode === 'github' && (hasLocalToken || hasServerCredentials);
+  const isGitHubConnected = hasLocalToken || hasServerCredentials;
   const storageMode = config?.storageMode || 'local';
   const isStale = config ? isProjectConfigStale(config) : false;
 
