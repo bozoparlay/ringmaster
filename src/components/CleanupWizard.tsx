@@ -175,7 +175,7 @@ Preserve all existing information while making it actionable and specific.`;
       {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className="w-full max-w-4xl bg-surface-900 border border-surface-700/50 rounded-2xl shadow-2xl animate-scale-in max-h-[90vh] flex flex-col"
+          className="w-full max-w-6xl bg-surface-900 border border-surface-700/50 rounded-2xl shadow-2xl animate-scale-in max-h-[90vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
