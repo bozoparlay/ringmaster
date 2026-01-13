@@ -33,6 +33,8 @@ interface UseBacklogReturn {
   signals: AuxiliarySignals;
   storageMode: StorageMode;
   addItem: (title: string, description?: string, priority?: Priority, effort?: Effort, value?: Value, category?: string) => Promise<void>;
+  /** Import a full BacklogItem (preserves ID) - used for sync to avoid creating duplicates */
+  importItem: (item: BacklogItem) => Promise<void>;
   updateItem: (item: BacklogItem, options?: { fromSync?: boolean }) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   moveItem: (id: string, newStatus: Status) => Promise<void>;
@@ -274,13 +276,32 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     });
   }, [items, signals, filePath, scheduleWrite]);
 
+  // Import a full BacklogItem (preserves ID) - used for sync to avoid creating duplicates
+  const importItem = useCallback(async (item: BacklogItem) => {
+    // Check if item with this ID already exists
+    const existingIndex = items.findIndex(i => i.id === item.id);
+
+    if (existingIndex >= 0) {
+      // Update existing item instead of creating duplicate
+      console.log(`[backlog] importItem: Item ${item.id} already exists, updating instead`);
+      const newItems = items.map((i, idx) => idx === existingIndex ? item : i);
+      await saveItems(newItems);
+    } else {
+      // Add as new item
+      const newItems = [...items, item];
+      await saveItems(newItems);
+    }
+  }, [items, saveItems]);
+
   const updateItem = useCallback(async (updatedItem: BacklogItem, options?: { fromSync?: boolean }) => {
     const now = new Date().toISOString();
     const newItems = items.map(item =>
       item.id === updatedItem.id
         ? {
             ...updatedItem,
-            updatedAt: now,
+            // Don't update updatedAt for sync operations - preserve existing value
+            // This prevents false "local modified" detection on next sync
+            updatedAt: options?.fromSync ? (item.updatedAt || now) : now,
             // Only set lastLocalModifiedAt for non-sync updates
             lastLocalModifiedAt: options?.fromSync ? item.lastLocalModifiedAt : now,
           }
@@ -354,6 +375,7 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     signals,
     storageMode,
     addItem,
+    importItem,
     updateItem,
     deleteItem,
     moveItem,

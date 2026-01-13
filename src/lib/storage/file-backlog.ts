@@ -117,9 +117,10 @@ export class FileBacklogTaskStore implements TaskStorageProvider {
     };
 
     // Get all items, add new one, save all
-    const items = await this.getAll();
-    items.push(newItem);
-    await this.saveAll(items);
+    // IMPORTANT: Create new array to avoid mutating cached items
+    const existingItems = await this.getAll();
+    const newItems = [...existingItems, newItem];
+    await this.saveAll(newItems);
 
     return newItem;
   }

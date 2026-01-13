@@ -348,6 +348,18 @@ export function parseBacklogMd(content: string): BacklogItem[] {
 export function serializeBacklogMd(items: BacklogItem[]): string {
   const lines: string[] = ['# Backlog\n'];
 
+  // Deduplicate items by ID to prevent duplicate entries
+  // Keep the last occurrence (most recently updated) if duplicates exist
+  const seenIds = new Map<string, BacklogItem>();
+  for (const item of items) {
+    seenIds.set(item.id, item);
+  }
+  const deduplicatedItems = Array.from(seenIds.values());
+
+  if (deduplicatedItems.length !== items.length) {
+    console.warn(`[serializeBacklogMd] Removed ${items.length - deduplicatedItems.length} duplicate items`);
+  }
+
   // Group by status first, then by category within each status
   const byStatus = new Map<string, Map<string, BacklogItem[]>>();
   // Note: up_next is a virtual status, so we treat it as backlog for serialization
@@ -357,7 +369,7 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
     byStatus.set(status, new Map());
   }
 
-  for (const item of items) {
+  for (const item of deduplicatedItems) {
     const cat = item.category || 'Uncategorized';
     // Normalize up_next status to backlog (up_next is virtual and computed at display time)
     const normalizedStatus = item.status === 'up_next' ? 'backlog' : item.status;

@@ -3,7 +3,7 @@
 ## [backlog] Infrastructure
 
 ### Setup docker container
-<!-- ringmaster:id=9c61fdbe-e455-48a7-bd78-0da67e0b6a5e github=402 synced=2026-01-13T05:03:08.499Z status=synced -->
+<!-- ringmaster:id=9c61fdbe-e455-48a7-bd78-0da67e0b6a5e github=402 synced=2026-01-13T16:35:32.231Z status=synced -->
 **Priority**: High | **Effort**: Medium
 
 **Description**:
@@ -123,5 +123,36 @@ Ready to Ship -> Ship it
 
 **Description**:
 Scoring a task that is pretty unique is coming back as having a ton of similarity. We should probably make things more strict as far as similarity goes
+
+### Add favicon
+<!-- ringmaster:id=354819bc-54e5-4fbb-b226-d3fc30e58f09 github=409 synced=2026-01-13T16:44:17.979Z status=synced -->
+**Priority**: Medium | **Effort**: Medium
+
+**Description**:
+Create a nice looking favicon and apply it. Use the frontend design skill
+
+### Integration Test Task
+<!-- ringmaster:id=d6c06278-7ee6-4e4d-92f5-74a3930e7350 github=411 synced=2026-01-13T17:09:33.276Z status=synced -->
+**Priority**: Medium | **Effort**: Medium
+
+**Description**:
+---
+*Priority: medium*
+*Effort: medium*
+*Value: medium*
+
+---
+
+## [ready_to_ship] Uncategorized
+
+### Integration Test Task
+<!-- ringmaster:id=46f4d7ae-6373-4f31-8257-e2dab375ee3c github=410 synced=2026-01-13T17:04:33.640Z status=synced -->
+**Priority**: Medium | **Effort**: Medium
+
+**Description**:
+---
+*Priority: medium*
+*Effort: medium*
+*Value: medium*
 
 ---

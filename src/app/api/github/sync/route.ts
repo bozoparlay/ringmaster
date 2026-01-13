@@ -747,7 +747,12 @@ export async function POST(request: NextRequest) {
           pullIndex++;
 
           const taskId = extractTaskId(issue.body);
-          const localTask = taskId ? tasks.find(t => t.id === taskId) : localTaskByIssueNumber.get(issue.number);
+          // Try matching by task ID first, then fall back to issue number
+          // This prevents duplicates when GitHub issue body has different ID than local task
+          let localTask = taskId ? tasks.find(t => t.id === taskId) : null;
+          if (!localTask) {
+            localTask = localTaskByIssueNumber.get(issue.number);
+          }
 
           if (!localTask) {
             // Skip closed orphan issues - these are likely cleanup artifacts

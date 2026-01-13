@@ -61,6 +61,7 @@ export default function Home() {
     signals,
     storageMode,
     addItem,
+    importItem,
     updateItem,
     deleteItem,
     reorderItems,
@@ -82,7 +83,7 @@ export default function Home() {
   } = useAutoSync({
     items,
     onUpdateItem: updateItem,
-    onAddItem: addItem,
+    onImportItem: importItem,
     enabled: isGitHubConnected,
     onConflicts: (conflicts) => setSyncConflicts(conflicts),
     onFlushWrites: flushPendingWrites,

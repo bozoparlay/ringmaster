@@ -510,6 +510,37 @@ export function KanbanBoard({
   };
 
   const handleDeleteItem = async (id: string) => {
+    // Find the item to check if it has a GitHub issue
+    const itemToDelete = items.find(item => item.id === id);
+
+    // If the task is synced to GitHub, close the issue first to prevent resurrection
+    if (itemToDelete?.githubIssueNumber) {
+      try {
+        const config = getGitHubSyncConfig();
+        if (config?.repo) {
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          if (config.token && config.token !== 'server-managed') {
+            headers['Authorization'] = `Bearer ${config.token}`;
+          }
+
+          await fetch('/api/github/close-issue', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              repo: config.repo,
+              issueNumber: itemToDelete.githubIssueNumber,
+            }),
+          });
+          console.log(`[Delete] Closed GitHub issue #${itemToDelete.githubIssueNumber}`);
+        }
+      } catch (err) {
+        console.error('[Delete] Failed to close GitHub issue:', err);
+        // Continue with local deletion even if GitHub close fails
+      }
+    }
+
     await onDeleteItem(id);
     setSelectedItem(null);
     setIsPanelOpen(false);

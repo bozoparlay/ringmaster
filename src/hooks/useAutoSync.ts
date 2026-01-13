@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getGitHubSyncConfig } from '@/lib/storage/github-sync';
-import type { BacklogItem, Priority, Effort, Value } from '@/types/backlog';
+import type { BacklogItem } from '@/types/backlog';
 import type { SyncConflict } from '@/lib/storage/types';
 
 // ============================================================================
@@ -38,7 +38,8 @@ export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | '
 interface UseAutoSyncOptions {
   items: BacklogItem[];
   onUpdateItem: (item: BacklogItem, options?: { fromSync?: boolean }) => Promise<void>;
-  onAddItem: (title: string, description?: string, priority?: Priority, effort?: Effort, value?: Value, category?: string) => Promise<void>;
+  /** Import a full BacklogItem (preserves ID) - prevents duplicates from sync */
+  onImportItem: (item: BacklogItem) => Promise<void>;
   /** Auto-sync interval in milliseconds (default: 5 minutes) */
   syncInterval?: number;
   /** Whether auto-sync is enabled */
@@ -86,7 +87,7 @@ const MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes max
 export function useAutoSync({
   items,
   onUpdateItem,
-  onAddItem,
+  onImportItem,
   syncInterval = DEFAULT_SYNC_INTERVAL,
   enabled = true,
   onConflicts,
@@ -229,14 +230,9 @@ export function useAutoSync({
       if (result.pulled && result.pulled.length > 0) {
         for (const pulledTask of result.pulled) {
           if (pulledTask.operation === 'new') {
-            await onAddItem(
-              pulledTask.task.title,
-              pulledTask.task.description || '',
-              pulledTask.task.priority,
-              pulledTask.task.effort,
-              pulledTask.task.value,
-              pulledTask.task.category
-            );
+            // Use importItem to preserve the task ID from GitHub
+            // This prevents creating duplicates on subsequent syncs
+            await onImportItem(pulledTask.task);
           } else if (pulledTask.operation === 'updated' || pulledTask.operation === 'closed') {
             const localTask = itemsRef.current.find(t =>
               t.id === pulledTask.task.id ||
@@ -294,7 +290,7 @@ export function useAutoSync({
     } finally {
       isSyncingRef.current = false;
     }
-  }, [isOnline, onUpdateItem, onAddItem, onConflicts, onFlushWrites]);
+  }, [isOnline, onUpdateItem, onImportItem, onConflicts, onFlushWrites]);
 
   // Keep sync ref updated (avoids recreating intervals when sync callback changes)
   useEffect(() => {
