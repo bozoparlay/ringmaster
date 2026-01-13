@@ -1080,11 +1080,12 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           )}
 
           {/* Submit for Review button (shown when in progress) */}
-          {isInProgress && (
+          {isInProgress && onReview && (
             <button
               onClick={() => {
                 const updatedItem = { ...editedItem, status: 'review' as const };
                 onSave(updatedItem);
+                onReview(updatedItem);
               }}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-cyan-500/25"
             >
