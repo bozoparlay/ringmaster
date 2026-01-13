@@ -33,7 +33,7 @@ interface UseBacklogReturn {
   signals: AuxiliarySignals;
   storageMode: StorageMode;
   addItem: (title: string, description?: string, priority?: Priority, effort?: Effort, value?: Value, category?: string) => Promise<void>;
-  updateItem: (item: BacklogItem) => Promise<void>;
+  updateItem: (item: BacklogItem, options?: { fromSync?: boolean }) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   moveItem: (id: string, newStatus: Status) => Promise<void>;
   reorderItems: (items: BacklogItem[]) => Promise<void>;
@@ -273,10 +273,16 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     });
   }, [items, signals, filePath, scheduleWrite]);
 
-  const updateItem = useCallback(async (updatedItem: BacklogItem) => {
+  const updateItem = useCallback(async (updatedItem: BacklogItem, options?: { fromSync?: boolean }) => {
+    const now = new Date().toISOString();
     const newItems = items.map(item =>
       item.id === updatedItem.id
-        ? { ...updatedItem, updatedAt: new Date().toISOString() }
+        ? {
+            ...updatedItem,
+            updatedAt: now,
+            // Only set lastLocalModifiedAt for non-sync updates
+            lastLocalModifiedAt: options?.fromSync ? item.lastLocalModifiedAt : now,
+          }
         : item
     );
     await saveItems(newItems);

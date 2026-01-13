@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Header, KanbanBoard, NewTaskModal, CleanupWizard, ProjectSelector, GitHubConnectionPrompt, GitHubSettingsModal } from '@/components';
+import { Header, KanbanBoard, NewTaskModal, CleanupWizard, ProjectSelector, GitHubConnectionPrompt, GitHubSettingsModal, SyncConflictModal } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
 import { useProjectConfig } from '@/hooks/useProjectConfig';
-import { GitHubSyncService, getGitHubSyncConfig } from '@/lib/storage/github-sync';
+import { useAutoSync } from '@/hooks/useAutoSync';
+import { getGitHubSyncConfig } from '@/lib/storage/github-sync';
+import type { SyncConflict } from '@/lib/storage/types';
 
 const LAST_PATH_KEY = 'ringmaster-last-path';
 
@@ -25,8 +27,8 @@ export default function Home() {
   const [isGitHubSettingsOpen, setIsGitHubSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
 
   // Auto-detect project from git remote
   const {
@@ -67,58 +69,73 @@ export default function Home() {
     exportToMarkdown,
   } = useBacklog({ path: backlogPath });
 
+  // Auto-sync with GitHub
+  const {
+    status: syncStatus,
+    lastSyncAt,
+    error: autoSyncError,
+    isOnline,
+    sync: handleSync,
+    pendingCount,
+    conflicts: autoSyncConflicts,
+  } = useAutoSync({
+    items,
+    onUpdateItem: updateItem,
+    onAddItem: addItem,
+    enabled: isGitHubConnected,
+    onConflicts: (conflicts) => setSyncConflicts(conflicts),
+  });
+
+  // Update syncError from autoSync
+  useEffect(() => {
+    if (autoSyncError) {
+      setSyncError(autoSyncError);
+    }
+  }, [autoSyncError]);
+
   const handleChangePath = (newPath: string) => {
     setBacklogPath(newPath);
     setLastPath(newPath);
   };
 
-  // GitHub sync handler
-  const handleSync = useCallback(async () => {
-    if (storageMode !== 'github') return;
-
-    const config = getGitHubSyncConfig();
-    if (!config) {
-      setSyncError('GitHub is not configured. Please set up GitHub sync in settings.');
-      return;
-    }
-
-    setIsSyncing(true);
-    setSyncError(null);
-
-    try {
-      const syncService = new GitHubSyncService(config);
-      const result = await syncService.sync(items);
-
-      // Log sync results for debugging
-      console.log('[Ringmaster] Sync completed:', {
-        pushed: result.pushed.length,
-        pulled: result.pulled.length,
-        conflicts: result.conflicts.length,
-        errors: result.errors.length,
-      });
-
-      // If there were pulled changes, refresh the data
-      if (result.pulled.length > 0) {
-        await refresh();
-      }
-
-      // Show errors if any
-      if (result.errors.length > 0) {
-        setSyncError(`Sync completed with ${result.errors.length} error(s). Check console for details.`);
-        result.errors.forEach(err => console.error('[Ringmaster] Sync error:', err));
-      }
-    } catch (error) {
-      console.error('[Ringmaster] Sync failed:', error);
-      setSyncError(error instanceof Error ? error.message : 'Sync failed');
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [storageMode, items, refresh]);
-
   const handleNewTask = async (task: { title: string; description: string; priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday'; effort?: 'trivial' | 'low' | 'medium' | 'high' | 'very_high'; value?: 'low' | 'medium' | 'high'; category?: string; acceptanceCriteria?: string[] }) => {
     await addItem(task.title, task.description, task.priority, task.effort, task.value, task.category);
     setIsNewTaskOpen(false);
   };
+
+  // Handle conflict resolution
+  const handleResolveConflict = useCallback(async (taskId: string, resolution: 'local' | 'remote') => {
+    const conflict = syncConflicts.find(c => c.taskId === taskId);
+    if (!conflict) return;
+
+    const config = getGitHubSyncConfig();
+    if (!config) return;
+
+    if (resolution === 'local') {
+      // Keep local: push local version to GitHub (force update)
+      const localTask = items.find(t => t.id === taskId);
+      if (localTask) {
+        // Clear lastLocalModifiedAt to allow push
+        await updateItem({
+          ...localTask,
+          lastSyncedAt: undefined, // Clear sync timestamp to force push
+        }, { fromSync: true });
+        // Re-sync to push the local version
+        await handleSync();
+      }
+    } else {
+      // Keep remote: update local with remote version
+      await updateItem({
+        ...conflict.remoteVersion,
+        syncStatus: 'synced',
+        lastSyncedAt: new Date().toISOString(),
+      }, { fromSync: true });
+    }
+
+    // Remove this conflict from the list
+    setSyncConflicts(prev => prev.filter(c => c.taskId !== taskId));
+    setSyncError(null);
+  }, [syncConflicts, items, updateItem, handleSync]);
 
   return (
     <>
@@ -146,7 +163,7 @@ export default function Home() {
         }}
         onExportMarkdown={exportToMarkdown}
         onSync={handleSync}
-        isSyncing={isSyncing}
+        isSyncing={syncStatus === 'syncing'}
         onCleanup={() => setIsCleanupOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -231,6 +248,14 @@ export default function Home() {
           window.location.reload();
         }}
         detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
+      />
+
+      {/* Sync Conflict Resolution Modal */}
+      <SyncConflictModal
+        isOpen={syncConflicts.length > 0}
+        onClose={() => setSyncConflicts([])}
+        conflicts={syncConflicts}
+        onResolve={handleResolveConflict}
       />
     </main>
     </>

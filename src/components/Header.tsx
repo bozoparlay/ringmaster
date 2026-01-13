@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { HealthIndicator } from './HealthIndicator';
 import { StorageModeSelector } from './StorageModeSelector';
 import type { StorageMode } from '@/lib/storage';
-import { isGitHubSyncConfigured } from '@/lib/storage';
+// Note: We use the isGitHubConnected prop instead of isGitHubSyncConfigured()
+// to avoid hydration mismatches (localStorage isn't available during SSR)
 
 interface HeaderProps {
   filePath: string | null;
@@ -234,8 +235,8 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
             </span>
           )}
 
-          {/* Sync Button (only shown in github mode when configured) */}
-          {storageMode === 'github' && onSync && (
+          {/* Sync Button (shown when GitHub is connected) */}
+          {isGitHubConnected && onSync && (
             <button
               onClick={onSync}
               disabled={isSyncing}

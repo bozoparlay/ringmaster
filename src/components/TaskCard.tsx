@@ -147,21 +147,25 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
           {item.githubIssueNumber && (
             <span
               className={`ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                item.githubSyncStatus === 'synced'
+                item.syncStatus === 'synced'
                   ? 'text-surface-400 bg-surface-800/50'
-                  : item.githubSyncStatus === 'modified'
+                  : item.syncStatus === 'pending'
                   ? 'text-yellow-400 bg-yellow-500/10 border border-yellow-500/20'
-                  : item.githubSyncStatus === 'conflict'
+                  : item.syncStatus === 'conflict'
+                  ? 'text-red-400 bg-red-500/10 border border-red-500/20'
+                  : item.syncStatus === 'error'
                   ? 'text-red-400 bg-red-500/10 border border-red-500/20'
                   : 'text-surface-500 bg-surface-800/30'
               }`}
               title={
-                item.githubSyncStatus === 'synced'
+                item.syncStatus === 'synced'
                   ? `Synced with GitHub Issue #${item.githubIssueNumber}`
-                  : item.githubSyncStatus === 'modified'
+                  : item.syncStatus === 'pending'
                   ? 'Local changes not yet synced'
-                  : item.githubSyncStatus === 'conflict'
+                  : item.syncStatus === 'conflict'
                   ? 'Sync conflict - needs resolution'
+                  : item.syncStatus === 'error'
+                  ? `Sync error: ${item.syncError || 'Unknown error'}`
                   : `GitHub Issue #${item.githubIssueNumber}`
               }
             >

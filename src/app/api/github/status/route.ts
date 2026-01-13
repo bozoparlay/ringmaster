@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { GitHubStatusResponse } from '@/lib/storage/types';
+import { getGitHubCredentials } from '@/lib/config/github-credentials';
 
 /**
  * GET /api/github/status
  *
  * Validates GitHub configuration and returns connection status.
- * Requires Authorization header with Bearer token.
+ *
+ * Token priority:
+ * 1. GITHUB_TOKEN from .env.local
+ * 2. ~/.ringmaster/config.json
+ * 3. Authorization header (legacy/client-side fallback)
  *
  * Query params:
  * - repo: Repository in "owner/repo" format (required for repo-specific info)
@@ -14,16 +19,33 @@ import type { GitHubStatusResponse } from '@/lib/storage/types';
  * - User info (login, name, avatar)
  * - Repository info (if repo param provided)
  * - Token permissions
+ * - tokenSource: where the token came from ('env', 'file', 'header')
  */
 export async function GET(request: NextRequest) {
-  // Get token from Authorization header
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
+  // Get token - priority: server-side config > Authorization header
+  let token: string | null = null;
+  let tokenSource: 'env' | 'file' | 'header' | 'none' = 'none';
+
+  // 1. Check server-side credentials (env var or config file)
+  const serverCredentials = await getGitHubCredentials();
+  if (serverCredentials) {
+    token = serverCredentials.token;
+    tokenSource = serverCredentials.source;
+  }
+
+  // 2. Fall back to Authorization header (client-side/legacy)
+  if (!token) {
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+      tokenSource = 'header';
+    }
+  }
 
   if (!token) {
     const response: GitHubStatusResponse = {
       connected: false,
-      error: 'No authorization token provided',
+      error: 'No GitHub token configured. Set GITHUB_TOKEN in .env.local or configure via settings.',
     };
     return NextResponse.json(response, { status: 401 });
   }
@@ -58,7 +80,7 @@ export async function GET(request: NextRequest) {
     const userData = await userResponse.json();
 
     // Build response
-    const response: GitHubStatusResponse = {
+    const response: GitHubStatusResponse & { tokenSource?: string } = {
       connected: true,
       user: {
         login: userData.login,
@@ -70,6 +92,7 @@ export async function GET(request: NextRequest) {
         canWriteIssues: false,
         canCreatePRs: false,
       },
+      tokenSource, // Tell client where token came from
     };
 
     // If repo specified, check repo access and permissions

@@ -7,6 +7,7 @@ A kanban-style backlog management tool with AI-powered task analysis and Claude 
 ## Features
 
 - **Kanban Board**: Drag-and-drop tasks across Backlog, Up Next, In Progress, Review, and Ready to Ship columns
+- **GitHub Sync**: Bidirectional sync with GitHub Issues - work offline, auto-merge changes ([workflow guide](docs/guides/github-sync-workflow.md))
 - **AI Assist**: Analyze and enhance task descriptions with Claude via AWS Bedrock
 - **Claude Code Integration**: One-click to open VS Code with task context copied to clipboard
 - **Git Worktrees**: Automatic worktree creation for isolated task development
@@ -72,6 +73,16 @@ Or configure via AWS CLI:
 aws configure --profile your-profile-name
 ```
 
+### GitHub Sync
+
+To sync tasks with GitHub Issues:
+
+1. Generate a [fine-grained PAT](https://github.com/settings/tokens?type=beta) with **Issues: Read and write** permission
+2. Click the GitHub settings icon (or the "Connect GitHub" prompt)
+3. Paste your token and connect
+
+See the [GitHub Sync Workflow Guide](docs/guides/github-sync-workflow.md) for detailed setup instructions.
+
 ### Backlog File
 
 By default, Ringmaster looks for a `BACKLOG.md` file in common locations. You can also drag and drop a markdown file onto the board.
@@ -110,6 +121,9 @@ The health indicator in the header shows real-time server status:
 | `/api/tackle-task` | POST | Open VS Code with task context |
 | `/api/ship-task` | POST | Push branch and create PR |
 | `/api/review-task` | POST | AI code review for task |
+| `/api/github/sync` | POST | Bidirectional sync with GitHub Issues |
+| `/api/github/status` | GET | GitHub connection status |
+| `/api/repo-info` | GET | Git repository info (owner/repo) |
 
 ## Tech Stack
 
@@ -124,16 +138,22 @@ The health indicator in the header shows real-time server status:
 ```
 src/
 ├── app/
-│   ├── api/           # API routes
-│   │   ├── health/    # Health check endpoint
-│   │   ├── backlog/   # Backlog CRUD
-│   │   ├── analyze-task/
+│   ├── api/              # API routes
+│   │   ├── health/       # Health check endpoint
+│   │   ├── backlog/      # Backlog CRUD
+│   │   ├── github/       # GitHub sync & status
 │   │   └── ...
-│   └── page.tsx       # Main app
-├── components/        # React components
+│   └── page.tsx          # Main app
+├── components/           # React components
 │   ├── KanbanBoard.tsx
 │   ├── HealthIndicator.tsx
+│   ├── SyncConflictModal.tsx
 │   └── ...
+├── hooks/
+│   ├── useBacklog.ts     # Backlog state management
+│   ├── useAutoSync.ts    # GitHub auto-sync
+│   └── useProjectConfig.ts
 └── lib/
-    └── resilience.ts  # Timeout, circuit breaker utilities
+    ├── resilience.ts     # Timeout, circuit breaker utilities
+    └── storage/          # Storage providers & GitHub sync
 ```

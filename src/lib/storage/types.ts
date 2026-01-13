@@ -148,9 +148,8 @@ export interface SyncConflict {
   taskId: string;
   issueNumber: number;
   localVersion: BacklogItem;
-  remoteVersion: GitHubIssueData;
-  conflictType: 'both-modified' | 'deleted-remote' | 'deleted-local';
-  detectedAt: string;
+  remoteVersion: BacklogItem;
+  conflictType: 'both-modified' | 'local-deleted' | 'remote-deleted';
 }
 
 /**
@@ -284,7 +283,45 @@ export interface GitHubStatusResponse {
 }
 
 /**
- * Default label mapping for GitHub workflow sync
+ * GitHub label definition with color and description
+ */
+export interface GitHubLabelDef {
+  color: string;
+  description: string;
+}
+
+/**
+ * Comprehensive label schema for GitHub sync
+ * All labels managed by Ringmaster
+ */
+export const GITHUB_LABEL_SCHEMA: Record<string, GitHubLabelDef> = {
+  // Meta label to identify Ringmaster-managed issues
+  'ringmaster': { color: '7057FF', description: 'Managed by Ringmaster' },
+
+  // Priority labels
+  'priority:critical': { color: 'B60205', description: 'Critical priority' },
+  'priority:high': { color: 'D93F0B', description: 'High priority' },
+  'priority:medium': { color: 'FBCA04', description: 'Medium priority' },
+  'priority:low': { color: '0E8A16', description: 'Low priority' },
+  'priority:someday': { color: 'C5DEF5', description: 'Someday/maybe' },
+
+  // Status labels (for Kanban columns)
+  'status:backlog': { color: 'EDEDED', description: 'In backlog' },
+  'status:up-next': { color: 'C2E0C6', description: 'Up next' },
+  'status:in-progress': { color: '0052CC', description: 'In progress' },
+  'status:review': { color: '5319E7', description: 'In review' },
+  'status:ready-to-ship': { color: '0E8A16', description: 'Ready to ship' },
+
+  // Effort labels
+  'effort:trivial': { color: 'BFDADC', description: 'Trivial effort' },
+  'effort:low': { color: 'C2E0C6', description: 'Low effort' },
+  'effort:medium': { color: 'FEF2C0', description: 'Medium effort' },
+  'effort:high': { color: 'F9D0C4', description: 'High effort' },
+  'effort:very-high': { color: 'E99695', description: 'Very high effort' },
+};
+
+/**
+ * Default label mapping for GitHub workflow sync (legacy)
  */
 export const DEFAULT_GITHUB_LABELS = {
   'up-next': 'priority: up-next',

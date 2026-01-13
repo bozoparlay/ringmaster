@@ -95,7 +95,7 @@ export function SyncConflictModal({
           <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
             currentConflict.conflictType === 'both-modified'
               ? 'bg-yellow-500/10 text-yellow-400'
-              : currentConflict.conflictType === 'deleted-remote'
+              : currentConflict.conflictType === 'remote-deleted'
               ? 'bg-red-500/10 text-red-400'
               : 'bg-blue-500/10 text-blue-400'
           }`}>
@@ -107,7 +107,7 @@ export function SyncConflictModal({
                 Both versions modified
               </>
             )}
-            {currentConflict.conflictType === 'deleted-remote' && (
+            {currentConflict.conflictType === 'remote-deleted' && (
               <>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -115,7 +115,7 @@ export function SyncConflictModal({
                 Deleted on GitHub
               </>
             )}
-            {currentConflict.conflictType === 'deleted-local' && (
+            {currentConflict.conflictType === 'local-deleted' && (
               <>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -166,7 +166,7 @@ export function SyncConflictModal({
               <div>
                 <label className="text-xs text-surface-500 uppercase tracking-wide">Last Modified</label>
                 <p className="text-surface-400 text-sm mt-1">
-                  {formatDate(currentConflict.localVersion.updatedAt)}
+                  {currentConflict.localVersion.updatedAt ? formatDate(currentConflict.localVersion.updatedAt) : '(unknown)'}
                 </p>
               </div>
             </div>
@@ -205,27 +205,25 @@ export function SyncConflictModal({
               <div>
                 <label className="text-xs text-surface-500 uppercase tracking-wide">Description</label>
                 <p className="text-surface-300 text-sm mt-1 line-clamp-3">
-                  {currentConflict.remoteVersion.body || '(no description)'}
+                  {currentConflict.remoteVersion.description || '(no description)'}
                 </p>
               </div>
 
               <div className="flex gap-4">
                 <div>
-                  <label className="text-xs text-surface-500 uppercase tracking-wide">State</label>
-                  <p className="text-surface-300 text-sm mt-1">{currentConflict.remoteVersion.state}</p>
+                  <label className="text-xs text-surface-500 uppercase tracking-wide">Status</label>
+                  <p className="text-surface-300 text-sm mt-1">{currentConflict.remoteVersion.status}</p>
                 </div>
                 <div>
-                  <label className="text-xs text-surface-500 uppercase tracking-wide">Labels</label>
-                  <p className="text-surface-300 text-sm mt-1">
-                    {currentConflict.remoteVersion.labels.join(', ') || '(none)'}
-                  </p>
+                  <label className="text-xs text-surface-500 uppercase tracking-wide">Priority</label>
+                  <p className="text-surface-300 text-sm mt-1">{currentConflict.remoteVersion.priority}</p>
                 </div>
               </div>
 
               <div>
                 <label className="text-xs text-surface-500 uppercase tracking-wide">Last Modified</label>
                 <p className="text-surface-400 text-sm mt-1">
-                  {formatDate(currentConflict.remoteVersion.updatedAt)}
+                  {currentConflict.remoteVersion.updatedAt ? formatDate(currentConflict.remoteVersion.updatedAt) : '(unknown)'}
                 </p>
               </div>
             </div>

@@ -40,7 +40,7 @@ export type {
   GitHubStatusResponse,
 } from './types';
 
-export { DEFAULT_GITHUB_LABELS } from './types';
+export { DEFAULT_GITHUB_LABELS, GITHUB_LABEL_SCHEMA, type GitHubLabelDef } from './types';
 
 // Storage Providers
 export { LocalStorageTaskStore, getStorageKey, hasLocalStorageData, clearLocalStorageData } from './local-storage';
