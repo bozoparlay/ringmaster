@@ -19,7 +19,7 @@ import { TaskPanel } from '../TaskPanel';
 import { TackleModal } from '../TackleModal';
 import { Toast, ToastType } from '../Toast';
 import type { BacklogItem, Priority, Status } from '@/types/backlog';
-import { PRIORITY_WEIGHT } from '@/types/backlog';
+import { COLUMN_ORDER, PRIORITY_WEIGHT } from '@/types/backlog';
 import { v4 as uuidv4 } from 'uuid';
 
 export const QUICK_TASKS_KEY = 'ringmaster:quick-tasks';
@@ -62,18 +62,6 @@ export function addQuickTask(task: {
   tasks.push(newTask);
   localStorage.setItem(QUICK_TASKS_KEY, JSON.stringify(tasks));
 }
-
-// Simplified column order for Quick Tasks (no Up Next or Review)
-const QUICK_TASK_COLUMNS: Status[] = ['backlog', 'in_progress', 'ready_to_ship'];
-
-// Column display names for Quick Tasks
-const COLUMN_LABELS: Record<Status, string> = {
-  backlog: 'To Do',
-  up_next: 'Up Next',
-  in_progress: 'In Progress',
-  review: 'Review',
-  ready_to_ship: 'Done',
-};
 
 export interface QuickTasksViewProps {
   onPromoteToBacklog?: (item: BacklogItem) => void;
@@ -220,17 +208,11 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
       : tasks.filter(task => task.priority === priorityFilter);
 
     filtered.forEach((task) => {
-      // Map any status to our simplified columns
-      if (task.status === 'up_next' || task.status === 'review') {
-        // Up Next goes to backlog, Review goes to in_progress for quick tasks
-        columns[task.status === 'up_next' ? 'backlog' : 'in_progress'].push(task);
-      } else {
-        columns[task.status].push(task);
-      }
+      columns[task.status].push(task);
     });
 
     // Sort each column by priority then order
-    QUICK_TASK_COLUMNS.forEach((status) => {
+    COLUMN_ORDER.forEach((status) => {
       columns[status].sort((a, b) => {
         const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
         if (priorityDiff !== 0) return priorityDiff;
@@ -259,7 +241,7 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
     const overId = over.id as string;
 
     // Dropped on a column
-    if (QUICK_TASK_COLUMNS.includes(overId as Status)) {
+    if (COLUMN_ORDER.includes(overId as Status)) {
       const targetStatus = overId as Status;
       if (draggedItem.status !== targetStatus) {
         updateTask({ ...draggedItem, status: targetStatus });
@@ -272,7 +254,7 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
     if (overItem) {
       // Find which column the target item is in
       let targetColumn: Status | null = null;
-      for (const status of QUICK_TASK_COLUMNS) {
+      for (const status of COLUMN_ORDER) {
         if (columnItems[status].some(item => item.id === overId)) {
           targetColumn = status;
           break;
@@ -360,7 +342,7 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
           onDragEnd={handleDragEnd}
         >
           <div className="flex gap-4 p-6 h-full w-full">
-            {QUICK_TASK_COLUMNS.map((status) => (
+            {COLUMN_ORDER.map((status) => (
               <KanbanColumn
                 key={status}
                 status={status}
@@ -368,7 +350,6 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
                 onItemClick={handleItemClick}
                 isLoading={loading}
                 activeTaskId={undefined}
-                columnLabel={COLUMN_LABELS[status]}
               />
             ))}
           </div>

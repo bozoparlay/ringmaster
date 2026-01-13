@@ -326,8 +326,6 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     setTackleItem(null);
   };
 
-  // GitHub-specific column order (no Up Next)
-  const githubColumnOrder: Status[] = ['backlog', 'in_progress', 'review', 'ready_to_ship'];
 
   if (loading) {
     return (
@@ -419,7 +417,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
           onDragEnd={handleDragEnd}
         >
           <div className="flex gap-4 p-6 h-full w-full">
-            {githubColumnOrder.map((status) => (
+            {COLUMN_ORDER.map((status) => (
               <KanbanColumn
                 key={status}
                 status={status}
