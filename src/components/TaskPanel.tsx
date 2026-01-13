@@ -199,8 +199,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const [aiComment, setAiComment] = useState('');
   const [showDiff, setShowDiff] = useState(false);
   const [qualityWarning, setQualityWarning] = useState<{ score: number; issues: string[] } | null>(null);
-  const [showSaveWarning, setShowSaveWarning] = useState(false);
-  const [pendingQuality, setPendingQuality] = useState<{ score: number; issues: string[] } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -224,8 +222,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       setAiComment('');
       setShowDiff(false);
       setQualityWarning(null);
-      setShowSaveWarning(false);
-      setPendingQuality(null);
       setAiError(null);
     }
   }, [item]);
@@ -262,21 +258,14 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, editedItem]);
 
-  const handleSave = (forceIgnoreQuality = false) => {
+  const handleSave = () => {
     if (!editedItem || !editedItem.title.trim()) {
       onClose();
       return;
     }
 
-    // Check quality before saving
+    // Calculate quality score to save with the item
     const quality = validateTaskQuality(editedItem.title, editedItem.description || '', editedItem.acceptanceCriteria);
-
-    // If low quality and not forcing, show warning
-    if (!forceIgnoreQuality && quality.score < QUALITY_THRESHOLD) {
-      setPendingQuality({ score: quality.score, issues: quality.issues });
-      setShowSaveWarning(true);
-      return;
-    }
 
     // Save with quality scores attached
     onSave({
@@ -285,16 +274,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       qualityIssues: quality.issues,
     });
     onClose();
-  };
-
-  const handleForceSave = () => {
-    setShowSaveWarning(false);
-    handleSave(true);
-  };
-
-  const handleCancelSave = () => {
-    setShowSaveWarning(false);
-    setPendingQuality(null);
   };
 
   const handleAddTag = (e: React.KeyboardEvent) => {
@@ -1210,58 +1189,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
         </div>
       </div>
 
-      {/* Low Quality Save Warning Modal */}
-      {showSaveWarning && pendingQuality && (
-        <>
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]" onClick={handleCancelSave} />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-surface-900 border border-surface-700 rounded-xl shadow-2xl z-[60] p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-surface-100 mb-1">Low Quality Task</h3>
-                <p className="text-sm text-surface-400">
-                  This task scores {pendingQuality.score}/100 and may need rescoping later.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-surface-800 rounded-lg p-3 mb-4">
-              <p className="text-xs font-medium text-surface-400 mb-2">Issues found:</p>
-              <ul className="space-y-1">
-                {pendingQuality.issues.map((issue, idx) => (
-                  <li key={idx} className="text-sm text-surface-300 flex items-start gap-2">
-                    <span className="text-red-400">•</span>
-                    {issue}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleCancelSave}
-                className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors"
-              >
-                Go Back & Fix
-              </button>
-              <button
-                onClick={handleForceSave}
-                className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
-              >
-                Save Anyway
-              </button>
-            </div>
-
-            <p className="text-xs text-surface-500 mt-3 text-center">
-              Tip: Use AI Assist to improve task quality
-            </p>
-          </div>
-        </>
-      )}
     </>
   );
 }
