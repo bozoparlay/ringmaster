@@ -14,6 +14,7 @@ interface KanbanColumnProps {
   subtitle?: string;
   activeTaskId?: string | null;
   upNextIds?: Set<string>;
+  columnLabel?: string; // Custom label override for the column header
 }
 
 const columnAccents: Record<Status, string> = {
@@ -32,7 +33,7 @@ const columnDots: Record<Status, string> = {
   ready_to_ship: 'bg-green-500',
 };
 
-export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, activeTaskId, upNextIds }: KanbanColumnProps) {
+export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, activeTaskId, upNextIds, columnLabel }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
@@ -48,7 +49,7 @@ export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, 
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${columnDots[status]} ${isUpNext ? 'animate-pulse' : ''}`} />
             <h2 className={`font-medium text-sm tracking-wide ${isUpNext ? 'text-cyan-300' : 'text-surface-200'}`}>
-              {STATUS_LABELS[status]}
+              {columnLabel || STATUS_LABELS[status]}
             </h2>
             <span className="text-xs font-mono text-surface-500 tabular-nums">
               {items.length}
