@@ -34,6 +34,24 @@ interface GitHubIssue {
   user: { login: string };
 }
 
+// Up Next sizing configuration (same as BacklogView)
+const UP_NEXT_CONFIG = {
+  SMALL_THRESHOLD: 5,
+  SMALL_LIMIT: 1,
+  MEDIUM_THRESHOLD: 10,
+  MEDIUM_LIMIT: 3,
+  LARGE_THRESHOLD: 15,
+  LARGE_LIMIT: 4,
+  MAX_LIMIT: 5,
+} as const;
+
+function calculateUpNextLimit(backlogSize: number): number {
+  if (backlogSize < UP_NEXT_CONFIG.SMALL_THRESHOLD) return UP_NEXT_CONFIG.SMALL_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.MEDIUM_THRESHOLD) return UP_NEXT_CONFIG.MEDIUM_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.LARGE_THRESHOLD) return UP_NEXT_CONFIG.LARGE_LIMIT;
+  return UP_NEXT_CONFIG.MAX_LIMIT;
+}
+
 // Map status to GitHub label
 const STATUS_TO_LABEL: Record<Status, string | null> = {
   'backlog': null, // No label for backlog
@@ -174,11 +192,11 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
 
   const items = useMemo(() => issues.map(issueToBacklogItem), [issues]);
 
-  // Organize items by column (no Up Next for GitHub view - it's not applicable)
-  const columnItems = useMemo(() => {
+  // Organize items by column with Up Next calculation
+  const columnData = useMemo(() => {
     const columns: Record<Status, BacklogItem[]> = {
       backlog: [],
-      up_next: [], // Keep empty - not used for GitHub
+      up_next: [],
       in_progress: [],
       review: [],
       ready_to_ship: [],
@@ -192,17 +210,36 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       }
     });
 
-    // Sort by priority
-    Object.values(columns).forEach(col => {
-      col.sort((a, b) => {
+    // Sort backlog by priority
+    columns.backlog.sort((a, b) => {
+      const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.order - b.order;
+    });
+
+    // Calculate Up Next from high-priority backlog items
+    let upNextItemIds = new Set<string>();
+    const eligibleForUpNext = columns.backlog.filter(
+      item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
+    );
+    const upNextLimit = calculateUpNextLimit(columns.backlog.length);
+    const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
+    upNextItemIds = new Set(upNextItems.map(item => item.id));
+    columns.up_next = upNextItems;
+
+    // Sort other columns by priority
+    ['in_progress', 'review', 'ready_to_ship'].forEach((status) => {
+      columns[status as Status].sort((a, b) => {
         const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
         if (priorityDiff !== 0) return priorityDiff;
         return a.order - b.order;
       });
     });
 
-    return columns;
+    return { columnItems: columns, upNextIds: upNextItemIds };
   }, [items]);
+
+  const { columnItems, upNextIds } = columnData;
 
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
@@ -425,7 +462,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
                 onItemClick={handleItemClick}
                 isLoading={false}
                 activeTaskId={undefined}
-                upNextIds={new Set()}
+                upNextIds={upNextIds}
               />
             ))}
           </div>

@@ -24,6 +24,24 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const QUICK_TASKS_KEY = 'ringmaster:quick-tasks';
 
+// Up Next sizing configuration (same as BacklogView)
+const UP_NEXT_CONFIG = {
+  SMALL_THRESHOLD: 5,
+  SMALL_LIMIT: 1,
+  MEDIUM_THRESHOLD: 10,
+  MEDIUM_LIMIT: 3,
+  LARGE_THRESHOLD: 15,
+  LARGE_LIMIT: 4,
+  MAX_LIMIT: 5,
+} as const;
+
+function calculateUpNextLimit(backlogSize: number): number {
+  if (backlogSize < UP_NEXT_CONFIG.SMALL_THRESHOLD) return UP_NEXT_CONFIG.SMALL_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.MEDIUM_THRESHOLD) return UP_NEXT_CONFIG.MEDIUM_LIMIT;
+  if (backlogSize < UP_NEXT_CONFIG.LARGE_THRESHOLD) return UP_NEXT_CONFIG.LARGE_LIMIT;
+  return UP_NEXT_CONFIG.MAX_LIMIT;
+}
+
 // Helper to add a quick task from outside the component
 export function addQuickTask(task: {
   title: string;
@@ -192,8 +210,8 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Organize tasks into columns
-  const columnItems = useMemo(() => {
+  // Organize tasks into columns with Up Next calculation
+  const columnData = useMemo(() => {
     const columns: Record<Status, BacklogItem[]> = {
       backlog: [],
       up_next: [],
@@ -208,20 +226,46 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
       : tasks.filter(task => task.priority === priorityFilter);
 
     filtered.forEach((task) => {
-      columns[task.status].push(task);
+      // Map up_next status to backlog (it's a virtual column)
+      if (task.status === 'up_next') {
+        columns.backlog.push(task);
+      } else {
+        columns[task.status].push(task);
+      }
     });
 
-    // Sort each column by priority then order
-    COLUMN_ORDER.forEach((status) => {
-      columns[status].sort((a, b) => {
+    // Sort backlog by priority
+    columns.backlog.sort((a, b) => {
+      const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.order - b.order;
+    });
+
+    // Calculate Up Next from high-priority backlog items
+    let upNextItemIds = new Set<string>();
+    if (priorityFilter === 'all') {
+      const eligibleForUpNext = columns.backlog.filter(
+        item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
+      );
+      const upNextLimit = calculateUpNextLimit(columns.backlog.length);
+      const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
+      upNextItemIds = new Set(upNextItems.map(item => item.id));
+      columns.up_next = upNextItems;
+    }
+
+    // Sort other columns by priority
+    ['in_progress', 'review', 'ready_to_ship'].forEach((status) => {
+      columns[status as Status].sort((a, b) => {
         const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
         if (priorityDiff !== 0) return priorityDiff;
         return a.order - b.order;
       });
     });
 
-    return columns;
+    return { columnItems: columns, upNextIds: upNextItemIds };
   }, [tasks, priorityFilter]);
+
+  const { columnItems, upNextIds } = columnData;
 
   const activeItem = activeId ? tasks.find(i => i.id === activeId) : null;
 
@@ -350,6 +394,7 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
                 onItemClick={handleItemClick}
                 isLoading={loading}
                 activeTaskId={undefined}
+                upNextIds={upNextIds}
               />
             ))}
           </div>
