@@ -1,30 +1,16 @@
 /**
- * GitHub Issues Sync Service
+ * GitHub Issues Service
  *
- * Provides bidirectional synchronization between local tasks and GitHub Issues.
- * This enables team collaboration while maintaining the local-first experience.
+ * Provides integration with GitHub Issues for workflow actions like tackle and ship.
+ * This is NOT an automatic sync - it provides explicit user-driven operations.
  *
  * Key features:
- * - Push local tasks to GitHub Issues
- * - Pull GitHub Issues to local storage
- * - Detect and resolve conflicts
- * - Offline queue for pending operations
- * - ETag-based change detection
+ * - Create issues from backlog items
+ * - Assign issues and manage labels during tackle workflow
+ * - Update issue state during ship workflow
  */
 
 import type { BacklogItem } from '@/types/backlog';
-import type {
-  TaskStorageProvider,
-  StorageMode,
-  GitHubSyncStatus,
-  SyncState,
-  SyncOperation,
-  SyncConflict,
-  SyncResult,
-  SyncError,
-  GitHubIssueData,
-} from './types';
-import { serializeBacklogMd, parseBacklogMd } from '../backlog-parser';
 
 /**
  * Label used to identify Ringmaster-managed issues
@@ -50,13 +36,6 @@ interface GitHubIssue {
   created_at: string;
 }
 
-interface GitHubLabel {
-  id: number;
-  name: string;
-  color: string;
-  description?: string;
-}
-
 /**
  * Map task status to GitHub issue state
  */
@@ -64,36 +43,6 @@ function statusToGitHubState(status: BacklogItem['status']): 'open' | 'closed' {
   return status === 'ready_to_ship' ? 'closed' : 'open';
 }
 
-/**
- * Map GitHub issue state to task status
- */
-function githubStateToStatus(state: 'open' | 'closed'): BacklogItem['status'] {
-  return state === 'closed' ? 'ready_to_ship' : 'in_progress';
-}
-
-/**
- * Extract task ID from issue body metadata
- */
-function extractTaskId(body: string | null): string | null {
-  if (!body) return null;
-  const match = body.match(new RegExp(`${TASK_ID_PREFIX}([^\\s]+)${TASK_ID_SUFFIX}`));
-  return match ? match[1] : null;
-}
-
-/**
- * Add task ID metadata to issue body
- */
-function addTaskIdToBody(body: string, taskId: string): string {
-  return `${TASK_ID_PREFIX}${taskId}${TASK_ID_SUFFIX}\n\n${body}`;
-}
-
-/**
- * Remove task ID metadata from issue body
- */
-function removeTaskIdFromBody(body: string | null): string {
-  if (!body) return '';
-  return body.replace(new RegExp(`${TASK_ID_PREFIX}[^\\s]+${TASK_ID_SUFFIX}\\n*`), '').trim();
-}
 
 /**
  * Convert a BacklogItem to GitHub Issue format
@@ -152,70 +101,7 @@ function taskToGitHubIssue(task: BacklogItem): { title: string; body: string; la
 }
 
 /**
- * Convert a GitHub Issue to BacklogItem format
- */
-function githubIssueToTask(issue: GitHubIssue, existingTask?: BacklogItem): BacklogItem {
-  const body = removeTaskIdFromBody(issue.body);
-  const taskId = extractTaskId(issue.body);
-
-  // Parse metadata from body
-  const priorityMatch = body.match(/\*\*Priority\*\*:\s*(\w+)/i);
-  const effortMatch = body.match(/\*\*Effort\*\*:\s*(\w+)/i);
-  const valueMatch = body.match(/\*\*Value\*\*:\s*(\w+)/i);
-
-  // Parse description
-  const descriptionMatch = body.match(/## Description\n([\s\S]*?)(?=\n## |$)/i);
-  const description = descriptionMatch ? descriptionMatch[1].trim() : '';
-
-  // Parse acceptance criteria
-  const criteriaMatch = body.match(/## Acceptance Criteria\n([\s\S]*?)(?=\n## |$)/i);
-  const acceptanceCriteria = criteriaMatch
-    ? criteriaMatch[1]
-        .split('\n')
-        .filter(line => line.startsWith('- '))
-        .map(line => line.replace(/^- \[[ x]\]\s*/, '').trim())
-    : undefined;
-
-  // Parse notes
-  const notesMatch = body.match(/## Notes\n([\s\S]*?)$/i);
-  const notes = notesMatch ? notesMatch[1].trim() : undefined;
-
-  // Extract category from labels
-  const categoryLabel = issue.labels.find(l => l.name.startsWith('category:'));
-  const category = categoryLabel ? categoryLabel.name.replace('category:', '') : undefined;
-
-  // Determine status from labels and state
-  let status: BacklogItem['status'] = githubStateToStatus(issue.state);
-  const statusLabel = issue.labels.find(l => l.name.startsWith('status:'));
-  if (statusLabel) {
-    const labelStatus = statusLabel.name.replace('status:', '') as BacklogItem['status'];
-    if (['backlog', 'in_progress', 'review', 'ready_to_ship'].includes(labelStatus)) {
-      status = labelStatus;
-    }
-  }
-
-  return {
-    id: taskId || existingTask?.id || `gh-${issue.number}`,
-    title: issue.title,
-    description,
-    priority: (priorityMatch?.[1]?.toLowerCase() as BacklogItem['priority']) || 'medium',
-    effort: (effortMatch?.[1]?.toLowerCase() as BacklogItem['effort']) || undefined,
-    value: (valueMatch?.[1]?.toLowerCase() as BacklogItem['value']) || undefined,
-    status,
-    tags: category ? [category] : [],
-    category,
-    createdAt: existingTask?.createdAt || issue.created_at,
-    updatedAt: issue.updated_at,
-    order: existingTask?.order || Date.now(),
-    acceptanceCriteria,
-    notes,
-    // Link to GitHub
-    githubIssueNumber: issue.number,
-  };
-}
-
-/**
- * GitHub Sync Service Configuration
+ * GitHub Service Configuration
  */
 export interface GitHubSyncConfig {
   /** GitHub personal access token */
@@ -227,9 +113,9 @@ export interface GitHubSyncConfig {
 }
 
 /**
- * GitHub Sync Service
+ * GitHub Service
  *
- * Handles synchronization between local tasks and GitHub Issues.
+ * Handles GitHub API interactions for workflow actions (tackle, ship, create issue).
  */
 export class GitHubSyncService {
   private config: GitHubSyncConfig;
@@ -472,121 +358,6 @@ export class GitHubSyncService {
     return result;
   }
 
-  /**
-   * Perform a full sync between local tasks and GitHub
-   */
-  async sync(localTasks: BacklogItem[]): Promise<SyncResult> {
-    const result: SyncResult = {
-      pushed: [],
-      pulled: [],
-      conflicts: [],
-      errors: [],
-    };
-
-    try {
-      // Ensure label exists
-      await this.ensureLabel();
-
-      // Get all GitHub issues
-      const issues = await this.getIssues();
-      const issueByTaskId = new Map<string, GitHubIssue>();
-      const issueByNumber = new Map<number, GitHubIssue>();
-
-      for (const issue of issues) {
-        const taskId = extractTaskId(issue.body);
-        if (taskId) {
-          issueByTaskId.set(taskId, issue);
-        }
-        issueByNumber.set(issue.number, issue);
-      }
-
-      // Process local tasks
-      for (const task of localTasks) {
-        try {
-          const existingIssue = issueByTaskId.get(task.id);
-
-          if (!existingIssue) {
-            // Task doesn't exist on GitHub - push it
-            const issue = await this.createIssue(task);
-            result.pushed.push({ taskId: task.id, issueNumber: issue.number });
-          } else {
-            // Task exists - check for conflicts
-            const localUpdated = new Date(task.updatedAt).getTime();
-            const remoteUpdated = new Date(existingIssue.updated_at).getTime();
-
-            if (localUpdated > remoteUpdated) {
-              // Local is newer - push
-              await this.updateIssue(existingIssue.number, task);
-              result.pushed.push({ taskId: task.id, issueNumber: existingIssue.number });
-            } else if (remoteUpdated > localUpdated) {
-              // Remote is newer - this will be handled in pull phase
-              // Skip for now
-            }
-            // If equal, no action needed
-          }
-        } catch (error) {
-          result.errors.push({
-            taskId: task.id,
-            operation: 'push',
-            message: error instanceof Error ? error.message : 'Unknown error',
-            retryable: true,
-          });
-        }
-      }
-
-      // Pull new/updated issues
-      for (const issue of issues) {
-        try {
-          const taskId = extractTaskId(issue.body);
-          const existingTask = localTasks.find(t =>
-            t.id === taskId || t.githubIssueNumber === issue.number
-          );
-
-          if (!existingTask) {
-            // New issue from GitHub - pull it
-            result.pulled.push({ issueNumber: issue.number, taskId: taskId || `gh-${issue.number}` });
-          } else {
-            const localUpdated = new Date(existingTask.updatedAt).getTime();
-            const remoteUpdated = new Date(issue.updated_at).getTime();
-
-            if (remoteUpdated > localUpdated) {
-              // Remote is newer - pull
-              result.pulled.push({ issueNumber: issue.number, taskId: existingTask.id });
-            }
-          }
-        } catch (error) {
-          result.errors.push({
-            issueNumber: issue.number,
-            operation: 'pull',
-            message: error instanceof Error ? error.message : 'Unknown error',
-            retryable: true,
-          });
-        }
-      }
-
-    } catch (error) {
-      result.errors.push({
-        operation: 'pull',
-        message: error instanceof Error ? error.message : 'Sync failed',
-        retryable: false,
-      });
-    }
-
-    return result;
-  }
-
-  /**
-   * Convert GitHub issues to BacklogItems
-   */
-  issuesToTasks(issues: GitHubIssue[], existingTasks: BacklogItem[] = []): BacklogItem[] {
-    return issues.map(issue => {
-      const taskId = extractTaskId(issue.body);
-      const existing = existingTasks.find(t =>
-        t.id === taskId || t.githubIssueNumber === issue.number
-      );
-      return githubIssueToTask(issue, existing);
-    });
-  }
 }
 
 /**

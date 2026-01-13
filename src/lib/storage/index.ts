@@ -25,13 +25,6 @@ export type {
   StorageOptions,
   TaskStorageProvider,
   StorageProviderFactory,
-  GitHubSyncStatus,
-  SyncState,
-  SyncOperation,
-  SyncConflict,
-  SyncResult,
-  SyncError,
-  GitHubIssueData,
   // Project Integration Types (Phase 0)
   GitProvider,
   UserGitHubConfig,
@@ -68,7 +61,7 @@ export {
   type StorageStatus,
 } from './migration';
 
-// GitHub Sync Service
+// GitHub Service (for workflow actions like tackle/ship)
 export {
   GitHubSyncService,
   isGitHubSyncConfigured,

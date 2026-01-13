@@ -2,7 +2,7 @@
  * Unit tests for backlog-parser.ts
  *
  * Tests the critical functionality of preserving task metadata through
- * serialize/parse round-trips, which is essential for GitHub sync.
+ * serialize/parse round-trips, which is essential for BACKLOG.md persistence.
  */
 
 import { parseBacklogMd, serializeBacklogMd } from '../backlog-parser';
@@ -53,56 +53,11 @@ describe('backlog-parser', () => {
       expect(parsedTasks[0].githubIssueNumber).toBe(123);
     });
 
-    it('should preserve lastSyncedAt through round-trip', () => {
-      const syncTime = '2026-01-12T03:00:00Z';
-      const originalTask: BacklogItem = {
-        id: 'test-uuid-12345',
-        title: 'Test Task with Sync Time',
-        description: 'Test description',
-        priority: 'medium',
-        status: 'backlog',
-        tags: [],
-        category: 'Uncategorized',
-        createdAt: '2026-01-12T03:00:00Z',
-        updatedAt: '2026-01-12T03:00:00Z',
-        order: 1,
-        lastSyncedAt: syncTime,
-      };
-
-      const markdown = serializeBacklogMd([originalTask]);
-      const parsedTasks = parseBacklogMd(markdown);
-
-      expect(parsedTasks.length).toBe(1);
-      expect(parsedTasks[0].lastSyncedAt).toBe(syncTime);
-    });
-
-    it('should preserve syncStatus through round-trip', () => {
-      const originalTask: BacklogItem = {
-        id: 'test-uuid-12345',
-        title: 'Test Task with Sync Status',
-        description: 'Test description',
-        priority: 'medium',
-        status: 'backlog',
-        tags: [],
-        category: 'Uncategorized',
-        createdAt: '2026-01-12T03:00:00Z',
-        updatedAt: '2026-01-12T03:00:00Z',
-        order: 1,
-        syncStatus: 'synced',
-      };
-
-      const markdown = serializeBacklogMd([originalTask]);
-      const parsedTasks = parseBacklogMd(markdown);
-
-      expect(parsedTasks.length).toBe(1);
-      expect(parsedTasks[0].syncStatus).toBe('synced');
-    });
-
-    it('should preserve all sync metadata together through round-trip', () => {
+    it('should preserve all metadata together through round-trip', () => {
       const originalTask: BacklogItem = {
         id: 'test-uuid-complete',
-        title: 'Complete Sync Test Task',
-        description: 'A task with all sync metadata',
+        title: 'Complete Test Task',
+        description: 'A task with all metadata',
         priority: 'high',
         effort: 'medium',
         value: 'high',
@@ -113,8 +68,6 @@ describe('backlog-parser', () => {
         updatedAt: '2026-01-12T03:00:00Z',
         order: 1,
         githubIssueNumber: 456,
-        lastSyncedAt: '2026-01-12T04:00:00Z',
-        syncStatus: 'synced',
       };
 
       const markdown = serializeBacklogMd([originalTask]);
@@ -128,10 +81,8 @@ describe('backlog-parser', () => {
       expect(parsed.title).toBe(originalTask.title);
       expect(parsed.priority).toBe(originalTask.priority);
 
-      // Sync metadata
+      // GitHub link
       expect(parsed.githubIssueNumber).toBe(originalTask.githubIssueNumber);
-      expect(parsed.lastSyncedAt).toBe(originalTask.lastSyncedAt);
-      expect(parsed.syncStatus).toBe(originalTask.syncStatus);
     });
   });
 
@@ -149,17 +100,13 @@ describe('backlog-parser', () => {
         updatedAt: '2026-01-12T03:00:00Z',
         order: 1,
         githubIssueNumber: 789,
-        lastSyncedAt: '2026-01-12T05:00:00Z',
-        syncStatus: 'synced',
       };
 
       const markdown = serializeBacklogMd([task]);
 
-      // Should contain metadata comment
+      // Should contain metadata comment with id and github number
       expect(markdown).toContain('<!-- ringmaster:id=abc-12345');
       expect(markdown).toContain('github=789');
-      expect(markdown).toContain('synced=2026-01-12T05:00:00Z');
-      expect(markdown).toContain('status=synced');
     });
 
     it('should parse metadata comment correctly', () => {
@@ -168,7 +115,7 @@ describe('backlog-parser', () => {
 ## [backlog] Test
 
 ### My Task
-<!-- ringmaster:id=test-id-999 github=111 synced=2026-01-12T06:00:00Z status=pending -->
+<!-- ringmaster:id=test-id-999 github=111 -->
 **Priority**: High
 
 **Description**:
@@ -182,8 +129,6 @@ Some description here.
       expect(tasks.length).toBe(1);
       expect(tasks[0].id).toBe('test-id-999');
       expect(tasks[0].githubIssueNumber).toBe(111);
-      expect(tasks[0].lastSyncedAt).toBe('2026-01-12T06:00:00Z');
-      expect(tasks[0].syncStatus).toBe('pending');
     });
 
     it('should generate new UUID only when no existing id in metadata', () => {
@@ -232,10 +177,8 @@ This is a legacy task without metadata comments.
       // Should have generated new UUID
       expect(tasks[0].id).toBeDefined();
       expect(tasks[0].id.length).toBeGreaterThan(0);
-      // Sync fields should be undefined
+      // GitHub link should be undefined for legacy tasks
       expect(tasks[0].githubIssueNumber).toBeUndefined();
-      expect(tasks[0].lastSyncedAt).toBeUndefined();
-      expect(tasks[0].syncStatus).toBeUndefined();
     });
   });
 });
