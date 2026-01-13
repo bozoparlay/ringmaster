@@ -15,4 +15,4 @@ export { GitHubConnectionPrompt } from './GitHubConnectionPrompt';
 export { MigrationWizard } from './MigrationWizard';
 export { SourceSelector } from './SourceSelector';
 export type { DataSource } from './SourceSelector';
-export { BacklogView, GitHubIssuesView, QuickTasksView } from './views';
+export { BacklogView, GitHubIssuesView, QuickTasksView, addQuickTask, QUICK_TASKS_KEY } from './views';

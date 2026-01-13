@@ -22,7 +22,46 @@ import type { BacklogItem, Priority, Status } from '@/types/backlog';
 import { PRIORITY_WEIGHT } from '@/types/backlog';
 import { v4 as uuidv4 } from 'uuid';
 
-const QUICK_TASKS_KEY = 'ringmaster:quick-tasks';
+export const QUICK_TASKS_KEY = 'ringmaster:quick-tasks';
+
+// Helper to add a quick task from outside the component
+export function addQuickTask(task: {
+  title: string;
+  description?: string;
+  priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday';
+}): void {
+  const { v4: uuidv4 } = require('uuid');
+  const now = new Date().toISOString();
+
+  // Load existing tasks
+  let tasks: BacklogItem[] = [];
+  try {
+    const stored = localStorage.getItem(QUICK_TASKS_KEY);
+    if (stored) {
+      tasks = JSON.parse(stored);
+    }
+  } catch {
+    tasks = [];
+  }
+
+  // Create new task
+  const newTask: BacklogItem = {
+    id: uuidv4(),
+    title: task.title,
+    description: task.description || '',
+    priority: task.priority || 'medium',
+    status: 'backlog',
+    tags: [],
+    category: 'Quick Tasks',
+    createdAt: now,
+    updatedAt: now,
+    order: tasks.length,
+  };
+
+  // Save
+  tasks.push(newTask);
+  localStorage.setItem(QUICK_TASKS_KEY, JSON.stringify(tasks));
+}
 
 // Simplified column order for Quick Tasks (no Up Next or Review)
 const QUICK_TASK_COLUMNS: Status[] = ['backlog', 'in_progress', 'ready_to_ship'];
@@ -36,43 +75,12 @@ const COLUMN_LABELS: Record<Status, string> = {
   ready_to_ship: 'Done',
 };
 
-// Simple inline task creator
-function QuickTaskInput({ onAdd }: { onAdd: (title: string) => void }) {
-  const [title, setTitle] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (title.trim()) {
-      onAdd(title.trim());
-      setTitle('');
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
-      <input
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Add a quick task..."
-        className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-4 py-2 text-sm text-surface-200 placeholder-surface-500 focus:outline-none focus:border-accent/50 transition-colors"
-      />
-      <button
-        type="submit"
-        disabled={!title.trim()}
-        className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-surface-700 disabled:text-surface-500 text-surface-900 rounded-lg text-sm font-medium transition-colors"
-      >
-        Add
-      </button>
-    </form>
-  );
-}
-
 export interface QuickTasksViewProps {
   onPromoteToBacklog?: (item: BacklogItem) => void;
+  onNewTask: () => void;
 }
 
-export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
+export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksViewProps) {
   const [tasks, setTasks] = useState<BacklogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -81,6 +89,7 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
   const [isTackleOpen, setIsTackleOpen] = useState(false);
   const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -205,7 +214,12 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
       ready_to_ship: [],
     };
 
-    tasks.forEach((task) => {
+    // Filter by priority if set
+    const filtered = priorityFilter === 'all'
+      ? tasks
+      : tasks.filter(task => task.priority === priorityFilter);
+
+    filtered.forEach((task) => {
       // Map any status to our simplified columns
       if (task.status === 'up_next' || task.status === 'review') {
         // Up Next goes to backlog, Review goes to in_progress for quick tasks
@@ -225,7 +239,7 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
     });
 
     return columns;
-  }, [tasks]);
+  }, [tasks, priorityFilter]);
 
   const activeItem = activeId ? tasks.find(i => i.id === activeId) : null;
 
@@ -310,72 +324,65 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Toolbar with Quick Add */}
+      {/* Toolbar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-surface-800/50">
-        <div className="flex-1 max-w-xl">
-          <QuickTaskInput onAdd={addTask} />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-surface-500 uppercase tracking-wider">Filter:</span>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value as Priority | 'all')}
+              className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-1.5 text-sm text-surface-200 focus:outline-none focus:border-accent/50 transition-colors"
+            >
+              <option value="all">All Priorities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="someday">Someday</option>
+            </select>
+          </div>
         </div>
-        <div className="flex items-center gap-4 text-xs text-surface-500 ml-4">
-          <span className="font-mono">{todoCount} to do</span>
+
+        <div className="flex items-center gap-4 text-xs text-surface-500">
+          <span className="font-mono">{tasks.length} total</span>
           <span className="text-surface-700">|</span>
-          <span className="font-mono text-purple-400">{inProgressCount} active</span>
-          <span className="text-surface-700">|</span>
-          <span className="font-mono text-green-400">{doneCount} done</span>
+          <span className="font-mono text-accent">{inProgressCount} active</span>
         </div>
       </div>
 
-      {/* Kanban Board */}
-      {tasks.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-6">
-          <div className="w-12 h-12 rounded-full bg-surface-800 flex items-center justify-center">
-            <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-            </svg>
+      {/* Board */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-4 p-6 h-full w-full">
+            {QUICK_TASK_COLUMNS.map((status) => (
+              <KanbanColumn
+                key={status}
+                status={status}
+                items={columnItems[status]}
+                onItemClick={handleItemClick}
+                isLoading={loading}
+                activeTaskId={undefined}
+                columnLabel={COLUMN_LABELS[status]}
+              />
+            ))}
           </div>
-          <p className="text-surface-300">No quick tasks yet</p>
-          <p className="text-surface-500 text-sm max-w-xs">
-            Quick tasks are stored locally in your browser. Use them for scratch notes and ideas before promoting to your Backlog.
-          </p>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
-            <div className="flex gap-4 p-6 h-full w-full">
-              {QUICK_TASK_COLUMNS.map((status) => (
-                <KanbanColumn
-                  key={status}
-                  status={status}
-                  items={columnItems[status]}
-                  onItemClick={handleItemClick}
-                  isLoading={false}
-                  activeTaskId={undefined}
-                  columnLabel={COLUMN_LABELS[status]}
-                />
-              ))}
-            </div>
 
-            <DragOverlay>
-              {activeItem ? (
-                <TaskCard
-                  item={activeItem}
-                  onClick={() => {}}
-                  isDragging
-                />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </div>
-      )}
-
-      {/* Stats footer */}
-      <div className="px-6 py-3 border-t border-surface-800/50 flex items-center justify-between text-xs text-surface-500">
-        <span>Stored in browser localStorage</span>
-        <span className="font-mono">{tasks.length} total tasks</span>
+          <DragOverlay>
+            {activeItem ? (
+              <TaskCard
+                item={activeItem}
+                onClick={() => {}}
+                isDragging
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       {/* Task Panel */}
@@ -420,6 +427,16 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Floating Action Button */}
+      <button
+        onClick={onNewTask}
+        className="fixed bottom-8 right-8 w-14 h-14 bg-accent hover:bg-accent-hover text-surface-900 rounded-full shadow-glow-amber hover:shadow-glow-amber transition-all duration-200 hover:scale-105 flex items-center justify-center z-30"
+      >
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
     </div>
   );
 }

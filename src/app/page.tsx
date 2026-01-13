@@ -12,6 +12,7 @@ import {
   BacklogView,
   GitHubIssuesView,
   QuickTasksView,
+  addQuickTask,
 } from '@/components';
 import type { DataSource } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
@@ -49,6 +50,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
   const [activeSource, setActiveSource] = useState<DataSource>('backlog');
+  const [quickTasksKey, setQuickTasksKey] = useState(0); // For forcing QuickTasksView refresh
 
   // Auto-detect project from git remote
   const {
@@ -101,7 +103,18 @@ export default function Home() {
   };
 
   const handleNewTask = async (task: { title: string; description: string; priority?: 'critical' | 'high' | 'medium' | 'low' | 'someday'; effort?: 'trivial' | 'low' | 'medium' | 'high' | 'very_high'; value?: 'low' | 'medium' | 'high'; category?: string; acceptanceCriteria?: string[] }) => {
-    await addItem(task.title, task.description, task.priority, task.effort, task.value, task.category);
+    if (activeSource === 'quick') {
+      // Add to Quick Tasks (localStorage)
+      addQuickTask({
+        title: task.title,
+        description: task.description,
+        priority: task.priority,
+      });
+      setQuickTasksKey(k => k + 1); // Trigger refresh
+    } else {
+      // Add to Backlog (file mode)
+      await addItem(task.title, task.description, task.priority, task.effort, task.value, task.category);
+    }
     setIsNewTaskOpen(false);
   };
 
@@ -207,9 +220,11 @@ export default function Home() {
 
           {activeSource === 'quick' && (
             <QuickTasksView
+              key={quickTasksKey}
               onPromoteToBacklog={async (item) => {
                 await importItem(item);
               }}
+              onNewTask={() => setIsNewTaskOpen(true)}
             />
           )}
         </div>
