@@ -142,33 +142,24 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     setError(null);
 
     try {
-      const headers: Record<string, string> = {
-        'Accept': 'application/vnd.github.v3+json',
-      };
+      // Use the server-side API which has access to GITHUB_TOKEN from .env.local
+      const params = new URLSearchParams({
+        repo: `${repo.owner}/${repo.repo}`,
+        per_page: '100',
+      });
+      // Optionally pass client token if available
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        params.set('token', token);
       }
 
-      const response = await fetch(
-        `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues?state=open&per_page=100`,
-        { headers }
-      );
+      const response = await fetch(`/api/github/issues?${params}`);
+      const data = await response.json();
 
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('GitHub authentication failed. Check your token in Settings.');
-        } else if (response.status === 404) {
-          throw new Error(`Repository ${repo.owner}/${repo.repo} not found.`);
-        } else if (response.status === 403) {
-          throw new Error('API rate limit exceeded. Try again later or add a GitHub token.');
-        }
-        throw new Error(`GitHub API error: ${response.status}`);
+        throw new Error(data.error || `API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      // Filter out pull requests (they also come through the issues API)
-      const issuesOnly = data.filter((issue: GitHubIssue & { pull_request?: unknown }) => !issue.pull_request);
-      setIssues(issuesOnly);
+      setIssues(data.issues || []);
     } catch (err) {
       console.error('Failed to fetch GitHub issues:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch issues');

@@ -3,39 +3,54 @@ import { NextResponse } from 'next/server';
 interface GitHubIssue {
   number: number;
   title: string;
+  body: string | null;
   state: 'open' | 'closed';
   html_url: string;
   created_at: string;
+  updated_at: string;
   labels: Array<{ name: string; color: string }>;
+  assignee: { login: string } | null;
+  user: { login: string };
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q') || '';
   const repo = searchParams.get('repo');
-  const token = searchParams.get('token');
+  const clientToken = searchParams.get('token');
+  const perPage = searchParams.get('per_page') || '100';
+
+  // Use client token if it's a real token (not 'server-managed' placeholder), otherwise fall back to server token
+  const token = (clientToken && clientToken !== 'server-managed')
+    ? clientToken
+    : process.env.GITHUB_TOKEN;
 
   if (!repo) {
     return NextResponse.json({ error: 'Repository required' }, { status: 400 });
   }
 
+  if (!token) {
+    return NextResponse.json(
+      { error: 'No GitHub token configured. Add GITHUB_TOKEN to .env.local or configure in Settings.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const headers: Record<string, string> = {
       'Accept': 'application/vnd.github.v3+json',
+      'Authorization': `Bearer ${token}`,
     };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
 
     // Use GitHub search API for query, or list issues if no query
     let url: string;
     if (query.trim()) {
       // Search issues in the repo
       const searchQuery = encodeURIComponent(`${query} repo:${repo} is:issue`);
-      url = `https://api.github.com/search/issues?q=${searchQuery}&per_page=20`;
+      url = `https://api.github.com/search/issues?q=${searchQuery}&per_page=${perPage}`;
     } else {
       // List recent open issues
-      url = `https://api.github.com/repos/${repo}/issues?state=open&per_page=20&sort=updated`;
+      url = `https://api.github.com/repos/${repo}/issues?state=open&per_page=${perPage}&sort=updated`;
     }
 
     const response = await fetch(url, { headers });
@@ -67,10 +82,14 @@ export async function GET(request: Request) {
       .map((issue: GitHubIssue) => ({
         number: issue.number,
         title: issue.title,
+        body: issue.body,
         state: issue.state,
         html_url: issue.html_url,
         created_at: issue.created_at,
+        updated_at: issue.updated_at,
         labels: issue.labels,
+        assignee: issue.assignee,
+        user: issue.user,
       }));
 
     return NextResponse.json({ issues });
