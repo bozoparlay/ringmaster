@@ -82,15 +82,39 @@ export function useProjectConfig(): UseProjectConfigReturn {
   const [error, setError] = useState<string | null>(null);
   const [showGitHubPrompt, setShowGitHubPrompt] = useState(false);
 
+  // Track whether server has credentials (from .env.local or ~/.ringmaster/config.json)
+  const [hasServerCredentials, setHasServerCredentials] = useState(false);
+
   // Refs
   const initializedRef = useRef(false);
   const fetchingRef = useRef(false);
 
+  // Track global storage mode from localStorage (populated after mount to avoid hydration mismatch)
+  const [globalStorageMode, setGlobalStorageMode] = useState<string | null>(null);
+
   // Derived state
   const isGitHubRepo = project?.provider === 'github';
-  const isGitHubConnected = config?.storageMode === 'github' && !!getUserGitHubConfig()?.token;
+  // Connected if: (1) in github mode AND (2) have token from localStorage OR server
+  // Check both project config storageMode AND global storageMode (they can be out of sync)
+  const hasLocalToken = !!getUserGitHubConfig()?.token;
+  const effectiveStorageMode = globalStorageMode || config?.storageMode || 'local';
+  const isGitHubConnected = effectiveStorageMode === 'github' && (hasLocalToken || hasServerCredentials);
   const storageMode = config?.storageMode || 'local';
   const isStale = config ? isProjectConfigStale(config) : false;
+
+  /**
+   * Check if server has GitHub credentials (from .env.local or config file)
+   */
+  const checkServerCredentials = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/config');
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.configured === true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   /**
    * Fetch repo info from backend
@@ -140,8 +164,14 @@ export function useProjectConfig(): UseProjectConfigReturn {
       // Run migration from old config format (one-time)
       migrateOldGitHubConfig();
 
-      // Fetch repo info from backend
-      const repoInfo = await fetchRepoInfo();
+      // Check if server has GitHub credentials (parallel with repo info fetch)
+      const [repoInfo, serverHasCredentials] = await Promise.all([
+        fetchRepoInfo(),
+        checkServerCredentials(),
+      ]);
+
+      // Update server credentials state
+      setHasServerCredentials(serverHasCredentials);
 
       if (!repoInfo || !repoInfo.repoUrl) {
         // Not a git repo or no remote - use defaults
@@ -185,15 +215,30 @@ export function useProjectConfig(): UseProjectConfigReturn {
         setShowGitHubPrompt(true);
       }
 
-      // If GitHub mode is configured, validate the token
+      // If GitHub mode is configured, validate the token (local or server)
       const userConfig = getUserGitHubConfig();
-      if (userConfig?.token && projectConfig.storageMode === 'github') {
-        const status = await validateGitHubToken(
-          userConfig.token,
-          `${repoInfo.owner}/${repoInfo.repo}`
-        );
-        if (status?.connected && status.user) {
-          setGitHubUser(status.user);
+      if (projectConfig.storageMode === 'github') {
+        if (userConfig?.token) {
+          // Validate local token
+          const status = await validateGitHubToken(
+            userConfig.token,
+            `${repoInfo.owner}/${repoInfo.repo}`
+          );
+          if (status?.connected && status.user) {
+            setGitHubUser(status.user);
+          }
+        } else if (serverHasCredentials) {
+          // Server has token - check status without passing token (server will use its own)
+          try {
+            const repo = `${repoInfo.owner}/${repoInfo.repo}`;
+            const response = await fetch(`/api/github/status?repo=${encodeURIComponent(repo)}`);
+            const status = await response.json();
+            if (status?.connected && status.user) {
+              setGitHubUser(status.user);
+            }
+          } catch {
+            // Ignore errors - server token might be invalid
+          }
         }
       }
     } catch (err) {
@@ -203,7 +248,7 @@ export function useProjectConfig(): UseProjectConfigReturn {
       setIsLoading(false);
       fetchingRef.current = false;
     }
-  }, [fetchRepoInfo, validateGitHubToken]);
+  }, [fetchRepoInfo, checkServerCredentials, validateGitHubToken]);
 
   /**
    * Connect to GitHub with a PAT
@@ -300,6 +345,13 @@ export function useProjectConfig(): UseProjectConfigReturn {
       dismissProjectPrompt(config.repoUrl, permanent);
     }
   }, [config]);
+
+  // Read global storage mode after mount (avoids hydration mismatch)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setGlobalStorageMode(localStorage.getItem('ringmaster:storageMode'));
+    }
+  }, []);
 
   // Initialize on mount
   useEffect(() => {

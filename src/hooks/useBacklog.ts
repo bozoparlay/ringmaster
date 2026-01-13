@@ -40,6 +40,7 @@ interface UseBacklogReturn {
   updatePRStatus: (taskId: string, status: AuxiliarySignals['prStatus'][string]) => void;
   refresh: () => Promise<void>;
   exportToMarkdown: () => Promise<string>;
+  flushPendingWrites: () => Promise<void>;
 }
 
 export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
@@ -331,6 +332,19 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     return providerRef.current.exportToMarkdown();
   }, []);
 
+  // Flush pending writes immediately
+  // This ensures all pending debounced writes are completed before sync reads state
+  const flushPendingWrites = useCallback(async () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (pendingItemsRef.current) {
+      await writeToFile(pendingItemsRef.current);
+      pendingItemsRef.current = null;
+    }
+  }, [writeToFile]);
+
   return {
     items,
     loading,
@@ -347,5 +361,6 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
     updatePRStatus,
     refresh,
     exportToMarkdown,
+    flushPendingWrites,
   };
 }

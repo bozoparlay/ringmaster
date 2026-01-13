@@ -601,20 +601,68 @@ export function isGitHubSyncConfigured(): boolean {
 
 /**
  * Get GitHub sync configuration from localStorage
+ *
+ * Checks multiple sources in priority order:
+ * 1. Legacy sync config (ringmaster:github:token, ringmaster:github:repo)
+ * 2. New user config (ringmaster:user:github) + auto-detected repo
+ *
+ * For server-managed tokens, returns 'server-managed' as the token value
+ * and the API will use credentials from .env.local or config file.
  */
 export function getGitHubSyncConfig(): GitHubSyncConfig | null {
   if (typeof window === 'undefined') return null;
-  const token = localStorage.getItem('ringmaster:github:token');
-  const repo = localStorage.getItem('ringmaster:github:repo');
+
+  // 1. Check legacy sync config first
+  const legacyToken = localStorage.getItem('ringmaster:github:token');
+  const legacyRepo = localStorage.getItem('ringmaster:github:repo');
   const apiUrl = localStorage.getItem('ringmaster:github:apiUrl');
 
-  if (!token || !repo) return null;
+  if (legacyToken && legacyRepo) {
+    return {
+      token: legacyToken,
+      repo: legacyRepo,
+      apiUrl: apiUrl || undefined,
+    };
+  }
 
-  return {
-    token,
-    repo,
-    apiUrl: apiUrl || undefined,
-  };
+  // 2. Check new user config format + get repo from project config
+  try {
+    const userGithubStr = localStorage.getItem('ringmaster:user:github');
+    if (userGithubStr) {
+      const userGithub = JSON.parse(userGithubStr);
+      if (userGithub?.token) {
+        // Get repo from project configs (find the one with github mode)
+        let repo: string | null = null;
+
+        // Look for project config with owner/repo info
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('ringmaster:project:')) {
+            try {
+              const projectConfig = JSON.parse(localStorage.getItem(key) || '{}');
+              if (projectConfig.owner && projectConfig.repo) {
+                repo = `${projectConfig.owner}/${projectConfig.repo}`;
+                break;
+              }
+            } catch {
+              // Skip invalid project configs
+            }
+          }
+        }
+
+        if (repo) {
+          return {
+            token: userGithub.token, // May be 'server-managed'
+            repo,
+            apiUrl: apiUrl || undefined,
+          };
+        }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+
+  return null;
 }
 
 /**

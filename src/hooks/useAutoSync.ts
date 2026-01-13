@@ -45,6 +45,8 @@ interface UseAutoSyncOptions {
   enabled?: boolean;
   /** Callback when conflicts are detected */
   onConflicts?: (conflicts: SyncConflict[]) => void;
+  /** Callback to flush pending writes before sync */
+  onFlushWrites?: () => Promise<void>;
 }
 
 interface UseAutoSyncReturn {
@@ -72,6 +74,11 @@ const DEFAULT_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const MIN_SYNC_INTERVAL = 30 * 1000; // 30 seconds minimum
 const LAST_SYNC_KEY = 'ringmaster:lastSyncAt';
 
+// Rate limiting and backoff constants
+const MAX_CONSECUTIVE_ERRORS = 5;
+const BACKOFF_BASE_MS = 30 * 1000; // 30 seconds
+const MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes max
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -83,6 +90,7 @@ export function useAutoSync({
   syncInterval = DEFAULT_SYNC_INTERVAL,
   enabled = true,
   onConflicts,
+  onFlushWrites,
 }: UseAutoSyncOptions): UseAutoSyncReturn {
   const [status, setStatus] = useState<SyncStatus>('idle');
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -94,6 +102,10 @@ export function useAutoSync({
   const itemsRef = useRef(items);
   const isSyncingRef = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Rate limiting state
+  const consecutiveErrorsRef = useRef(0);
+  const backoffUntilRef = useRef<number>(0);
 
   // Update items ref
   useEffect(() => {
@@ -140,6 +152,21 @@ export function useAutoSync({
     // Don't sync if already syncing or offline
     if (isSyncingRef.current || !isOnline) return;
 
+    // Check backoff - don't sync if we're in a backoff period
+    const now = Date.now();
+    if (backoffUntilRef.current > now) {
+      const waitSeconds = Math.round((backoffUntilRef.current - now) / 1000);
+      console.log(`[AutoSync] In backoff period, waiting ${waitSeconds}s before retry`);
+      return;
+    }
+
+    // Check if we've exceeded max consecutive errors
+    if (consecutiveErrorsRef.current >= MAX_CONSECUTIVE_ERRORS) {
+      console.warn('[AutoSync] Max consecutive errors reached, pausing sync');
+      setStatus('error');
+      return;
+    }
+
     // Get repo from localStorage config (token may be server-side)
     const config = getGitHubSyncConfig();
     if (!config?.repo) return; // Need at least the repo to know where to sync
@@ -149,6 +176,11 @@ export function useAutoSync({
     setError(null);
 
     try {
+      // Flush any pending writes before syncing
+      // This ensures we sync the latest state, not stale data
+      if (onFlushWrites) {
+        await onFlushWrites();
+      }
       // Build headers - token is optional (server may have it from env/file)
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -232,6 +264,10 @@ export function useAutoSync({
         setStatus('synced');
       }
 
+      // Reset consecutive errors on success
+      consecutiveErrorsRef.current = 0;
+      backoffUntilRef.current = 0;
+
       // Update last sync time
       const now = new Date().toISOString();
       setLastSyncAt(now);
@@ -242,12 +278,22 @@ export function useAutoSync({
 
     } catch (err) {
       console.error('[AutoSync] Error:', err);
+
+      // Increment consecutive errors and set backoff
+      consecutiveErrorsRef.current += 1;
+      const backoffMs = Math.min(
+        BACKOFF_BASE_MS * Math.pow(2, consecutiveErrorsRef.current - 1),
+        MAX_BACKOFF_MS
+      );
+      backoffUntilRef.current = Date.now() + backoffMs;
+      console.log(`[AutoSync] Error #${consecutiveErrorsRef.current}, backing off for ${backoffMs / 1000}s`);
+
       setError(err instanceof Error ? err.message : 'Sync failed');
       setStatus('error');
     } finally {
       isSyncingRef.current = false;
     }
-  }, [isOnline, onUpdateItem, onAddItem, onConflicts]);
+  }, [isOnline, onUpdateItem, onAddItem, onConflicts, onFlushWrites]);
 
   // Auto-sync on interval
   useEffect(() => {

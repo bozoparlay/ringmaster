@@ -222,10 +222,10 @@ const sync = useCallback(async () => {
 
 ### Phase 2: Robustness Improvements
 
-- [ ] **T2.1**: Add idempotency check before creating new issues
-- [ ] **T2.2**: Implement write flush before sync
-- [ ] **T2.3**: Add rate limiting / backoff to prevent runaway sync loops
-- [ ] **T2.4**: Add sync status indicator showing pending vs synced tasks
+- [x] **T2.1**: Add idempotency check before creating new issues
+- [x] **T2.2**: Implement write flush before sync
+- [x] **T2.3**: Add rate limiting / backoff to prevent runaway sync loops
+- [x] **T2.4**: Add sync status indicator showing pending vs synced tasks
 
 ### Phase 3: Recovery & Cleanup Tools
 

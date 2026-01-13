@@ -67,6 +67,7 @@ export default function Home() {
     updatePRStatus,
     refresh,
     exportToMarkdown,
+    flushPendingWrites,
   } = useBacklog({ path: backlogPath });
 
   // Auto-sync with GitHub
@@ -84,6 +85,7 @@ export default function Home() {
     onAddItem: addItem,
     enabled: isGitHubConnected,
     onConflicts: (conflicts) => setSyncConflicts(conflicts),
+    onFlushWrites: flushPendingWrites,
   });
 
   // Update syncError from autoSync

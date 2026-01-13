@@ -453,11 +453,38 @@ async function pushTask(
   repo: string,
   token: string,
   task: BacklogItem,
-  existingIssue?: GitHubIssue
+  existingIssue?: GitHubIssue,
+  allExistingIssues?: GitHubIssue[]
 ): Promise<{ issue: GitHubIssue; operation: SyncedTask['operation'] }> {
   const body = taskToIssueBody(task);
   const labels = taskToLabels(task);
   const state = task.status === 'ready_to_ship' ? 'closed' : 'open';
+
+  // Idempotency check - if no existingIssue passed, search for a match
+  // This prevents duplicate creation even if local metadata was lost
+  if (!existingIssue && allExistingIssues) {
+    // Search by task ID in body first (most reliable)
+    const matchByTaskId = allExistingIssues.find(issue => {
+      const issueTaskId = extractTaskId(issue.body);
+      return issueTaskId === task.id;
+    });
+
+    if (matchByTaskId) {
+      console.log(`[GitHub Sync] Idempotency check: Found existing issue #${matchByTaskId.number} by task ID`);
+      existingIssue = matchByTaskId;
+    } else {
+      // Fallback: search by exact title match (less reliable but catches edge cases)
+      const matchByTitle = allExistingIssues.find(issue =>
+        issue.title === task.title &&
+        issue.labels.some(l => l.name === RINGMASTER_LABEL)
+      );
+
+      if (matchByTitle) {
+        console.log(`[GitHub Sync] Idempotency check: Found existing issue #${matchByTitle.number} by title`);
+        existingIssue = matchByTitle;
+      }
+    }
+  }
 
   if (existingIssue) {
     // Update existing issue
@@ -669,7 +696,7 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          const { issue, operation } = await pushTask(repo, token, task, existingIssue);
+          const { issue, operation } = await pushTask(repo, token, task, existingIssue, existingIssues);
 
           response.tasks.push({
             taskId: task.id,
