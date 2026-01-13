@@ -209,6 +209,8 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const hasAiChanges = preAiItem !== null;
   const isReadyToShip = editedItem?.status === 'ready_to_ship';
   const isInReview = editedItem?.status === 'review';
+  const isInProgress = editedItem?.status === 'in_progress';
+  const isInBacklog = editedItem?.status === 'backlog' || editedItem?.status === 'up_next';
   const hasBranch = !!editedItem?.branch;
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
   const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
@@ -1098,8 +1100,24 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </button>
           )}
 
-          {/* Tackle button (not shown when ready to ship or in review) */}
-          {!isReadyToShip && !isInReview && (
+          {/* Submit for Review button (shown when in progress) */}
+          {isInProgress && (
+            <button
+              onClick={() => {
+                const updatedItem = { ...editedItem, status: 'review' as const };
+                onSave(updatedItem);
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-cyan-500/25"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Submit for Review
+            </button>
+          )}
+
+          {/* Tackle button (only shown for backlog/up_next tasks) */}
+          {isInBacklog && (
             <button
               onClick={() => onTackle(editedItem)}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/25"
