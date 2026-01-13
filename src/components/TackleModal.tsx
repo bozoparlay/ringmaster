@@ -12,6 +12,7 @@ interface TackleModalProps {
   onStartWork: (item: BacklogItem) => void;
   onShowToast?: (message: string, type: 'success' | 'error' | 'info') => void;
   backlogPath?: string;
+  isGitHubView?: boolean; // When true, skip worktree creation
 }
 
 // IDE icon component
@@ -47,7 +48,7 @@ function IdeIcon({ ide, className = "w-4 h-4" }: { ide: string; className?: stri
   }
 }
 
-export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, backlogPath }: TackleModalProps) {
+export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, backlogPath, isGitHubView }: TackleModalProps) {
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<'plan' | 'prompt'>('plan');
   const [isLaunching, setIsLaunching] = useState(false);

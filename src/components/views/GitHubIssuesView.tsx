@@ -1,9 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { KanbanColumn } from '../KanbanColumn';
 import { TaskCard } from '../TaskCard';
+import { TaskPanel } from '../TaskPanel';
+import { TackleModal } from '../TackleModal';
 import { Toast, ToastType } from '../Toast';
 import type { BacklogItem, Priority, Effort, Status } from '@/types/backlog';
+import { COLUMN_ORDER, PRIORITY_WEIGHT } from '@/types/backlog';
 
 interface GitHubIssue {
   number: number;
@@ -17,6 +33,15 @@ interface GitHubIssue {
   assignee: { login: string } | null;
   user: { login: string };
 }
+
+// Map status to GitHub label
+const STATUS_TO_LABEL: Record<Status, string | null> = {
+  'backlog': null, // No label for backlog
+  'up_next': null, // Virtual status
+  'in_progress': 'status: in-progress',
+  'review': 'status: review',
+  'ready_to_ship': 'status: ready-to-ship',
+};
 
 // Convert GitHub issue to BacklogItem format for display
 function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
@@ -82,12 +107,28 @@ export function GitHubIssuesView({ repo, token, onTackle }: GitHubIssuesViewProp
   const [issues, setIssues] = useState<GitHubIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<BacklogItem | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isTackleOpen, setIsTackleOpen] = useState(false);
+  const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [updatingIssue, setUpdatingIssue] = useState<number | null>(null);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
   };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const fetchIssues = useCallback(async () => {
     if (!repo) {
@@ -139,29 +180,162 @@ export function GitHubIssuesView({ repo, token, onTackle }: GitHubIssuesViewProp
     fetchIssues();
   }, [fetchIssues]);
 
-  const items = issues.map(issueToBacklogItem);
+  const items = useMemo(() => issues.map(issueToBacklogItem), [issues]);
 
-  // Group by status
-  const backlogItems = items.filter(i => i.status === 'backlog');
-  const inProgressItems = items.filter(i => i.status === 'in_progress');
-  const reviewItems = items.filter(i => i.status === 'review');
-  const readyToShipItems = items.filter(i => i.status === 'ready_to_ship');
+  // Organize items by column (no Up Next for GitHub view - it's not applicable)
+  const columnItems = useMemo(() => {
+    const columns: Record<Status, BacklogItem[]> = {
+      backlog: [],
+      up_next: [], // Keep empty - not used for GitHub
+      in_progress: [],
+      review: [],
+      ready_to_ship: [],
+    };
+
+    items.forEach((item) => {
+      if (item.status === 'up_next') {
+        columns.backlog.push(item);
+      } else {
+        columns[item.status].push(item);
+      }
+    });
+
+    // Sort by priority
+    Object.values(columns).forEach(col => {
+      col.sort((a, b) => {
+        const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.order - b.order;
+      });
+    });
+
+    return columns;
+  }, [items]);
+
+  const activeItem = activeId ? items.find(i => i.id === activeId) : null;
+
+  // Update GitHub issue labels when status changes
+  const updateIssueStatus = async (issueNumber: number, fromStatus: Status, toStatus: Status) => {
+    if (!repo || !token) {
+      showToast('GitHub token required to update issue status', 'error');
+      return false;
+    }
+
+    setUpdatingIssue(issueNumber);
+
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': `Bearer ${token}`,
+      };
+
+      // Get current labels
+      const issue = issues.find(i => i.number === issueNumber);
+      if (!issue) return false;
+
+      const currentLabels = issue.labels.map(l => l.name);
+
+      // Remove old status label, add new one
+      const oldLabel = STATUS_TO_LABEL[fromStatus];
+      const newLabel = STATUS_TO_LABEL[toStatus];
+
+      let updatedLabels = currentLabels.filter(l => !l.startsWith('status:'));
+      if (newLabel) {
+        updatedLabels.push(newLabel);
+      }
+
+      // Update labels via GitHub API
+      const response = await fetch(
+        `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues/${issueNumber}`,
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ labels: updatedLabels }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to update issue: ${response.status}`);
+      }
+
+      // Update local state
+      setIssues(prev => prev.map(i => {
+        if (i.number === issueNumber) {
+          return {
+            ...i,
+            labels: updatedLabels.map(name => ({ name, color: '000000' })),
+          };
+        }
+        return i;
+      }));
+
+      showToast(`Issue #${issueNumber} moved to ${toStatus.replace('_', ' ')}`, 'success');
+      return true;
+    } catch (err) {
+      console.error('Failed to update issue status:', err);
+      showToast(`Failed to update issue #${issueNumber}`, 'error');
+      return false;
+    } finally {
+      setUpdatingIssue(null);
+    }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const draggedItem = items.find(i => i.id === active.id);
+    if (!draggedItem) return;
+
+    const overId = over.id as string;
+
+    // If dropped on a column
+    if (COLUMN_ORDER.includes(overId as Status)) {
+      const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
+      if (draggedItem.status !== targetStatus && draggedItem.githubIssueNumber) {
+        await updateIssueStatus(draggedItem.githubIssueNumber, draggedItem.status, targetStatus);
+      }
+      return;
+    }
+
+    // If dropped on another item, move to that item's column
+    const overItem = items.find(i => i.id === overId);
+    if (overItem && overItem.status !== draggedItem.status && draggedItem.githubIssueNumber) {
+      await updateIssueStatus(draggedItem.githubIssueNumber, draggedItem.status, overItem.status);
+    }
+  };
 
   const handleItemClick = (item: BacklogItem) => {
     setSelectedItem(item);
-    // Open the GitHub issue in a new tab
-    if (item.githubIssueUrl) {
-      window.open(item.githubIssueUrl, '_blank');
-    }
+    setIsPanelOpen(true);
   };
 
   const handleTackle = (item: BacklogItem) => {
-    if (onTackle) {
-      onTackle(item);
-    } else {
-      showToast('Tackle from GitHub view coming in Phase 3!', 'info');
-    }
+    setTackleItem(item);
+    setIsTackleOpen(true);
+    setIsPanelOpen(false);
   };
+
+  const handleStartWork = async (item: BacklogItem) => {
+    // For GitHub issues, we just update the status label
+    if (item.githubIssueNumber) {
+      const success = await updateIssueStatus(item.githubIssueNumber, item.status, 'in_progress');
+      if (success) {
+        showToast(`Started work on issue #${item.githubIssueNumber}`, 'success');
+      }
+    }
+    setIsTackleOpen(false);
+    setTackleItem(null);
+  };
+
+  // GitHub-specific column order (no Up Next)
+  const githubColumnOrder: Status[] = ['backlog', 'in_progress', 'review', 'ready_to_ship'];
 
   if (loading) {
     return (
@@ -221,9 +395,17 @@ export function GitHubIssuesView({ repo, token, onTackle }: GitHubIssuesViewProp
           <span className="text-xs text-surface-500 uppercase tracking-wider">
             {repo?.owner}/{repo?.repo}
           </span>
+          {updatingIssue && (
+            <span className="text-xs text-accent flex items-center gap-2">
+              <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
+              Updating #{updatingIssue}...
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-4 text-xs text-surface-500">
           <span className="font-mono">{items.length} open issues</span>
+          <span className="text-surface-700">|</span>
+          <span className="font-mono text-accent">{columnItems.in_progress.length} active</span>
           <button
             onClick={fetchIssues}
             className="p-1.5 hover:bg-surface-800 rounded-lg transition-colors"
@@ -236,48 +418,72 @@ export function GitHubIssuesView({ repo, token, onTackle }: GitHubIssuesViewProp
         </div>
       </div>
 
-      {/* Issues Grid */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* In Progress Section */}
-          {inProgressItems.length > 0 && (
-            <div className="col-span-full">
-              <h3 className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-400" />
-                In Progress ({inProgressItems.length})
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-                {inProgressItems.map(item => (
-                  <TaskCard
-                    key={item.id}
-                    item={item}
-                    onClick={() => handleItemClick(item)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Kanban Board */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-4 p-6 h-full w-full">
+            {githubColumnOrder.map((status) => (
+              <KanbanColumn
+                key={status}
+                status={status}
+                items={columnItems[status]}
+                onItemClick={handleItemClick}
+                isLoading={false}
+                activeTaskId={undefined}
+                upNextIds={new Set()}
+              />
+            ))}
+          </div>
 
-          {/* Backlog Section */}
-          {backlogItems.length > 0 && (
-            <div className="col-span-full">
-              <h3 className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-surface-500" />
-                Open ({backlogItems.length})
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {backlogItems.map(item => (
-                  <TaskCard
-                    key={item.id}
-                    item={item}
-                    onClick={() => handleItemClick(item)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+          <DragOverlay>
+            {activeItem ? (
+              <TaskCard
+                item={activeItem}
+                onClick={() => {}}
+                isDragging
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
+
+      {/* Task Panel - opens GitHub issue on view */}
+      <TaskPanel
+        item={selectedItem}
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        onSave={async () => {
+          // GitHub issues are edited on GitHub directly
+          if (selectedItem?.githubIssueUrl) {
+            window.open(selectedItem.githubIssueUrl, '_blank');
+          }
+          setIsPanelOpen(false);
+        }}
+        onDelete={async () => {
+          // Can't delete GitHub issues from here
+          showToast('Close issues directly on GitHub', 'info');
+        }}
+        onTackle={handleTackle}
+        isGitHubView
+      />
+
+      {/* Tackle Modal */}
+      <TackleModal
+        item={tackleItem}
+        isOpen={isTackleOpen}
+        onClose={() => {
+          setIsTackleOpen(false);
+          setTackleItem(null);
+        }}
+        onStartWork={handleStartWork}
+        onShowToast={showToast}
+        isGitHubView
+      />
 
       {/* Toast Notification */}
       {toast && (

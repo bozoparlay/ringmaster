@@ -29,6 +29,7 @@ interface TaskPanelProps {
   onShip?: (item: BacklogItem) => Promise<void>;
   onUnlinkGitHub?: (item: BacklogItem) => Promise<void>;
   backlogPath?: string;
+  isGitHubView?: boolean; // When true, editing opens GitHub instead
 }
 
 // AI Loading State Messages
@@ -180,7 +181,7 @@ const valueColors: Record<Value, string> = {
   high: 'bg-red-500',
 };
 
-export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onReview, onShip, onUnlinkGitHub, backlogPath }: TaskPanelProps) {
+export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onReview, onShip, onUnlinkGitHub, backlogPath, isGitHubView }: TaskPanelProps) {
   const [editedItem, setEditedItem] = useState<BacklogItem | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
