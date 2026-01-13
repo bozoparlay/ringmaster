@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { TaskCard } from '../TaskCard';
+import { TaskPanel } from '../TaskPanel';
+import { TackleModal } from '../TackleModal';
 import { Toast, ToastType } from '../Toast';
 import type { BacklogItem, Priority, Effort, Status } from '@/types/backlog';
 import { v4 as uuidv4 } from 'uuid';
@@ -50,6 +52,10 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [selectedItem, setSelectedItem] = useState<BacklogItem | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isTackleOpen, setIsTackleOpen] = useState(false);
+  const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -151,7 +157,46 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
     setEditTitle('');
   };
 
+  // Open task panel when clicking on a task
+  const handleItemClick = useCallback((item: BacklogItem) => {
+    setSelectedItem(item);
+    setIsPanelOpen(true);
+  }, []);
+
+  // Open tackle modal
+  const handleTackle = useCallback((item: BacklogItem) => {
+    setTackleItem(item);
+    setIsTackleOpen(true);
+    setIsPanelOpen(false);
+  }, []);
+
+  // Start work on a task (from TackleModal)
+  const handleStartWork = useCallback((item: BacklogItem) => {
+    // Mark task as in_progress
+    updateTask({ ...item, status: 'in_progress' });
+    showToast(`Started work on "${item.title}"`, 'success');
+    setIsTackleOpen(false);
+    setTackleItem(null);
+  }, [updateTask]);
+
+  // Save edited task from panel
+  const handleSaveTask = useCallback((updatedItem: BacklogItem) => {
+    updateTask(updatedItem);
+    setIsPanelOpen(false);
+    setSelectedItem(null);
+  }, [updateTask]);
+
+  // Delete task from panel
+  const handleDeleteTask = useCallback(async (id: string) => {
+    deleteTask(id);
+    setIsPanelOpen(false);
+    setSelectedItem(null);
+  }, [deleteTask]);
+
+  // Separate tasks by status: backlog/in_progress are pending, ready_to_ship are completed
   const pendingTasks = tasks.filter(t => t.status !== 'ready_to_ship');
+  const inProgressTasks = pendingTasks.filter(t => t.status === 'in_progress');
+  const backlogTasks = pendingTasks.filter(t => t.status === 'backlog');
   const completedTasks = tasks.filter(t => t.status === 'ready_to_ship');
 
   if (loading) {
@@ -188,21 +233,67 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Pending Tasks */}
-            {pendingTasks.length > 0 && (
+            {/* In Progress Tasks */}
+            {inProgressTasks.length > 0 && (
               <div>
-                <h3 className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-3">
-                  To Do ({pendingTasks.length})
+                <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider mb-3">
+                  In Progress ({inProgressTasks.length})
                 </h3>
                 <div className="space-y-2">
-                  {pendingTasks.map(task => (
+                  {inProgressTasks.map(task => (
                     <div
                       key={task.id}
-                      className="group flex items-center gap-3 p-3 bg-surface-850 border border-surface-800 rounded-lg hover:border-surface-700 transition-colors"
+                      className="group flex items-center gap-3 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg hover:border-purple-500/50 transition-colors cursor-pointer"
+                      onClick={() => handleItemClick(task)}
+                    >
+                      {/* Progress indicator */}
+                      <div className="w-5 h-5 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" />
+
+                      {/* Title */}
+                      <span className="flex-1 text-surface-200 text-sm font-medium">
+                        {task.title}
+                      </span>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleComplete(task.id);
+                          }}
+                          className="p-1.5 hover:bg-green-500/20 rounded text-surface-400 hover:text-green-400 transition-colors"
+                          title="Mark as complete"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Backlog Tasks */}
+            {backlogTasks.length > 0 && (
+              <div>
+                <h3 className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-3">
+                  To Do ({backlogTasks.length})
+                </h3>
+                <div className="space-y-2">
+                  {backlogTasks.map(task => (
+                    <div
+                      key={task.id}
+                      className="group flex items-center gap-3 p-3 bg-surface-850 border border-surface-800 rounded-lg hover:border-surface-700 transition-colors cursor-pointer"
+                      onClick={() => handleItemClick(task)}
                     >
                       {/* Checkbox */}
                       <button
-                        onClick={() => toggleComplete(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleComplete(task.id);
+                        }}
                         className="w-5 h-5 rounded border border-surface-600 hover:border-accent flex items-center justify-center transition-colors"
                       >
                         {task.status === 'ready_to_ship' && (
@@ -219,6 +310,7 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
                           value={editTitle}
                           onChange={(e) => setEditTitle(e.target.value)}
                           onBlur={saveEdit}
+                          onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') saveEdit();
                             if (e.key === 'Escape') cancelEdit();
@@ -227,10 +319,7 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
                           className="flex-1 bg-transparent border-b border-accent text-surface-100 text-sm focus:outline-none"
                         />
                       ) : (
-                        <span
-                          onClick={() => startEdit(task)}
-                          className="flex-1 text-surface-200 text-sm cursor-text"
-                        >
+                        <span className="flex-1 text-surface-200 text-sm">
                           {task.title}
                         </span>
                       )}
@@ -238,7 +327,22 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
                       {/* Actions */}
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => handlePromote(task)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTackle(task);
+                          }}
+                          className="p-1.5 hover:bg-purple-500/20 rounded text-surface-400 hover:text-purple-300 transition-colors"
+                          title="Tackle this task"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePromote(task);
+                          }}
                           className="p-1.5 hover:bg-surface-700 rounded text-surface-400 hover:text-accent transition-colors"
                           title="Promote to Backlog"
                         >
@@ -247,7 +351,10 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
                           </svg>
                         </button>
                         <button
-                          onClick={() => deleteTask(task.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteTask(task.id);
+                          }}
                           className="p-1.5 hover:bg-surface-700 rounded text-surface-400 hover:text-red-400 transition-colors"
                           title="Delete"
                         >
@@ -313,6 +420,31 @@ export function QuickTasksView({ onPromoteToBacklog }: QuickTasksViewProps) {
         <span>Stored in browser localStorage</span>
         <span className="font-mono">{pendingTasks.length} pending • {completedTasks.length} done</span>
       </div>
+
+      {/* Task Panel */}
+      <TaskPanel
+        item={selectedItem}
+        isOpen={isPanelOpen}
+        onClose={() => {
+          setIsPanelOpen(false);
+          setSelectedItem(null);
+        }}
+        onSave={handleSaveTask}
+        onDelete={handleDeleteTask}
+        onTackle={handleTackle}
+      />
+
+      {/* Tackle Modal */}
+      <TackleModal
+        item={tackleItem}
+        isOpen={isTackleOpen}
+        onClose={() => {
+          setIsTackleOpen(false);
+          setTackleItem(null);
+        }}
+        onStartWork={handleStartWork}
+        onShowToast={showToast}
+      />
 
       {/* Toast Notification */}
       {toast && (
