@@ -110,13 +110,18 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
   }
   // Note: 'status: backlog' label or no status label both map to 'backlog'
 
-  // Extract tags from other labels (excluding metadata labels)
+  // Extract category from category: label if present
+  const categoryLabel = issue.labels.find(l => l.name.startsWith('category:'));
+  const category = categoryLabel ? categoryLabel.name.replace('category:', '').trim() : undefined;
+
+  // Extract tags from other labels (excluding all metadata labels)
   const tags = issue.labels
     .filter(l =>
       !l.name.startsWith('priority:') &&
       !l.name.startsWith('effort:') &&
       !l.name.startsWith('value:') &&
       !l.name.startsWith('status:') &&
+      !l.name.startsWith('category:') &&
       l.name !== 'ringmaster'
     )
     .map(l => l.name);
@@ -134,8 +139,7 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
     status,
     tags,
     acceptanceCriteria: acceptanceCriteria.length > 0 ? acceptanceCriteria : undefined,
-    // Category extracted from first non-metadata label if present (e.g., 'bug', 'feature')
-    category: tags.length > 0 ? tags[0] : undefined,
+    category,
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,
     order: issue.number,
