@@ -127,16 +127,3 @@ Scoring a task that is pretty unique is coming back as having a ton of similarit
 *Value: medium*
 
 ---
-
-## [ready_to_ship] Uncategorized
-
-### Improve Needs Rescope Indicator
-<!-- ringmaster:id=248b5807-1beb-49eb-8507-175c771a1ec8 github=405 -->
-**Priority**: Medium | **Effort**: Medium
-**Branch**: task/248b5807-improve-needs-rescope-indicator
-**Worktree**: .tasks/task-248b5807
-
-**Description**:
-Currently it's just a red dot on the top right, make it a caution sign on the top left in the same style as the star that is used for the up next item
-
----

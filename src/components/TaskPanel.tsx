@@ -1027,6 +1027,19 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </div>
           )}
 
+          {/* GAP #6 FIX: Open in IDE button for in_progress tasks with worktree */}
+          {isInProgress && editedItem.worktreePath && (
+            <button
+              onClick={() => onTackle(editedItem)}
+              className="w-full flex items-center justify-center gap-2 bg-surface-800 hover:bg-surface-700 border border-surface-600 text-surface-200 font-medium py-2 px-4 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+              Open in IDE
+            </button>
+          )}
+
           {/* Review feedback */}
           {hasReviewFeedback && (
             <div className="px-3 py-2 bg-orange-500/10 rounded-lg border border-orange-500/30">
@@ -1041,6 +1054,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           )}
 
           {/* Ship button (for ready_to_ship status) */}
+          {/* GAP #11 FIX: PR should already exist at this point. Button merges and cleans up */}
           {isReadyToShip && onShip && (
             <button
               onClick={handleShip}
@@ -1053,14 +1067,14 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Shipping...
+                  Merging...
                 </>
               ) : (
                 <>
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-14 9V3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Commit & Push
+                  Merge & Ship
                 </>
               )}
             </button>
@@ -1079,21 +1093,28 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </button>
           )}
 
-          {/* Submit for Review button (shown when in progress) */}
+          {/* Commit & Review button (shown when in progress) */}
+          {/* GAP #11 FIX: The review API now auto-commits and pushes, so the button reflects this */}
           {isInProgress && onReview && (
-            <button
-              onClick={() => {
-                const updatedItem = { ...editedItem, status: 'review' as const };
-                onSave(updatedItem);
-                onReview(updatedItem);
-              }}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-cyan-500/25"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              Submit for Review
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  // Don't change status until review completes - the review modal will handle that
+                  // The review API will auto-commit any uncommitted changes before reviewing
+                  onReview(editedItem);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-cyan-500/25"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                Commit & Review
+              </button>
+              {/* GAP #8 FIX: Guidance about what the button does */}
+              <p className="text-xs text-surface-500 text-center">
+                Auto-commits changes, pushes to remote, runs AI review, and creates PR
+              </p>
+            </div>
           )}
 
           {/* Tackle button (only shown for backlog/up_next tasks) */}

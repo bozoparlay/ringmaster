@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { fromIni } from '@aws-sdk/credential-providers';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import * as path from 'path';
+import * as fs from 'fs/promises';
+import { execWithTimeout, TimeoutError } from '@/lib/resilience';
 
-const execAsync = promisify(exec);
+// Timeouts
+const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
+const GIT_PUSH_TIMEOUT_MS = 30000;      // 30s for git push
 
 // Initialize Bedrock client with profile support
 const bedrockClient = new BedrockRuntimeClient({
@@ -52,21 +54,117 @@ interface ReviewResult {
 }
 
 /**
+ * Check if worktree has uncommitted changes
+ * Returns { hasChanges: boolean, fileCount: number, files: string[] }
+ */
+async function checkUncommittedChanges(workDir: string): Promise<{
+  hasChanges: boolean;
+  fileCount: number;
+  files: string[];
+}> {
+  try {
+    const { stdout } = await execWithTimeout(
+      'git status --porcelain',
+      { cwd: workDir },
+      GIT_COMMAND_TIMEOUT_MS
+    );
+    const files = stdout.trim().split('\n').filter(Boolean);
+    return {
+      hasChanges: files.length > 0,
+      fileCount: files.length,
+      files: files.map(f => f.slice(3)), // Remove status prefix (e.g., " M ")
+    };
+  } catch {
+    return { hasChanges: false, fileCount: 0, files: [] };
+  }
+}
+
+/**
+ * Commit all changes in worktree with a generated message
+ */
+async function commitChanges(
+  workDir: string,
+  taskTitle: string
+): Promise<{ success: boolean; commitSha?: string; error?: string }> {
+  try {
+    // Stage all changes
+    await execWithTimeout('git add -A', { cwd: workDir }, GIT_COMMAND_TIMEOUT_MS);
+
+    // Create commit message
+    const message = `WIP: ${taskTitle}`;
+    const escapedMessage = message.replace(/'/g, "'\\''");
+
+    // Commit
+    await execWithTimeout(
+      `git commit -m '${escapedMessage}'`,
+      { cwd: workDir },
+      GIT_COMMAND_TIMEOUT_MS
+    );
+
+    // Get commit SHA
+    const { stdout } = await execWithTimeout(
+      'git rev-parse HEAD',
+      { cwd: workDir },
+      GIT_COMMAND_TIMEOUT_MS
+    );
+
+    return { success: true, commitSha: stdout.trim() };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[review-task] Commit failed:', errorMsg);
+    return { success: false, error: errorMsg };
+  }
+}
+
+/**
+ * Push branch to remote
+ */
+async function pushToRemote(
+  workDir: string,
+  branch: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Try push with upstream tracking
+    await execWithTimeout(
+      `git push -u origin ${branch}`,
+      { cwd: workDir },
+      GIT_PUSH_TIMEOUT_MS
+    );
+    return { success: true };
+  } catch {
+    // Try without -u if branch already tracked
+    try {
+      await execWithTimeout(
+        `git push origin ${branch}`,
+        { cwd: workDir },
+        GIT_PUSH_TIMEOUT_MS
+      );
+      return { success: true };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      return { success: false, error: errorMsg };
+    }
+  }
+}
+
+/**
  * Get git diff between branches
  */
 async function getGitDiff(workDir: string, baseBranch: string, targetBranch: string): Promise<string> {
   try {
     // Try three-dot syntax first (commits on target not in base)
-    const { stdout } = await execAsync(
+    const { stdout } = await execWithTimeout(
       `git diff ${baseBranch}...${targetBranch}`,
-      { cwd: workDir, maxBuffer: 10 * 1024 * 1024 }
+      { cwd: workDir, maxBuffer: 10 * 1024 * 1024 },
+      GIT_COMMAND_TIMEOUT_MS
     );
     return stdout;
   } catch {
     // Fallback to two-dot syntax
-    const { stdout } = await execAsync(
+    const { stdout } = await execWithTimeout(
       `git diff ${baseBranch} ${targetBranch}`,
-      { cwd: workDir, maxBuffer: 10 * 1024 * 1024 }
+      { cwd: workDir, maxBuffer: 10 * 1024 * 1024 },
+      GIT_COMMAND_TIMEOUT_MS
     );
     return stdout;
   }
@@ -198,19 +296,33 @@ export async function POST(request: Request) {
     // Determine the repo and worktree directories
     const repoDir = backlogPath ? path.dirname(backlogPath) : process.cwd();
     let workDir = repoDir;
+    let hasWorktree = false;
 
     if (worktreePath) {
       const absoluteWorktreePath = path.isAbsolute(worktreePath)
         ? worktreePath
         : path.join(repoDir, worktreePath);
-      workDir = absoluteWorktreePath;
+
+      // Check if worktree actually exists
+      try {
+        await fs.access(absoluteWorktreePath);
+        workDir = absoluteWorktreePath;
+        hasWorktree = true;
+      } catch {
+        // Worktree doesn't exist - use repo dir
+        console.warn(`[review-task] Worktree not found at ${absoluteWorktreePath}, using repo dir`);
+      }
     }
 
     // Determine branch name if not provided
     let targetBranch = branch;
     if (!targetBranch) {
       try {
-        const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: workDir });
+        const { stdout } = await execWithTimeout(
+          'git rev-parse --abbrev-ref HEAD',
+          { cwd: workDir },
+          GIT_COMMAND_TIMEOUT_MS
+        );
         targetBranch = stdout.trim();
       } catch {
         return NextResponse.json(
@@ -223,12 +335,60 @@ export async function POST(request: Request) {
     // Get the default branch (main or master)
     let defaultBranch = 'main';
     try {
-      const { stdout } = await execAsync('git branch --list main master', { cwd: repoDir });
+      const { stdout } = await execWithTimeout(
+        'git branch --list main master',
+        { cwd: repoDir },
+        GIT_COMMAND_TIMEOUT_MS
+      );
       if (stdout.includes('main')) defaultBranch = 'main';
       else if (stdout.includes('master')) defaultBranch = 'master';
     } catch {}
 
-    // Get the git diff
+    // =========================================================================
+    // GAP #9 FIX: Check for and commit uncommitted changes BEFORE review
+    // This ensures the review always has actual committed changes to analyze
+    // =========================================================================
+    let commitInfo: { committed: boolean; commitSha?: string; filesCommitted?: number } = { committed: false };
+    let pushInfo: { pushed: boolean; error?: string } = { pushed: false };
+
+    // Check for uncommitted changes in worktree
+    console.log(`[review-task] Checking for uncommitted changes in ${workDir}`);
+    const uncommittedStatus = await checkUncommittedChanges(workDir);
+
+    if (uncommittedStatus.hasChanges) {
+      console.log(`[review-task] Found ${uncommittedStatus.fileCount} uncommitted files, auto-committing...`);
+
+      // Auto-commit changes
+      const commitResult = await commitChanges(workDir, title);
+      if (!commitResult.success) {
+        return NextResponse.json({
+          success: false,
+          error: `Failed to commit changes before review: ${commitResult.error}`,
+          uncommittedFiles: uncommittedStatus.files,
+        }, { status: 400 });
+      }
+
+      commitInfo = {
+        committed: true,
+        commitSha: commitResult.commitSha,
+        filesCommitted: uncommittedStatus.fileCount,
+      };
+      console.log(`[review-task] Committed ${uncommittedStatus.fileCount} files: ${commitResult.commitSha}`);
+    }
+
+    // Push to remote (whether we committed now or not - ensures PR can be created)
+    console.log(`[review-task] Pushing branch ${targetBranch} to remote...`);
+    const pushResult = await pushToRemote(workDir, targetBranch);
+    if (!pushResult.success) {
+      console.warn(`[review-task] Push warning: ${pushResult.error}`);
+      // Don't fail the review for push errors - we can still review local changes
+      pushInfo = { pushed: false, error: pushResult.error };
+    } else {
+      pushInfo = { pushed: true };
+      console.log(`[review-task] Pushed to origin/${targetBranch}`);
+    }
+
+    // Get the git diff (now including any newly committed changes)
     console.log(`[review-task] Getting diff: ${defaultBranch}...${targetBranch} in ${workDir}`);
     let diff: string;
     try {
@@ -241,6 +401,7 @@ export async function POST(request: Request) {
     }
 
     if (!diff.trim()) {
+      // No changes even after checking for uncommitted - truly nothing to review
       return NextResponse.json({
         success: true,
         result: {
@@ -248,6 +409,9 @@ export async function POST(request: Request) {
           summary: 'No changes detected compared to the base branch.',
           issues: [],
         },
+        commitInfo,
+        pushInfo,
+        noChanges: true,
       });
     }
 
@@ -327,10 +491,22 @@ export async function POST(request: Request) {
         duration,
         timestamp: new Date().toISOString(),
       },
+      // GAP #9: Include commit/push info so UI knows what happened
+      commitInfo,
+      pushInfo,
       ...prInfo, // Include PR info if available
     });
   } catch (error) {
     console.error('Review task error:', error);
+
+    // Handle timeout errors specifically
+    if (error instanceof TimeoutError) {
+      return NextResponse.json(
+        { success: false, error: `Review operation timed out: ${error.message}` },
+        { status: 504 }
+      );
+    }
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { success: false, error: errorMessage },
