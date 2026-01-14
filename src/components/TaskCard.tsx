@@ -63,14 +63,26 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
         className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priority.dot} opacity-60`}
       />
 
-      {/* Low quality warning indicator (top-right) */}
-      {isLowQuality && (
+      {/* Low quality warning indicator (top-left) - caution triangle similar to star style */}
+      {/* Moved from top-right to top-left, changed from red dot to caution triangle */}
+      {isLowQuality && !isInUpNext && (
         <div
-          className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-lg border-2 border-surface-850 z-10"
+          className="absolute -top-1.5 -left-1.5 z-10 drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]"
           title={`Low quality (${item.qualityScore}/100): ${item.qualityIssues?.join(', ')}`}
         >
-          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01" />
+          <svg
+            className="w-5 h-5"
+            viewBox="0 0 24 24"
+            fill="url(#cautionGradient)"
+          >
+            <defs>
+              <linearGradient id="cautionGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#FCA5A5" />
+                <stop offset="50%" stopColor="#EF4444" />
+                <stop offset="100%" stopColor="#B91C1C" />
+              </linearGradient>
+            </defs>
+            <path d="M12 2L1 21h22L12 2zm0 3.17L20.24 19H3.76L12 5.17zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
           </svg>
         </div>
       )}
