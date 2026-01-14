@@ -102,14 +102,6 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 
 ## [backlog] Uncategorized
 
-### Improve Column Labels
-<!-- ringmaster:id=7b266aba-1375-4d05-881a-fce535992397 github=406 -->
-**Priority**: Medium | **Effort**: Medium
-
-**Description**:
-Up Next -> Priority
-Ready to Ship -> Ship it
-
 ### Improve Similarity Scoring
 <!-- ringmaster:id=10b8dbdc-0a16-46dd-9883-37c45157764f github=407 -->
 **Priority**: Medium | **Effort**: Medium | **Value**: Medium
