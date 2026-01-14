@@ -625,20 +625,19 @@ export function BacklogView({
           const repo = syncConfig?.repo;
           const token = userConfig?.token;
 
-          if (!repo || !token) {
-            showToast('Configure GitHub in settings to send items', 'error');
-            throw new Error('GitHub not configured');
+          if (!repo) {
+            showToast('Configure GitHub repository in settings first', 'error');
+            throw new Error('GitHub repository not configured');
           }
 
+          // Send full task object for proper formatting with all metadata
           const response = await fetch('/api/github/create-issue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              title: item.title,
-              body: item.description || '',
-              labels: item.tags || [],
+              task: item,
               repo,
-              token,
+              token: token || 'server-managed',
             }),
           });
 

@@ -98,6 +98,29 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 - [ ] QA testing confirms functionality works for all user scenarios, specifically testing drops near column headers
 - [ ] User can intuitively drop tiles without having to aim for the middle of columns
 
+### Clean up the frontend
+<!-- ringmaster:id=4c5c46cd-2698-49e2-858e-b5690ae251be github=492 -->
+**Priority**: Medium | **Effort**: Low | **Value**: Medium
+
+**Description**:
+**Description:**
+This task focuses on cleaning up and simplifying the frontend interface by consolidating action buttons into a more organized dropdown menu system. The current interface has redundant "new task" buttons and scattered cleanup/delete actions that create visual clutter and poor user experience. By implementing a dropdown pattern, we'll create a cleaner, more intuitive interface that reduces cognitive load for users.
+
+**Requirements:**
+- Consolidate cleanup tasks and delete worktrees functionality into a dropdown menu
+- Remove the redundant "new task" button from the top right since a plus sign exists at the bottom
+- Implement a consistent dropdown component that can be reused across the application
+- Ensure the dropdown is accessible with proper keyboard navigation and ARIA labels
+- Maintain all existing functionality while improving the visual hierarchy
+- Use consistent styling that matches the existing design system
+- Ensure dropdown works responsively on mobile devices
+
+**Technical Approach:**
+Create a reusable dropdown component (e.g., `ActionDropdown.jsx`) that accepts an array of action items with icons, labels, and click handlers. Position the dropdown in the top navigation or toolbar area. Remove the duplicate new task button from the header component. Consider using a library like Headless UI or building a custom dropdown with proper focus management and click-outside behavior.
+
+**Notes:**
+(Additional context, links, or findings to be added by the user)
+
 ---
 
 ## [backlog] Uncategorized

@@ -548,16 +548,14 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
         </DndContext>
       </div>
 
-      {/* Task Panel - opens GitHub issue on view */}
+      {/* Task Panel - view-only for GitHub issues */}
       <TaskPanel
         item={selectedItem}
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
         onSave={async () => {
-          // GitHub issues are edited on GitHub directly
-          if (selectedItem?.githubIssueUrl) {
-            window.open(selectedItem.githubIssueUrl, '_blank');
-          }
+          // Just close the panel - GitHub issues are edited on GitHub directly
+          // The "Edit on GitHub" link in the header provides explicit navigation
           setIsPanelOpen(false);
         }}
         onDelete={async () => {

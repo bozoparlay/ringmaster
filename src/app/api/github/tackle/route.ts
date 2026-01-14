@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GitHubSyncService, type GitHubSyncConfig } from '@/lib/storage/github-sync';
+import { getGitHubCredentials } from '@/lib/config/github-credentials';
 
 /**
  * POST /api/github/tackle
@@ -13,7 +14,9 @@ import { GitHubSyncService, type GitHubSyncConfig } from '@/lib/storage/github-s
  * - repo: Repository in "owner/repo" format
  * - inProgressLabel (optional): Custom label for in-progress state
  *
- * Authorization: Bearer token required
+ * Token resolution:
+ * 1. Server-side credentials (.env.local or ~/.ringmaster/config.json)
+ * 2. Authorization header (fallback for client-provided tokens)
  */
 
 interface TackleRequest {
@@ -31,16 +34,28 @@ interface TackleResponse {
 }
 
 export async function POST(request: NextRequest) {
-  // Get token from Authorization header
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
+  // Resolve token: server-side credentials first, then Authorization header
+  let token: string | null = null;
+
+  const serverCredentials = await getGitHubCredentials();
+  if (serverCredentials) {
+    token = serverCredentials.token;
+  }
+
+  if (!token) {
+    const authHeader = request.headers.get('Authorization');
+    const headerToken = authHeader?.replace('Bearer ', '');
+    if (headerToken && headerToken !== 'server-managed') {
+      token = headerToken;
+    }
+  }
 
   if (!token) {
     const response: TackleResponse = {
       success: false,
       assigned: false,
       labeled: false,
-      error: 'No authorization token provided',
+      error: 'No GitHub token configured. Add GITHUB_TOKEN to .env.local or configure in Settings.',
     };
     return NextResponse.json(response, { status: 401 });
   }

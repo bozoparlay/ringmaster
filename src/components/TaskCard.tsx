@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { BacklogItem, Priority } from '@/types/backlog';
 import { QUALITY_THRESHOLD } from '@/lib/task-quality';
+import { cleanDescriptionForDisplay } from '@/lib/display-utils';
 
 interface TaskCardProps {
   item: BacklogItem;
@@ -119,10 +120,10 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
           </h3>
         </div>
 
-        {/* Description preview */}
+        {/* Description preview - cleaned of internal metadata */}
         {item.description && (
           <p className="text-xs text-surface-400 line-clamp-2 mb-2.5 leading-relaxed">
-            {item.description}
+            {cleanDescriptionForDisplay(item.description)}
           </p>
         )}
 
