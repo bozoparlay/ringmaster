@@ -107,7 +107,7 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 **Priority**: Medium | **Effort**: Medium
 
 **Description**:
-Currently it's just a red dot on the top right, make it a caution sign on the top left in the same style as the star for the up next item
+Currently it's just a red dot on the top right, make it a caution sign on the top left in the same style as the star that is used for the up next item
 
 ### Improve Column Labels
 <!-- ringmaster:id=7b266aba-1375-4d05-881a-fce535992397 github=406 -->
