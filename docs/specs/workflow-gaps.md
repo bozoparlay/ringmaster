@@ -373,10 +373,46 @@ Ready to Ship → Ship  ✅ WORKING (merges PR, removes from board)
 
 ---
 
-## Next Steps
+## Gap Status Checklist
 
-1. ~~Create task for "Fix commit timing in workflow" addressing GAPs #9, #11, #8~~ ✅ Done
-2. ~~Create task for "Add IDE/worktree management" addressing GAPs #6, #4, #12~~ ✅ Partially done (#6, #12 fixed)
-3. ~~**CRITICAL**: Fix GAP #15 - Ship should actually merge the PR~~ ✅ Done
-4. Create task for "Cleanup improvements" addressing GAPs #7, #13
-5. Address remaining UX gaps (#16, #17, #18, #3)
+### ✅ FIXED (Critical/High Priority)
+
+- [x] **#9** - Review doesn't detect uncommitted changes → Auto-commits before review
+- [x] **#11** - Stage/git state mismatch → "Commit & Review" button, no premature status change
+- [x] **#8** - No guidance on when to commit → Added guidance text below button
+- [x] **#12** - Shell session breaks after ship → Deferred worktree cleanup
+- [x] **#6** - No re-open IDE button → Added "Open in IDE" for in_progress tasks
+- [x] **#15** - Ship doesn't merge PR → Added `gh pr merge` to ship flow
+- [x] **#14** - Ship doesn't create PR → Fixed by #9 (review now commits, PR auto-created)
+
+### 🔲 REMAINING (Medium Priority)
+
+- [ ] **#3** - Branch name not shown before creation (modal shows "Auto-generated on launch")
+- [ ] **#4** - No "Start Without IDE" option (forces VS Code open)
+- [ ] **#5** - Unclear success feedback (toast messages not specific)
+- [ ] **#10** - Status updates before operation completes (partially addressed)
+- [ ] **#16** - Storage mode friction on fresh load (must manually select file each session)
+- [ ] **#18** - No "Open in IDE" in Ready to Ship state (can't make last-minute fixes)
+
+### 🔲 REMAINING (Low Priority)
+
+- [ ] **#1** - File selector button text misleading ("No file loaded")
+- [ ] **#2** - Low quality tasks can start work (no warning gate)
+- [ ] **#7** - Orphaned worktree directories (disk space waste)
+- [ ] **#13** - Old worktrees not fully cleaned (build artifacts remain)
+- [ ] **#17** - Toast "Worktree already exists" is confusing
+
+---
+
+## Summary
+
+**Fixed**: 7 gaps (all critical/high priority)
+**Remaining**: 11 gaps (6 medium, 5 low)
+
+**Core workflow is now complete**:
+```
+Backlog → Start Working → In Progress → Commit & Review → Ready to Ship → Merge & Ship → Done
+    ✅           ✅            ✅              ✅                ✅              ✅
+```
+
+Remaining gaps are UX polish - the fundamental workflow is sound and tested.
