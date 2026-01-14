@@ -109,4 +109,11 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 **Description**:
 Scoring a task that is pretty unique is coming back as having a ton of similarity. We should probably make things more strict as far as similarity goes
 
+### Add trash can icon
+<!-- ringmaster:id=9770dd08-dc03-455b-b109-4d291147fe84 -->
+**Priority**: Medium | **Effort**: Medium | **Value**: Medium
+
+**Description**:
+Create a trash can icon at the bottom right when dragging a task. If we drag the task over the trash can, it should be deleted. Use frontend design to accomplish it.
+
 ---
