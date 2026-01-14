@@ -14,6 +14,16 @@ interface DeleteConfirmationModalProps {
 }
 
 /**
+ * Clean description text by removing HTML comments and metadata
+ */
+function cleanDescription(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  // Remove HTML comments (e.g., <!-- ringmaster-task-id:xxx -->)
+  const cleaned = text.replace(/<!--[\s\S]*?-->/g, '').trim();
+  return cleaned || undefined;
+}
+
+/**
  * Confirmation modal shown before deleting a task via drag-and-drop.
  */
 export function DeleteConfirmationModal({
@@ -23,6 +33,8 @@ export function DeleteConfirmationModal({
   onCancel,
 }: DeleteConfirmationModalProps) {
   if (!isOpen || !item) return null;
+
+  const cleanedDescription = cleanDescription(item.description);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -52,8 +64,8 @@ export function DeleteConfirmationModal({
         <div className="px-6 py-4">
           <div className="bg-surface-800/50 rounded-lg p-4 border border-surface-700">
             <h3 className="font-medium text-surface-200 line-clamp-2">{item.title}</h3>
-            {item.description && (
-              <p className="text-sm text-surface-400 mt-2 line-clamp-2">{item.description}</p>
+            {cleanedDescription && (
+              <p className="text-sm text-surface-400 mt-2 line-clamp-2">{cleanedDescription}</p>
             )}
             <div className="flex items-center gap-2 mt-3">
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
