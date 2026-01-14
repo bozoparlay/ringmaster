@@ -111,18 +111,28 @@ Scoring a task that is pretty unique is coming back as having a ton of similarit
 
 ---
 
-## [ready_to_ship] Uncategorized
+## [ready_to_ship] UI/UX
 
-### Add trash can icon
-<!-- ringmaster:id=9770dd08-dc03-455b-b109-4d291147fe84 -->
+### Add drag-and-drop trash can for deleting tasks
+<!-- ringmaster:id=6cf94cec-b3da-441a-a1f5-60a106fee311 -->
 **Priority**: Medium | **Effort**: Medium | **Value**: Medium
-**Branch**: task/9770dd08-add-trash-can-icon
-**Worktree**: .tasks/task-9770dd08
+**Branch**: task/6cf94cec-add-drag-and-drop-trash-can-for-deleting
+**Worktree**: .tasks/task-6cf94cec
 
 **Description**:
-Create a trash can icon at the bottom right when dragging a task. If we drag the task over the trash can, it should be deleted. Use frontend design to accomplish it.
+Add a trash can icon in the bottom-right corner of the Kanban board that users can drag tasks to for deletion. This provides a more intuitive way to delete tasks compared to opening the task panel and clicking delete.
 
-> **Review Feedback**:
-> The implementation only adds a placeholder comment without any actual functionality. No trash can icon, drag detection, or deletion logic has been implemented. | Missing: Create a trash can icon at the bottom right when dragging a task, Implement drag detection over the trash can, Implement task deletion when dragged over trash can, Use frontend design to accomplish the feature
+**Requirements:**
+- Trash can icon appears in a fixed position (bottom-right corner)
+- Users can drag any task card and drop it on the trash can
+- Confirmation dialog appears before deletion
+- Visual feedback during drag (trash can highlights when hovering)
+- Smooth animation when task is deleted
+
+**Technical Approach:**
+- Use existing DnD context from @dnd-kit
+- Add trash can as a droppable zone
+- Implement hover state detection
+- Add confirmation modal before deletion
 
 ---
