@@ -553,9 +553,12 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
         item={selectedItem}
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
-        onSave={async () => {
-          // Just close the panel - GitHub issues are edited on GitHub directly
-          // The "Edit on GitHub" link in the header provides explicit navigation
+        onSave={async (updatedItem) => {
+          // Check if status changed - if so, sync to GitHub
+          if (selectedItem && updatedItem.status !== selectedItem.status && updatedItem.githubIssueNumber) {
+            await updateIssueStatus(updatedItem.githubIssueNumber, selectedItem.status, updatedItem.status);
+          }
+          // Other fields are edited on GitHub directly via the "Edit on GitHub" link
           setIsPanelOpen(false);
         }}
         onDelete={async () => {
