@@ -186,6 +186,231 @@ First sync creates all labels. If missing:
 4. **Use server-side token storage** - Prefer `.env.local` or `~/.ringmaster/config.json` over browser localStorage
 5. **Keep tokens secure** - Don't commit `.env.local` to git (it's already in `.gitignore`)
 
+## Known Gaps and Limitations
+
+### GitHub Issues View
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Delete closes GitHub issues** | ✅ Working | Clicking delete in GitHub view closes the issue on GitHub |
+| **Acceptance criteria parsed** | ✅ Working | Parses `- [ ]` and `- [x]` checkboxes from issue body |
+| **Value field populated** | ✅ Working | Reads `value:*` labels and displays in dropdown |
+| **Status sync (drag-drop)** | ✅ Working | Dragging between columns updates `status:*` labels on GitHub |
+
+### Backlog View
+
+| Gap | Current Behavior | Expected Behavior | Status |
+|-----|------------------|-------------------|--------|
+| **Delete closes GitHub issue** | ✅ Working - deleting a backlog item with linked GitHub issue closes it | N/A | Implemented |
+| **Update syncs to GitHub** | ✅ Working - editing a synced task pushes changes to GitHub | N/A | Implemented |
+
+### Create Flow
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Create from GitHub view** | ✅ Working | Native task modal with AI assist, creates GitHub issue directly |
+| **All metadata transfers** | ✅ Working | Priority, effort, value, category, acceptance criteria all transfer to GitHub |
+| **Acceptance criteria as checkboxes** | ✅ Working | Criteria rendered as `- [ ]` checklist in GitHub |
+| **Labels auto-created** | ✅ Working | priority:*, effort:*, value:*, category labels all created |
+
+---
+
+## Gap Specifications (Historical)
+
+> **Note:** All gaps below have been implemented. This section is retained for historical reference.
+
+### Gap 1: Parse Acceptance Criteria from GitHub Issue Body ✅ IMPLEMENTED
+
+**Problem Statement:**
+When viewing/editing a GitHub issue in Ringmaster, the acceptance criteria section shows "0 criteria" even when the issue body contains `- [ ]` checkbox items. This means users cannot see or interact with acceptance criteria that were either created on GitHub directly or synced from Ringmaster previously.
+
+**Root Cause:**
+The `githubIssueToBacklogItem()` function in `GitHubIssuesView.tsx` does not parse the issue body for checkbox patterns. It only extracts the title, body text, and label-based metadata.
+
+**Current Behavior:**
+1. Create an issue on GitHub with body containing `- [ ] First criterion`
+2. Open that issue in Ringmaster's GitHub view
+3. Acceptance criteria shows "0 criteria"
+4. The checkboxes are visible in the description but not parsed into the AC field
+
+**Expected Behavior:**
+1. When loading a GitHub issue, parse `- [ ]` and `- [x]` patterns from the body
+2. Populate the `acceptanceCriteria` array with extracted items
+3. Display the correct count (e.g., "3 criteria")
+4. Show checked/unchecked state based on `[x]` vs `[ ]`
+
+**Implementation Tasks:**
+
+1. **Create parsing utility function**
+   - Location: `src/lib/utils/parse-acceptance-criteria.ts` (new file)
+   - Function: `parseAcceptanceCriteriaFromMarkdown(body: string): AcceptanceCriterion[]`
+   - Parse `- [ ] text` as unchecked, `- [x] text` as checked
+   - Handle nested lists (ignore nesting, flatten)
+   - Handle edge cases: empty checkboxes, special characters
+
+2. **Update `githubIssueToBacklogItem()` in `GitHubIssuesView.tsx`**
+   - Import the parsing utility
+   - Call parser on `issue.body`
+   - Merge parsed criteria into the returned `BacklogItem`
+
+3. **Handle the ringmaster metadata comment**
+   - The body may contain `<!-- ringmaster-task-id:xxx -->`
+   - Ensure parser doesn't treat this as content
+   - Consider: criteria may be in a dedicated section like `## Acceptance Criteria`
+
+**Acceptance Criteria:**
+- [ ] GitHub issues with `- [ ]` items show correct criteria count in edit panel
+- [ ] Checked items (`- [x]`) appear as completed in the UI
+- [ ] Unchecked items (`- [ ]`) appear as incomplete
+- [ ] Criteria text is correctly extracted (no leading/trailing whitespace)
+- [ ] Hidden HTML comments are not parsed as criteria
+- [ ] Empty checkboxes (`- [ ]` with no text) are ignored
+- [ ] Nested checkbox lists are flattened correctly
+
+**Test & Validation Steps:**
+
+1. **Manual Test - Basic parsing:**
+   - Create GitHub issue #497 with body:
+     ```
+     Description here
+
+     ## Acceptance Criteria
+     - [ ] First criterion
+     - [x] Second criterion (done)
+     - [ ] Third criterion
+     ```
+   - Open in Ringmaster GitHub view
+   - Verify: Shows "3 criteria", 1 checked, 2 unchecked
+
+2. **Manual Test - Edge cases:**
+   - Create issue with nested checkboxes, empty checkboxes, special chars
+   - Verify parsing handles all cases gracefully
+
+3. **Manual Test - Roundtrip:**
+   - Create task in Ringmaster with AC → syncs to GitHub
+   - Refresh GitHub view → AC should still show correctly
+
+---
+
+### Gap 2: Populate Value Field from GitHub Labels ✅ IMPLEMENTED
+
+**Problem Statement:**
+When opening a GitHub issue that has a `value:high`, `value:medium`, or `value:low` label, the Value dropdown in the edit panel shows "Select..." instead of the correct value. This breaks the visual consistency and requires users to re-select the value.
+
+**Root Cause:**
+The `githubIssueToBacklogItem()` function parses `priority:*` and `effort:*` labels but does not parse `value:*` labels.
+
+**Current Behavior:**
+1. GitHub issue has label `value:high`
+2. Open in Ringmaster GitHub view
+3. Value dropdown shows "Select..."
+4. Priority and Effort correctly show their values
+
+**Expected Behavior:**
+1. Parse `value:high`, `value:medium`, `value:low` labels
+2. Map to the `Value` type: `'high' | 'medium' | 'low'`
+3. Display correctly in the edit panel dropdown
+
+**Implementation Tasks:**
+
+1. **Update label parsing in `githubIssueToBacklogItem()`**
+   - Location: `src/components/views/GitHubIssuesView.tsx` (around line 70-120)
+   - Add value label parsing alongside existing priority/effort parsing
+   - Map label names to Value type values
+
+**Acceptance Criteria:**
+- [ ] Issues with `value:high` label show "High" in dropdown
+- [ ] Issues with `value:medium` label show "Medium" in dropdown
+- [ ] Issues with `value:low` label show "Low" in dropdown
+- [ ] Issues without value labels show "Select..."
+- [ ] Value persists after saving changes
+
+**Test & Validation Steps:**
+
+1. **Manual Test - Existing issue:**
+   - Find or create GitHub issue with `value:high` label
+   - Open in Ringmaster GitHub view
+   - Verify: Value dropdown shows "High"
+
+2. **Manual Test - All values:**
+   - Test with `value:medium` and `value:low` labels
+   - Verify each displays correctly
+
+3. **Manual Test - No value:**
+   - Open issue without value label
+   - Verify: Shows "Select..." (not broken)
+
+---
+
+### Gap 3: Bidirectional Status Sync in GitHub View ✅ IMPLEMENTED
+
+**Problem Statement:**
+When changing a task's status in the GitHub Issues view (e.g., moving from "Backlog" to "In Progress"), the change is only reflected locally in the UI. The corresponding `status:*` label on GitHub is not updated.
+
+**Root Cause:**
+The status change handlers in `GitHubIssuesView.tsx` only update local state. There's no call to the GitHub API to update labels when status changes.
+
+**Current Behavior:**
+1. Open issue in GitHub view, currently in "Backlog" column
+2. Click "In Progress" status button
+3. UI updates, issue moves to In Progress column
+4. GitHub still has `status:backlog` label (not `status:in-progress`)
+5. On refresh, issue snaps back to Backlog
+
+**Expected Behavior:**
+1. Change status in UI
+2. API call removes old `status:*` label
+3. API call adds new `status:*` label
+4. GitHub issue reflects the change
+5. On refresh, issue stays in correct column
+
+**Implementation Tasks:**
+
+1. **Create status update API route**
+   - Location: `src/app/api/github/update-status/route.ts` (new file)
+   - Accepts: `{ repo, issueNumber, oldStatus, newStatus }`
+   - Removes old `status:*` label, adds new `status:*` label
+   - Uses server-side token resolution (like close-issue route)
+
+2. **Update status change handlers in `GitHubIssuesView.tsx`**
+   - After local state update, call the new API route
+   - Handle loading state (show spinner on card while updating)
+   - Handle errors (revert local state on failure, show toast)
+
+3. **Handle drag-and-drop status changes**
+   - The kanban drag handler should also trigger the API call
+   - Ensure `handleDragEnd` calls the status update API
+
+**Acceptance Criteria:**
+- [ ] Clicking status button updates GitHub label
+- [ ] Dragging card between columns updates GitHub label
+- [ ] Old status label is removed (not accumulated)
+- [ ] Loading indicator shown during update
+- [ ] Error toast shown if update fails
+- [ ] Local state reverts on API failure
+- [ ] Refresh shows issue in correct column
+
+**Test & Validation Steps:**
+
+1. **Manual Test - Button click:**
+   - Open issue currently in Backlog
+   - Click "In Progress" status button
+   - Verify: GitHub issue now has `status:in-progress` label (not `status:backlog`)
+
+2. **Manual Test - Drag and drop:**
+   - Drag issue from "Up Next" to "Review" column
+   - Verify: GitHub labels updated accordingly
+
+3. **Manual Test - Error handling:**
+   - Disconnect network, try to change status
+   - Verify: Error toast appears, issue stays in original column
+
+4. **Manual Test - Persistence:**
+   - Change status, click Refresh button
+   - Verify: Issue remains in new column
+
+---
+
 ## Data Flow
 
 ```

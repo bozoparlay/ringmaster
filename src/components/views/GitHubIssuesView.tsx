@@ -20,8 +20,10 @@ import { TackleModal } from '../TackleModal';
 import { Toast, ToastType } from '../Toast';
 import { TrashDropZone } from '../TrashDropZone';
 import { DeleteConfirmationModal } from '../DeleteConfirmationModal';
-import type { BacklogItem, Priority, Effort, Status } from '@/types/backlog';
+import { NewTaskModal } from '../NewTaskModal';
+import type { BacklogItem, Priority, Effort, Status, Value } from '@/types/backlog';
 import { COLUMN_ORDER, PRIORITY_WEIGHT } from '@/types/backlog';
+import { parseAcceptanceCriteriaFromMarkdown } from '@/lib/utils/parse-acceptance-criteria';
 
 interface GitHubIssue {
   number: number;
@@ -56,8 +58,8 @@ function calculateUpNextLimit(backlogSize: number): number {
 
 // Map status to GitHub label
 const STATUS_TO_LABEL: Record<Status, string | null> = {
-  'backlog': null, // No label for backlog
-  'up_next': null, // Virtual status
+  'backlog': 'status: backlog',
+  'up_next': 'status: up-next',
   'in_progress': 'status: in-progress',
   'review': 'status: review',
   'ready_to_ship': 'status: ready-to-ship',
@@ -85,6 +87,16 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
     }
   }
 
+  // Extract value from labels if present
+  let value: Value | undefined;
+  const valueLabel = issue.labels.find(l => l.name.startsWith('value:'));
+  if (valueLabel) {
+    const v = valueLabel.name.replace('value:', '').trim().toLowerCase();
+    if (['low', 'medium', 'high'].includes(v)) {
+      value = v as Value;
+    }
+  }
+
   // Determine status from labels
   let status: Status = 'backlog';
   if (issue.labels.some(l => l.name === 'status: in-progress')) {
@@ -93,12 +105,24 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
     status = 'review';
   } else if (issue.labels.some(l => l.name === 'status: ready-to-ship')) {
     status = 'ready_to_ship';
+  } else if (issue.labels.some(l => l.name === 'status: up-next')) {
+    status = 'up_next';
   }
+  // Note: 'status: backlog' label or no status label both map to 'backlog'
 
-  // Extract tags from other labels
+  // Extract tags from other labels (excluding metadata labels)
   const tags = issue.labels
-    .filter(l => !l.name.startsWith('priority:') && !l.name.startsWith('effort:') && !l.name.startsWith('status:'))
+    .filter(l =>
+      !l.name.startsWith('priority:') &&
+      !l.name.startsWith('effort:') &&
+      !l.name.startsWith('value:') &&
+      !l.name.startsWith('status:') &&
+      l.name !== 'ringmaster'
+    )
     .map(l => l.name);
+
+  // Parse acceptance criteria from issue body checkboxes
+  const acceptanceCriteria = parseAcceptanceCriteriaFromMarkdown(issue.body);
 
   return {
     id: `github-${issue.number}`,
@@ -106,8 +130,10 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
     description: issue.body || '',
     priority,
     effort,
+    value,
     status,
     tags,
+    acceptanceCriteria: acceptanceCriteria.length > 0 ? acceptanceCriteria : undefined,
     category: 'GitHub Issues',
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,
@@ -140,8 +166,65 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
   const [itemToDelete, setItemToDelete] = useState<BacklogItem | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
+  // New task modal state
+  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+  const [isCreatingIssue, setIsCreatingIssue] = useState(false);
+
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
+  };
+
+  // Handle creating a new GitHub issue from the modal
+  const handleCreateGitHubTask = async (task: {
+    title: string;
+    description: string;
+    priority?: Priority;
+    effort?: Effort;
+    value?: Value;
+    category?: string;
+    acceptanceCriteria?: string[];
+  }) => {
+    if (!repo || !token) {
+      showToast('GitHub not configured', 'error');
+      return;
+    }
+
+    setIsCreatingIssue(true);
+    try {
+      const response = await fetch('/api/github/create-issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: {
+            title: task.title,
+            description: task.description,
+            priority: task.priority || 'medium',
+            effort: task.effort,
+            value: task.value,
+            category: task.category,
+            acceptanceCriteria: task.acceptanceCriteria,
+            status: 'backlog',
+          },
+          repo: `${repo.owner}/${repo.repo}`,
+          token,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        showToast(`Created issue #${result.issue.number}: ${result.issue.title}`, 'success');
+        setIsNewTaskOpen(false);
+        // Refresh the issue list
+        fetchIssues();
+      } else {
+        showToast(`Failed to create issue: ${result.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('Failed to create GitHub issue:', err);
+      showToast('Failed to create GitHub issue', 'error');
+    } finally {
+      setIsCreatingIssue(false);
+    }
   };
 
   const sensors = useSensors(
@@ -250,56 +333,51 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
   // Update GitHub issue labels when status changes
+  // Uses the server-side API route which has access to GITHUB_TOKEN from .env.local
   const updateIssueStatus = async (issueNumber: number, fromStatus: Status, toStatus: Status) => {
-    if (!repo || !token) {
-      showToast('GitHub token required to update issue status', 'error');
+    if (!repo) {
+      showToast('GitHub repository not configured', 'error');
       return false;
     }
 
     setUpdatingIssue(issueNumber);
 
     try {
+      // Use the server-side API route which handles token resolution
       const headers: Record<string, string> = {
-        'Accept': 'application/vnd.github.v3+json',
-        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
       };
 
-      // Get current labels
-      const issue = issues.find(i => i.number === issueNumber);
-      if (!issue) return false;
-
-      const currentLabels = issue.labels.map(l => l.name);
-
-      // Remove old status label, add new one
-      const oldLabel = STATUS_TO_LABEL[fromStatus];
-      const newLabel = STATUS_TO_LABEL[toStatus];
-
-      let updatedLabels = currentLabels.filter(l => !l.startsWith('status:'));
-      if (newLabel) {
-        updatedLabels.push(newLabel);
+      // Pass client token as fallback if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
-      // Update labels via GitHub API
-      const response = await fetch(
-        `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues/${issueNumber}`,
-        {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ labels: updatedLabels }),
-        }
-      );
+      const response = await fetch('/api/github/update-status', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          repo: `${repo.owner}/${repo.repo}`,
+          issueNumber,
+          oldStatus: fromStatus,
+          newStatus: toStatus,
+        }),
+      });
 
       if (!response.ok) {
-        throw new Error(`Failed to update issue: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to update issue: ${response.status}`);
       }
 
-      // Update local state
+      // Update local state - get the new label name for the status
+      const newLabel = STATUS_TO_LABEL[toStatus];
       setIssues(prev => prev.map(i => {
         if (i.number === issueNumber) {
-          return {
-            ...i,
-            labels: updatedLabels.map(name => ({ name, color: '000000' })),
-          };
+          // Remove old status labels, add new one
+          const updatedLabels = i.labels
+            .filter(l => !l.name.startsWith('status:'))
+            .concat(newLabel ? [{ name: newLabel, color: '000000' }] : []);
+          return { ...i, labels: updatedLabels };
         }
         return i;
       }));
@@ -376,30 +454,39 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     setTackleItem(null);
   };
 
-  // Close GitHub issue (for trash drop zone)
+  // Close GitHub issue (for trash drop zone and delete button)
+  // Uses the server-side API route which has access to GITHUB_TOKEN from .env.local
   const closeGitHubIssue = async (issueNumber: number) => {
-    if (!repo || !token) {
-      showToast('GitHub token required to close issues', 'error');
+    if (!repo) {
+      showToast('GitHub repository not configured', 'error');
       return false;
     }
 
     setUpdatingIssue(issueNumber);
 
     try {
-      const response = await fetch(
-        `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues/${issueNumber}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Accept': 'application/vnd.github.v3+json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ state: 'closed' }),
-        }
-      );
+      // Use the server-side API route which handles token resolution
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Pass client token as fallback if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/github/close-issue', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          repo: `${repo.owner}/${repo.repo}`,
+          issueNumber,
+        }),
+      });
 
       if (!response.ok) {
-        throw new Error(`Failed to close issue: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to close issue: ${response.status}`);
       }
 
       // Remove from local state
@@ -562,8 +649,14 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
           setIsPanelOpen(false);
         }}
         onDelete={async () => {
-          // Can't delete GitHub issues from here
-          showToast('Close issues directly on GitHub', 'info');
+          // Close the GitHub issue when delete is clicked
+          if (selectedItem?.githubIssueNumber) {
+            const closed = await closeGitHubIssue(selectedItem.githubIssueNumber);
+            if (closed) {
+              setIsPanelOpen(false);
+              setSelectedItem(null);
+            }
+          }
         }}
         onTackle={handleTackle}
         onAddToBacklog={onAddToBacklog ? async (item) => {
@@ -604,16 +697,31 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
         onCancel={handleCancelTrashDelete}
       />
 
-      {/* Floating Action Button - opens GitHub new issue page */}
+      {/* New Task Modal - creates GitHub issue with AI assist */}
+      <NewTaskModal
+        isOpen={isNewTaskOpen}
+        onClose={() => setIsNewTaskOpen(false)}
+        onSubmit={handleCreateGitHubTask}
+      />
+
+      {/* Floating Action Button - opens native task creation modal */}
       {repo && (
         <button
-          onClick={() => window.open(`https://github.com/${repo.owner}/${repo.repo}/issues/new`, '_blank')}
-          className="fixed bottom-8 right-8 w-14 h-14 bg-accent hover:bg-accent-hover text-surface-900 rounded-full shadow-glow-amber hover:shadow-glow-amber transition-all duration-200 hover:scale-105 flex items-center justify-center z-30"
-          title="Create new issue on GitHub"
+          onClick={() => setIsNewTaskOpen(true)}
+          disabled={isCreatingIssue}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-accent hover:bg-accent-hover disabled:bg-accent/50 text-surface-900 rounded-full shadow-glow-amber hover:shadow-glow-amber transition-all duration-200 hover:scale-105 disabled:scale-100 flex items-center justify-center z-30"
+          title="Create new GitHub issue"
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
+          {isCreatingIssue ? (
+            <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          ) : (
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          )}
         </button>
       )}
     </div>

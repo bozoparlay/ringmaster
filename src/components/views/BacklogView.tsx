@@ -24,8 +24,79 @@ import { Toast, ToastType } from '../Toast';
 import { TrashDropZone } from '../TrashDropZone';
 import { DeleteConfirmationModal } from '../DeleteConfirmationModal';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
-import { getGitHubSyncConfig } from '@/lib/storage/github-sync';
+import { getGitHubSyncConfig, GitHubSyncService } from '@/lib/storage/github-sync';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
+
+/**
+ * Close a GitHub issue when deleting a task that's linked to one.
+ * Fails silently if GitHub is not configured or the API call fails.
+ */
+async function closeGitHubIssue(item: BacklogItem): Promise<boolean> {
+  if (!item.githubIssueNumber) return false;
+
+  const config = getGitHubSyncConfig();
+  if (!config || !config.token || config.token === 'server-managed') {
+    // Try user config as fallback
+    const userConfig = getUserGitHubConfig();
+    if (!userConfig?.token) return false;
+
+    // Get repo from sync config or return false
+    if (!config?.repo) return false;
+
+    try {
+      await fetch(`https://api.github.com/repos/${config.repo}/issues/${item.githubIssueNumber}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${userConfig.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+        body: JSON.stringify({ state: 'closed' }),
+      });
+      return true;
+    } catch (err) {
+      console.error('[BacklogView] Failed to close GitHub issue:', err);
+      return false;
+    }
+  }
+
+  try {
+    const service = new GitHubSyncService(config);
+    await service.closeIssue(item.githubIssueNumber);
+    return true;
+  } catch (err) {
+    console.error('[BacklogView] Failed to close GitHub issue:', err);
+    return false;
+  }
+}
+
+/**
+ * Sync task changes to a linked GitHub issue.
+ * Updates the issue title, body, labels, and state.
+ */
+async function syncToGitHub(item: BacklogItem): Promise<boolean> {
+  if (!item.githubIssueNumber) return false;
+
+  const config = getGitHubSyncConfig();
+  if (!config) return false;
+
+  // Resolve token - try sync config first, then user config
+  let token: string | undefined = config.token;
+  if (!token || token === 'server-managed') {
+    const userConfig = getUserGitHubConfig();
+    token = userConfig?.token;
+  }
+
+  if (!token) return false;
+
+  try {
+    const service = new GitHubSyncService({ ...config, token: token });
+    await service.updateIssue(item.githubIssueNumber, item);
+    return true;
+  } catch (err) {
+    console.error('[BacklogView] Failed to sync to GitHub:', err);
+    return false;
+  }
+}
 
 // Priority levels in order from highest to lowest
 const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
@@ -411,10 +482,27 @@ export function BacklogView({
 
   const handleSaveItem = async (item: BacklogItem) => {
     await onUpdateItem(item);
+    // Sync to GitHub if linked (fire and forget - don't block UI)
+    if (item.githubIssueNumber) {
+      syncToGitHub(item).then(synced => {
+        if (synced) {
+          showToast(`Synced to GitHub issue #${item.githubIssueNumber}`, 'success');
+        }
+      });
+    }
     setSelectedItem(null);
   };
 
   const handleDeleteItem = async (id: string) => {
+    // Find the item to check for GitHub link
+    const itemToDelete = items.find(i => i.id === id);
+    if (itemToDelete) {
+      // Close GitHub issue if linked
+      const closedGitHub = await closeGitHubIssue(itemToDelete);
+      if (closedGitHub) {
+        showToast(`Closed GitHub issue #${itemToDelete.githubIssueNumber}`, 'success');
+      }
+    }
     await onDeleteItem(id);
     setSelectedItem(null);
     setIsPanelOpen(false);
@@ -423,8 +511,15 @@ export function BacklogView({
   // Trash drop zone handlers
   const handleConfirmTrashDelete = async () => {
     if (itemToDelete) {
+      // Close GitHub issue if linked
+      const closedGitHub = await closeGitHubIssue(itemToDelete);
       await onDeleteItem(itemToDelete.id);
-      showToast(`Deleted "${itemToDelete.title}"`, 'info');
+
+      if (closedGitHub) {
+        showToast(`Deleted "${itemToDelete.title}" and closed GitHub issue #${itemToDelete.githubIssueNumber}`, 'success');
+      } else {
+        showToast(`Deleted "${itemToDelete.title}"`, 'info');
+      }
       setItemToDelete(null);
       setIsDeleteConfirmOpen(false);
     }
