@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { HealthIndicator } from './HealthIndicator';
 import { StorageModeSelector } from './StorageModeSelector';
+import { ActionDropdown, type ActionItem } from './ActionDropdown';
+import { AnimatedSearch } from './AnimatedSearch';
 import type { StorageMode } from '@/lib/storage';
 // Note: We use the isGitHubConnected prop instead of isGitHubSyncConfigured()
 // to avoid hydration mismatches (localStorage isn't available during SSR)
@@ -365,71 +367,49 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
 
         {/* Actions */}
         <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="relative hidden sm:block">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search tasks..."
-              className="w-56 bg-surface-900 border border-surface-700 rounded-lg pl-9 pr-8 py-2 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors"
+          {/* Animated Search */}
+          <AnimatedSearch
+            value={searchQuery}
+            onChange={onSearchChange}
+            placeholder="Search tasks..."
+            className="hidden sm:flex"
+          />
+
+          {/* Actions Dropdown - consolidates Cleanup and Worktrees */}
+          {(onCleanup || onCleanupWorktrees) && (
+            <ActionDropdown
+              className="hidden sm:block"
+              actions={[
+                ...(onCleanup ? [{
+                  id: 'cleanup',
+                  label: 'Tidy Up Tasks',
+                  icon: (
+                    // Modern sparkle/clean icon - represents tidying up
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                    </svg>
+                  ),
+                  onClick: onCleanup,
+                }] : []),
+                ...(onCleanupWorktrees ? [{
+                  id: 'worktrees',
+                  label: 'Clean Worktrees',
+                  icon: (
+                    // Git branch icon
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <circle cx="6" cy="6" r="3" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="12" r="3" />
+                      <path d="M6 9v6M9 6h6c1.5 0 3 1.5 3 3v0" />
+                    </svg>
+                  ),
+                  onClick: handleCleanupWorktrees,
+                  loading: isCleaningWorktrees,
+                  loadingLabel: 'Cleaning...',
+                }] : []),
+              ] as ActionItem[]}
             />
-            {searchQuery && (
-              <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition-colors"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-
-          {onCleanup && (
-            <button
-              onClick={onCleanup}
-              className="hidden sm:flex items-center gap-2 px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 font-medium text-sm rounded-lg transition-colors border border-surface-700"
-              title="Clean up tasks to match template"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-              Cleanup
-            </button>
           )}
-
-          {onCleanupWorktrees && (
-            <button
-              onClick={handleCleanupWorktrees}
-              disabled={isCleaningWorktrees}
-              className="hidden sm:flex items-center gap-2 px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 font-medium text-sm rounded-lg transition-colors border border-surface-700 disabled:opacity-50"
-              title="Remove orphaned worktree directories"
-            >
-              <svg className={`w-4 h-4 ${isCleaningWorktrees ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              {isCleaningWorktrees ? 'Cleaning...' : 'Worktrees'}
-            </button>
-          )}
-
-          <button
-            onClick={onNewTask}
-            className="hidden sm:flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-surface-900 font-medium text-sm rounded-lg transition-all shadow-glow-amber-sm hover:shadow-glow-amber"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            New Task
-          </button>
 
           {/* Mobile menu button */}
           <button className="sm:hidden p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors">
