@@ -165,7 +165,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
   const [isTackleOpen, setIsTackleOpen] = useState(false);
   const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
-  const [updatingIssue, setUpdatingIssue] = useState<number | null>(null);
+  // Note: updatingIssue state removed - now using optimistic updates
 
   // Delete confirmation modal state (for closing GitHub issues)
   const [itemToDelete, setItemToDelete] = useState<BacklogItem | null>(null);
@@ -338,64 +338,59 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
   // Update GitHub issue labels when status changes
-  // Uses the server-side API route which has access to GITHUB_TOKEN from .env.local
-  const updateIssueStatus = async (issueNumber: number, fromStatus: Status, toStatus: Status) => {
+  // Uses OPTIMISTIC UPDATES: UI updates instantly, syncs to GitHub in background
+  const updateIssueStatus = (issueNumber: number, fromStatus: Status, toStatus: Status) => {
     if (!repo) {
       showToast('GitHub repository not configured', 'error');
-      return false;
+      return;
     }
 
-    setUpdatingIssue(issueNumber);
+    // 1. OPTIMISTIC UPDATE - Save previous state for rollback, then update UI immediately
+    const previousIssues = [...issues];
+    const newLabel = STATUS_TO_LABEL[toStatus];
 
-    try {
-      // Use the server-side API route which handles token resolution
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      // Pass client token as fallback if available
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+    setIssues(prev => prev.map(i => {
+      if (i.number === issueNumber) {
+        // Remove old status labels, add new one
+        const updatedLabels = i.labels
+          .filter(l => !l.name.startsWith('status:'))
+          .concat(newLabel ? [{ name: newLabel, color: '000000' }] : []);
+        return { ...i, labels: updatedLabels };
       }
+      return i;
+    }));
 
-      const response = await fetch('/api/github/update-status', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          repo: `${repo.owner}/${repo.repo}`,
-          issueNumber,
-          oldStatus: fromStatus,
-          newStatus: toStatus,
-        }),
-      });
+    // 2. BACKGROUND SYNC - Fire and forget, handle errors with rollback
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to update issue: ${response.status}`);
-      }
-
-      // Update local state - get the new label name for the status
-      const newLabel = STATUS_TO_LABEL[toStatus];
-      setIssues(prev => prev.map(i => {
-        if (i.number === issueNumber) {
-          // Remove old status labels, add new one
-          const updatedLabels = i.labels
-            .filter(l => !l.name.startsWith('status:'))
-            .concat(newLabel ? [{ name: newLabel, color: '000000' }] : []);
-          return { ...i, labels: updatedLabels };
+    fetch('/api/github/update-status', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        repo: `${repo.owner}/${repo.repo}`,
+        issueNumber,
+        oldStatus: fromStatus,
+        newStatus: toStatus,
+      }),
+    })
+      .then(async response => {
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed: ${response.status}`);
         }
-        return i;
-      }));
-
-      showToast(`Issue #${issueNumber} moved to ${toStatus.replace('_', ' ')}`, 'success');
-      return true;
-    } catch (err) {
-      console.error('Failed to update issue status:', err);
-      showToast(`Failed to update issue #${issueNumber}`, 'error');
-      return false;
-    } finally {
-      setUpdatingIssue(null);
-    }
+        // Sync succeeded silently - no toast needed for success
+      })
+      .catch(err => {
+        // 3. ROLLBACK on failure
+        console.error('[status-sync] Failed to sync:', err);
+        setIssues(previousIssues);
+        showToast(`Failed to sync status change for #${issueNumber}`, 'error');
+      });
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -424,7 +419,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     if (COLUMN_ORDER.includes(overId as Status)) {
       const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
       if (draggedItem.status !== targetStatus && draggedItem.githubIssueNumber) {
-        await updateIssueStatus(draggedItem.githubIssueNumber, draggedItem.status, targetStatus);
+        updateIssueStatus(draggedItem.githubIssueNumber, draggedItem.status, targetStatus);
       }
       return;
     }
@@ -432,7 +427,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     // If dropped on another item, move to that item's column
     const overItem = items.find(i => i.id === overId);
     if (overItem && overItem.status !== draggedItem.status && draggedItem.githubIssueNumber) {
-      await updateIssueStatus(draggedItem.githubIssueNumber, draggedItem.status, overItem.status);
+      updateIssueStatus(draggedItem.githubIssueNumber, draggedItem.status, overItem.status);
     }
   };
 
@@ -447,13 +442,11 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     setIsPanelOpen(false);
   };
 
-  const handleStartWork = async (item: BacklogItem) => {
-    // For GitHub issues, we just update the status label
+  const handleStartWork = (item: BacklogItem) => {
+    // For GitHub issues, we just update the status label (optimistic update)
     if (item.githubIssueNumber) {
-      const success = await updateIssueStatus(item.githubIssueNumber, item.status, 'in_progress');
-      if (success) {
-        showToast(`Started work on issue #${item.githubIssueNumber}`, 'success');
-      }
+      updateIssueStatus(item.githubIssueNumber, item.status, 'in_progress');
+      showToast(`Started work on issue #${item.githubIssueNumber}`, 'success');
     }
     setIsTackleOpen(false);
     setTackleItem(null);
@@ -466,8 +459,6 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       showToast('GitHub repository not configured', 'error');
       return false;
     }
-
-    setUpdatingIssue(issueNumber);
 
     try {
       // Use the server-side API route which handles token resolution
@@ -502,8 +493,6 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       console.error('Failed to close issue:', err);
       showToast(`Failed to close issue #${issueNumber}`, 'error');
       return false;
-    } finally {
-      setUpdatingIssue(null);
     }
   };
 
@@ -580,12 +569,6 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
           <span className="text-xs text-surface-500 uppercase tracking-wider">
             {repo?.owner}/{repo?.repo}
           </span>
-          {updatingIssue && (
-            <span className="text-xs text-accent flex items-center gap-2">
-              <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
-              Updating #{updatingIssue}...
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-4 text-xs text-surface-500">
           <span className="font-mono">{items.length} open issues</span>
@@ -645,10 +628,10 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
         item={selectedItem}
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
-        onSave={async (updatedItem) => {
-          // Check if status changed - if so, sync to GitHub
+        onSave={(updatedItem) => {
+          // Check if status changed - if so, sync to GitHub (optimistic update)
           if (selectedItem && updatedItem.status !== selectedItem.status && updatedItem.githubIssueNumber) {
-            await updateIssueStatus(updatedItem.githubIssueNumber, selectedItem.status, updatedItem.status);
+            updateIssueStatus(updatedItem.githubIssueNumber, selectedItem.status, updatedItem.status);
           }
           // Other fields are edited on GitHub directly via the "Edit on GitHub" link
           setIsPanelOpen(false);
