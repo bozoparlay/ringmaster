@@ -109,13 +109,4 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 **Description**:
 Scoring a task that is pretty unique is coming back as having a ton of similarity. We should probably make things more strict as far as similarity goes
 
-### Integration Test Task
-<!-- ringmaster:id=d6c06278-7ee6-4e4d-92f5-74a3930e7350 github=411 -->
-**Priority**: Medium | **Effort**: Medium
-
-**Description**:
-*Priority: medium*
-*Effort: medium*
-*Value: medium*
-
 ---
