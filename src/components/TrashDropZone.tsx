@@ -3,17 +3,25 @@
 import { useDroppable } from '@dnd-kit/core';
 
 interface TrashDropZoneProps {
-  isActive?: boolean;
+  /** Whether a drag operation is currently active */
+  isDragging: boolean;
+  /** Whether an item is currently hovering over the trash zone */
+  isOver?: boolean;
 }
 
 /**
  * Trash can drop zone for deleting tasks via drag-and-drop.
- * Appears in the bottom-right corner of the Kanban board.
+ * Appears in the bottom-right corner when dragging, next to the FAB.
  */
-export function TrashDropZone({ isActive }: TrashDropZoneProps) {
-  const { setNodeRef, isOver } = useDroppable({
+export function TrashDropZone({ isDragging, isOver: externalIsOver }: TrashDropZoneProps) {
+  const { setNodeRef, isOver: dndIsOver } = useDroppable({
     id: 'trash-drop-zone',
   });
+
+  const isHovering = externalIsOver ?? dndIsOver;
+
+  // Only render when dragging
+  if (!isDragging) return null;
 
   return (
     <div
@@ -22,18 +30,18 @@ export function TrashDropZone({ isActive }: TrashDropZoneProps) {
         fixed bottom-8 right-24 w-14 h-14
         flex items-center justify-center
         rounded-full border-2 border-dashed
-        transition-all duration-200
-        ${isOver
-          ? 'bg-red-500/30 border-red-500 scale-110'
-          : isActive
-            ? 'bg-surface-800/80 border-surface-600 opacity-100'
-            : 'bg-surface-800/50 border-surface-700 opacity-0'
+        transition-all duration-200 ease-out
+        z-30
+        ${isHovering
+          ? 'bg-red-500/30 border-red-500 scale-110 shadow-lg shadow-red-500/20'
+          : 'bg-surface-800/80 border-surface-500 scale-100'
         }
-        ${isActive ? 'pointer-events-auto' : 'pointer-events-none'}
       `}
     >
       <svg
-        className={`w-6 h-6 transition-colors ${isOver ? 'text-red-400' : 'text-surface-400'}`}
+        className={`w-6 h-6 transition-all duration-200 ${
+          isHovering ? 'text-red-400 scale-110' : 'text-surface-400'
+        }`}
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
