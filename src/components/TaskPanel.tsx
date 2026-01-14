@@ -20,6 +20,12 @@ function getGitHubRepo(): string | null {
   return config?.repo || null;
 }
 
+// Helper to strip HTML comments from description (e.g., ringmaster-task-id)
+function stripHtmlComments(text: string | undefined): string {
+  if (!text) return '';
+  return text.replace(/<!--[\s\S]*?-->/g, '').trim();
+}
+
 interface TaskPanelProps {
   item: BacklogItem | null;
   isOpen: boolean;
@@ -215,7 +221,11 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
 
   useEffect(() => {
     if (item) {
-      setEditedItem({ ...item });
+      // Strip HTML comments (e.g., ringmaster-task-id) from description for display
+      setEditedItem({
+        ...item,
+        description: stripHtmlComments(item.description),
+      });
       setIsPreviewMode(false);
       setPreAiItem(null);
       setShowAiInput(false);
@@ -529,7 +539,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               {editedItem.githubIssueNumber && (
                 <div className="flex items-center gap-2">
                   <a
-                    href={`https://github.com/${getGitHubRepo() || ''}/issues/${editedItem.githubIssueNumber}`}
+                    href={editedItem.githubIssueUrl || `https://github.com/${getGitHubRepo() || ''}/issues/${editedItem.githubIssueNumber}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"

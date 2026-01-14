@@ -436,3 +436,68 @@ The status change handlers in `GitHubIssuesView.tsx` only update local state. Th
 - **Bidirectional**: Changes flow both ways
 - **Conflict-aware**: Detects and presents conflicts for resolution
 - **Server-side config**: PAT stored securely outside browser
+
+---
+
+## Playwright Validation Testing (2026-01-14)
+
+### Test Summary
+
+Validated the GitHub sync workflow using Playwright automation testing. Focused on status changes, optimistic updates, and sync behavior.
+
+### ✅ Working Features
+
+| Feature | Test Result | Notes |
+|---------|-------------|-------|
+| **Status change via panel** | ✅ Pass | Click status button → instant UI update |
+| **Optimistic updates** | ✅ Pass | UI updates immediately, no 2-3s delay |
+| **GitHub label sync** | ✅ Pass | `status: in-progress` label added/removed correctly |
+| **Bidirectional sync** | ✅ Pass | Backlog ↔ In Progress ↔ Backlog all synced to GitHub |
+| **FAB opens native modal** | ✅ Pass | Creates task with AI assist, not redirect to GitHub |
+| **Task cards display** | ✅ Pass | Category, priority, effort, issue number all visible |
+| **Refresh button** | ✅ Pass | Fetches latest issues from GitHub |
+
+### ⚠️ Gaps Discovered
+
+| Gap | Severity | Description | Location |
+|-----|----------|-------------|----------|
+| **Description shows metadata comment** | Medium | `<!-- ringmaster-task-id:xxx -->` visible in edit panel textarea | `TaskPanel.tsx` |
+| **GitHub link URL malformed** | Low | Link shows `https://github.com//issues/404` (missing repo between slashes) | `GitHubIssuesView.tsx` edit panel |
+| **Playwright drag-to limitation** | N/A (testing) | Playwright's `dragTo()` doesn't work with dnd-kit; drops on self | Not a product bug |
+
+### Gap Details
+
+#### Gap: Description Shows Metadata Comment
+
+**Current Behavior:**
+When editing a GitHub issue in the panel, the description textarea shows the raw markdown including `<!-- ringmaster-task-id:9d850d10-4979-4333-a4c7-77225ae3569f -->`.
+
+**Expected Behavior:**
+The metadata comment should be stripped from display (but preserved when saving back to GitHub).
+
+**Fix Location:** `TaskPanel.tsx` - strip HTML comments before displaying in textarea, restore when saving.
+
+#### Gap: GitHub Link URL Malformed
+
+**Current Behavior:**
+The GitHub issue link in the edit panel header shows URL: `https://github.com//issues/404`
+
+**Expected Behavior:**
+Should be `https://github.com/bozoparlay/ringmaster/issues/404`
+
+**Fix Location:** `GitHubIssuesView.tsx` - the link construction is missing the repo path.
+
+### Test Methodology
+
+1. Navigated to GitHub Issues view via tab
+2. Clicked task card to open edit panel
+3. Changed status via panel button (Backlog → In Progress)
+4. Verified instant UI update (optimistic)
+5. Verified GitHub API label change via `gh api` command
+6. Changed status back (In Progress → Backlog)
+7. Verified bidirectional sync
+
+### Screenshots
+
+- `github-view-initial.png` - Initial state with 4 issues in Backlog
+- `github-view-after-status-change.png` - After moving #404 to In Progress
