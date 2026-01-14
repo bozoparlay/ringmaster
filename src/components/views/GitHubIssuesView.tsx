@@ -18,6 +18,8 @@ import { TaskCard } from '../TaskCard';
 import { TaskPanel } from '../TaskPanel';
 import { TackleModal } from '../TackleModal';
 import { Toast, ToastType } from '../Toast';
+import { TrashDropZone } from '../TrashDropZone';
+import { DeleteConfirmationModal } from '../DeleteConfirmationModal';
 import type { BacklogItem, Priority, Effort, Status } from '@/types/backlog';
 import { COLUMN_ORDER, PRIORITY_WEIGHT } from '@/types/backlog';
 
@@ -133,6 +135,10 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
   const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [updatingIssue, setUpdatingIssue] = useState<number | null>(null);
+
+  // Delete confirmation modal state (for closing GitHub issues)
+  const [itemToDelete, setItemToDelete] = useState<BacklogItem | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -324,6 +330,13 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
 
     const overId = over.id as string;
 
+    // Check if dropped on trash zone
+    if (overId === 'trash-drop-zone') {
+      setItemToDelete(draggedItem);
+      setIsDeleteConfirmOpen(true);
+      return;
+    }
+
     // If dropped on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
       const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
@@ -361,6 +374,59 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     }
     setIsTackleOpen(false);
     setTackleItem(null);
+  };
+
+  // Close GitHub issue (for trash drop zone)
+  const closeGitHubIssue = async (issueNumber: number) => {
+    if (!repo || !token) {
+      showToast('GitHub token required to close issues', 'error');
+      return false;
+    }
+
+    setUpdatingIssue(issueNumber);
+
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues/${issueNumber}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ state: 'closed' }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to close issue: ${response.status}`);
+      }
+
+      // Remove from local state
+      setIssues(prev => prev.filter(i => i.number !== issueNumber));
+      showToast(`Closed issue #${issueNumber}`, 'success');
+      return true;
+    } catch (err) {
+      console.error('Failed to close issue:', err);
+      showToast(`Failed to close issue #${issueNumber}`, 'error');
+      return false;
+    } finally {
+      setUpdatingIssue(null);
+    }
+  };
+
+  // Trash drop zone handlers
+  const handleConfirmTrashDelete = async () => {
+    if (itemToDelete?.githubIssueNumber) {
+      await closeGitHubIssue(itemToDelete.githubIssueNumber);
+    }
+    setItemToDelete(null);
+    setIsDeleteConfirmOpen(false);
+  };
+
+  const handleCancelTrashDelete = () => {
+    setItemToDelete(null);
+    setIsDeleteConfirmOpen(false);
   };
 
 
@@ -476,6 +542,9 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
               />
             ) : null}
           </DragOverlay>
+
+          {/* Trash Drop Zone - appears when dragging */}
+          <TrashDropZone isDragging={!!activeId} />
         </DndContext>
       </div>
 
@@ -524,6 +593,27 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
           type={toast.type}
           onClose={() => setToast(null)}
         />
+      )}
+
+      {/* Delete Confirmation Modal (closes GitHub issue) */}
+      <DeleteConfirmationModal
+        item={itemToDelete}
+        isOpen={isDeleteConfirmOpen}
+        onConfirm={handleConfirmTrashDelete}
+        onCancel={handleCancelTrashDelete}
+      />
+
+      {/* Floating Action Button - opens GitHub new issue page */}
+      {repo && (
+        <button
+          onClick={() => window.open(`https://github.com/${repo.owner}/${repo.repo}/issues/new`, '_blank')}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-accent hover:bg-accent-hover text-surface-900 rounded-full shadow-glow-amber hover:shadow-glow-amber transition-all duration-200 hover:scale-105 flex items-center justify-center z-30"
+          title="Create new issue on GitHub"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       )}
     </div>
   );

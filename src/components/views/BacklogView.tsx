@@ -21,6 +21,8 @@ import { TaskPanel } from '../TaskPanel';
 import { TackleModal } from '../TackleModal';
 import { ReviewModal } from '../ReviewModal';
 import { Toast, ToastType } from '../Toast';
+import { TrashDropZone } from '../TrashDropZone';
+import { DeleteConfirmationModal } from '../DeleteConfirmationModal';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
 import { getGitHubSyncConfig } from '@/lib/storage/github-sync';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
@@ -121,6 +123,10 @@ export function BacklogView({
   const [prUrl, setPrUrl] = useState<string | undefined>();
   const [prNumber, setPrNumber] = useState<number | undefined>();
   const [prError, setPrError] = useState<string | undefined>();
+
+  // Delete confirmation modal state
+  const [itemToDelete, setItemToDelete] = useState<BacklogItem | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -294,6 +300,13 @@ export function BacklogView({
 
     const overId = over.id as string;
 
+    // Check if dropped on trash zone
+    if (overId === 'trash-drop-zone') {
+      setItemToDelete(activeItem);
+      setIsDeleteConfirmOpen(true);
+      return;
+    }
+
     if (COLUMN_ORDER.includes(overId as Status)) {
       const isInUpNext = columnItems.up_next.some(i => i.id === activeItem.id);
       const isInBacklog = columnItems.backlog.some(i => i.id === activeItem.id);
@@ -405,6 +418,21 @@ export function BacklogView({
     await onDeleteItem(id);
     setSelectedItem(null);
     setIsPanelOpen(false);
+  };
+
+  // Trash drop zone handlers
+  const handleConfirmTrashDelete = async () => {
+    if (itemToDelete) {
+      await onDeleteItem(itemToDelete.id);
+      showToast(`Deleted "${itemToDelete.title}"`, 'info');
+      setItemToDelete(null);
+      setIsDeleteConfirmOpen(false);
+    }
+  };
+
+  const handleCancelTrashDelete = () => {
+    setItemToDelete(null);
+    setIsDeleteConfirmOpen(false);
   };
 
   const handleTackle = (item: BacklogItem) => {
@@ -565,6 +593,9 @@ export function BacklogView({
               />
             ) : null}
           </DragOverlay>
+
+          {/* Trash Drop Zone - appears when dragging */}
+          <TrashDropZone isDragging={!!activeId} />
         </DndContext>
       </div>
 
@@ -669,6 +700,14 @@ export function BacklogView({
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        item={itemToDelete}
+        isOpen={isDeleteConfirmOpen}
+        onConfirm={handleConfirmTrashDelete}
+        onCancel={handleCancelTrashDelete}
+      />
 
       {/* Floating Action Button */}
       <button

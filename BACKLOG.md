@@ -29,7 +29,7 @@ Create a .devcontainer directory in the project root with devcontainer.json conf
 
 ### Improve Grading of Tasks
 <!-- ringmaster:id=fecf956f-234f-454a-bbfe-3d2702f9a0db github=403 -->
-**Priority**: Medium | **Effort**: Medium
+**Priority**: High | **Effort**: Medium
 
 **Description**:
 **Description:**
@@ -46,6 +46,29 @@ The current task scoring algorithm is not responsive to content changes, creatin
 
 **Technical Approach:**
 Update the task scoring service to implement a weighted scoring model. Consider factors like title presence/length, description word count, acceptance criteria count, and any other relevant task attributes. Implement real-time score recalculation on task updates. May need to update both frontend scoring display and backend scoring logic. Consider adding score breakdown tooltips to help users understand how scores are calculated.
+
+### Add ability to close github issues
+<!-- ringmaster:id=41ab95af-27bd-4034-9519-7d32e22c2001 -->
+**Priority**: Medium | **Effort**: Low | **Value**: Medium
+
+**Description**:
+**Description:**
+Implement functionality to close GitHub issues directly from the application's task management interface. Currently, when tasks are deleted from the GitHub view within the application, the corresponding GitHub issues remain open, creating inconsistency between the application state and the GitHub repository. This enhancement will automatically close GitHub issues when tasks are removed from the application, maintaining synchronization between internal task management and external GitHub issue tracking.
+
+**Requirements:**
+- Integrate with GitHub API to programmatically close issues when tasks are deleted from the GitHub view
+- Maintain existing delete functionality while adding the GitHub issue closure as an additional step
+- Handle API failures gracefully without blocking the task deletion process
+- Provide user feedback when GitHub issue closure succeeds or fails
+- Ensure proper authentication and authorization for GitHub API calls
+- Log all GitHub API interactions for debugging and audit purposes
+- Support bulk operations if multiple tasks are deleted simultaneously
+
+**Technical Approach:**
+Extend the existing task deletion service to include a GitHub API call using the PATCH method to update issue state to 'closed'. Implement this as a service method that can be called after successful task deletion. Use the existing GitHub integration patterns and authentication mechanisms. Consider implementing this as an async operation to avoid blocking the UI. Add error handling to gracefully manage API rate limits and network failures.
+
+**Notes:**
+(Additional context, links, or findings to be added by the user)
 
 ---
 
@@ -108,5 +131,29 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 
 **Description**:
 Scoring a task that is pretty unique is coming back as having a ton of similarity. We should probably make things more strict as far as similarity goes
+
+### Consolidate Kanban View Components
+<!-- ringmaster:id=consolidate-kanban-views -->
+**Priority**: Medium | **Effort**: Medium
+
+**Description**:
+The three kanban view components (BacklogView, GitHubIssuesView, QuickTasksView) duplicate significant logic including DndContext setup, drag handlers, state management for panels/modals, and toast handling. This duplication has already caused bugs where features added to one view weren't present in others (e.g., trash can feature).
+
+**Requirements:**
+- Extract common DnD logic into a shared hook (useKanbanDnd or similar)
+- Extract common panel/modal state management into a shared hook
+- Ensure all three views have feature parity (trash can, review modal, etc.)
+- Reduce code duplication while maintaining view-specific customization
+
+**Technical Approach:**
+Create custom hooks that encapsulate the common patterns:
+- `useKanbanDnd` - sensors, handleDragStart, handleDragEnd, activeId state
+- `useKanbanPanels` - panel/modal state, open/close handlers
+- Consider a HOC or wrapper component for the common DndContext structure
+
+**Files to Refactor:**
+- src/components/views/BacklogView.tsx (723 lines)
+- src/components/views/GitHubIssuesView.tsx
+- src/components/views/QuickTasksView.tsx
 
 ---

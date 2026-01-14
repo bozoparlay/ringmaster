@@ -18,6 +18,8 @@ import { TaskCard } from '../TaskCard';
 import { TaskPanel } from '../TaskPanel';
 import { TackleModal } from '../TackleModal';
 import { Toast, ToastType } from '../Toast';
+import { TrashDropZone } from '../TrashDropZone';
+import { DeleteConfirmationModal } from '../DeleteConfirmationModal';
 import type { BacklogItem, Priority, Status } from '@/types/backlog';
 import { COLUMN_ORDER, PRIORITY_WEIGHT } from '@/types/backlog';
 import { v4 as uuidv4 } from 'uuid';
@@ -96,6 +98,10 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
   const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
+
+  // Delete confirmation modal state
+  const [itemToDelete, setItemToDelete] = useState<BacklogItem | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -204,6 +210,20 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
     setSelectedItem(null);
   }, [deleteTask]);
 
+  // Trash drop zone handlers
+  const handleConfirmTrashDelete = useCallback(() => {
+    if (itemToDelete) {
+      deleteTask(itemToDelete.id);
+      setItemToDelete(null);
+      setIsDeleteConfirmOpen(false);
+    }
+  }, [itemToDelete, deleteTask]);
+
+  const handleCancelTrashDelete = useCallback(() => {
+    setItemToDelete(null);
+    setIsDeleteConfirmOpen(false);
+  }, []);
+
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -283,6 +303,13 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
     if (!draggedItem) return;
 
     const overId = over.id as string;
+
+    // Check if dropped on trash zone
+    if (overId === 'trash-drop-zone') {
+      setItemToDelete(draggedItem);
+      setIsDeleteConfirmOpen(true);
+      return;
+    }
 
     // Dropped on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
@@ -409,6 +436,9 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
               />
             ) : null}
           </DragOverlay>
+
+          {/* Trash Drop Zone - appears when dragging */}
+          <TrashDropZone isDragging={!!activeId} />
         </DndContext>
       </div>
 
@@ -454,6 +484,14 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        item={itemToDelete}
+        isOpen={isDeleteConfirmOpen}
+        onConfirm={handleConfirmTrashDelete}
+        onCancel={handleCancelTrashDelete}
+      />
 
       {/* Floating Action Button */}
       <button

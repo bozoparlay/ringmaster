@@ -48,6 +48,8 @@ module.exports = {
         'card-hover': '0 8px 24px -4px rgba(0, 0, 0, 0.4), 0 2px 8px -2px rgba(0, 0, 0, 0.3)',
         'card-dragging': '0 20px 40px -8px rgba(0, 0, 0, 0.5), 0 8px 16px -4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(245, 158, 11, 0.15), 0 0 30px -5px rgba(245, 158, 11, 0.2)',
         'panel': '-8px 0 32px -4px rgba(0, 0, 0, 0.5)',
+        'glow-red': '0 0 24px -4px rgba(239, 68, 68, 0.4), 0 0 48px -8px rgba(239, 68, 68, 0.2)',
+        'trash-zone': '0 4px 16px -4px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255,255,255,0.05)',
       },
       animation: {
         'slide-in': 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -64,6 +66,8 @@ module.exports = {
         'ai-float': 'aiFloat 3s ease-in-out infinite',
         'ai-shimmer': 'aiShimmer 2s linear infinite',
         'ai-text-cycle': 'aiTextCycle 0.5s ease-in-out',
+        'trash-appear': 'trashAppear 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'trash-pulse': 'trashPulse 1.5s ease-in-out infinite',
       },
       keyframes: {
         slideIn: {
@@ -178,6 +182,26 @@ module.exports = {
           '100%': {
             opacity: '1',
             transform: 'translateY(0) scale(1)',
+          },
+        },
+        trashAppear: {
+          '0%': {
+            opacity: '0',
+            transform: 'scale(0.8) translateY(8px)',
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'scale(1) translateY(0)',
+          },
+        },
+        trashPulse: {
+          '0%, 100%': {
+            opacity: '0.4',
+            transform: 'scale(1)',
+          },
+          '50%': {
+            opacity: '0',
+            transform: 'scale(1.5)',
           },
         },
       },
