@@ -110,29 +110,3 @@ Fix the broken drag and drop functionality that prevents users from moving betti
 Scoring a task that is pretty unique is coming back as having a ton of similarity. We should probably make things more strict as far as similarity goes
 
 ---
-
-## [ready_to_ship] UI/UX
-
-### Add drag-and-drop trash can for deleting tasks
-<!-- ringmaster:id=6cf94cec-b3da-441a-a1f5-60a106fee311 -->
-**Priority**: Medium | **Effort**: Medium | **Value**: Medium
-**Branch**: task/6cf94cec-add-drag-and-drop-trash-can-for-deleting
-**Worktree**: .tasks/task-6cf94cec
-
-**Description**:
-Add a trash can icon in the bottom-right corner of the Kanban board that users can drag tasks to for deletion. This provides a more intuitive way to delete tasks compared to opening the task panel and clicking delete.
-
-**Requirements:**
-- Trash can icon appears in a fixed position (bottom-right corner)
-- Users can drag any task card and drop it on the trash can
-- Confirmation dialog appears before deletion
-- Visual feedback during drag (trash can highlights when hovering)
-- Smooth animation when task is deleted
-
-**Technical Approach:**
-- Use existing DnD context from @dnd-kit
-- Add trash can as a droppable zone
-- Implement hover state detection
-- Add confirmation modal before deletion
-
----
