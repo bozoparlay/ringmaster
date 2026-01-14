@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-export type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro';
+export type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro' | 'worktree';
 
 export interface IdeOption {
   id: IdeType;
   name: string;
   description: string;
   command: string;
-  icon: 'code' | 'terminal' | 'cursor' | 'kiro';
+  icon: 'code' | 'terminal' | 'cursor' | 'kiro' | 'folder';
 }
 
 export const IDE_OPTIONS: IdeOption[] = [
@@ -40,6 +40,13 @@ export const IDE_OPTIONS: IdeOption[] = [
     description: 'Copy prompt to clipboard only',
     command: '',
     icon: 'terminal',
+  },
+  {
+    id: 'worktree',
+    name: 'Worktree Only',
+    description: 'Create branch/worktree, nothing else',
+    command: '',
+    icon: 'folder',
   },
 ];
 

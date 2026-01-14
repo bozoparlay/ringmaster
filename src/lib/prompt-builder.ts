@@ -7,6 +7,7 @@
 
 export interface TaskPromptInput {
   title: string;
+  id?: string;  // Task ID - used to compute branch name
   priority?: string;
   category?: string;
   tags?: string[];
@@ -16,6 +17,20 @@ export interface TaskPromptInput {
   effort?: string;
   value?: string;
   branch?: string;
+}
+
+// Client-side slugify to compute branch name (matches server logic)
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+// Compute the branch name that will be created
+function computeBranchName(taskId: string, title: string): string {
+  return `task/${taskId.slice(0, 8)}-${slugify(title)}`;
 }
 
 export interface TaskPromptOptions {
@@ -72,9 +87,12 @@ export function buildTaskPrompt(
     sections.push(`Tags: ${task.tags.join(', ')}`);
   }
 
-  // Branch - show actual branch or placeholder for preview
+  // Branch - show actual branch, computed preview, or placeholder
   if (task.branch) {
     sections.push(`Branch: ${task.branch}`);
+  } else if (task.id && showBranchPlaceholder) {
+    // GAP #3 FIX: Show computed branch name instead of vague placeholder
+    sections.push(`Branch: ${computeBranchName(task.id, task.title)}`);
   } else if (showBranchPlaceholder) {
     sections.push(`Branch: Auto-generated on launch`);
   }

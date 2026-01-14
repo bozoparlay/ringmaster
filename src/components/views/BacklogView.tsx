@@ -479,9 +479,10 @@ export function BacklogView({
         });
 
         if (result.alreadyExists) {
-          showToast(`Worktree already exists: ${result.worktreePath}`, 'info');
+          // GAP #17 FIX: More helpful message when worktree exists
+          showToast(`Opening existing worktree at ${result.worktreePath}`, 'success');
         } else {
-          showToast(`Created worktree: ${result.worktreePath} (branch: ${result.branch})`, 'success');
+          showToast(`Created worktree at ${result.worktreePath}`, 'success');
         }
       } else {
         await onUpdateItem({ ...item, status: 'in_progress' });

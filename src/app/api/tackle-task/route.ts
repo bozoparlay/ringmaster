@@ -9,7 +9,7 @@ const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
 const GIT_WORKTREE_TIMEOUT_MS = 30000;  // 30s for worktree creation
 const EXTERNAL_APP_TIMEOUT_MS = 5000;   // 5s for opening VS Code, clipboard
 
-type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro';
+type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro' | 'worktree';
 
 interface TackleRequest {
   taskId: string;
@@ -32,7 +32,8 @@ const IDE_COMMANDS: Record<IdeType, string> = {
   vscode: 'code -n',
   cursor: 'cursor',
   kiro: 'kiro',
-  terminal: '', // No IDE to launch
+  terminal: '', // No IDE to launch, but still copy to clipboard
+  worktree: '', // GAP #4: No IDE and no clipboard - just create worktree
 };
 
 function slugify(text: string): string {
@@ -156,19 +157,21 @@ export async function POST(request: Request) {
     // The command to run claude with the task context
     const claudeCommand = `claude '${escapedPrompt}'`;
 
-    // Copy to clipboard using pbcopy (macOS) - non-critical, use short timeout
-    try {
-      await execWithTimeout(
-        `echo '${escapedPrompt}' | pbcopy`,
-        {},
-        EXTERNAL_APP_TIMEOUT_MS
-      );
-    } catch (err) {
-      // Log timeout vs other errors differently
-      if (err instanceof TimeoutError) {
-        console.warn('[tackle-task] Clipboard operation timed out');
-      } else {
-        console.warn('[tackle-task] Failed to copy to clipboard');
+    // Copy to clipboard using pbcopy (macOS) - skip for worktree-only mode
+    if (ide !== 'worktree') {
+      try {
+        await execWithTimeout(
+          `echo '${escapedPrompt}' | pbcopy`,
+          {},
+          EXTERNAL_APP_TIMEOUT_MS
+        );
+      } catch (err) {
+        // Log timeout vs other errors differently
+        if (err instanceof TimeoutError) {
+          console.warn('[tackle-task] Clipboard operation timed out');
+        } else {
+          console.warn('[tackle-task] Failed to copy to clipboard');
+        }
       }
     }
 

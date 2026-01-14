@@ -35,6 +35,8 @@ interface HeaderProps {
   onOpenGitHubSettings?: () => void;
   /** Last sync timestamp */
   lastSyncAt?: string;
+  /** Clean up orphaned worktrees */
+  onCleanupWorktrees?: () => Promise<void>;
 }
 
 const RECENT_PATHS_KEY = 'ringmaster-recent-paths';
@@ -75,11 +77,12 @@ function addRecentPath(path: string): void {
   localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT_PATHS)));
 }
 
-export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange, detectedRepo, isProjectStale, onRefreshProject, gitHubUser, isGitHubConnected, onOpenGitHubSettings, lastSyncAt }: HeaderProps) {
+export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh, onChangePath, onStorageModeChange, onExportMarkdown, onSync, isSyncing, onCleanup, searchQuery, onSearchChange, detectedRepo, isProjectStale, onRefreshProject, gitHubUser, isGitHubConnected, onOpenGitHubSettings, lastSyncAt, onCleanupWorktrees }: HeaderProps) {
   const [showPathPicker, setShowPathPicker] = useState(false);
   const [pathInput, setPathInput] = useState('');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [isRefreshingProject, setIsRefreshingProject] = useState(false);
+  const [isCleaningWorktrees, setIsCleaningWorktrees] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -95,6 +98,16 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
       await onRefreshProject();
     } finally {
       setIsRefreshingProject(false);
+    }
+  };
+
+  const handleCleanupWorktrees = async () => {
+    if (!onCleanupWorktrees || isCleaningWorktrees) return;
+    setIsCleaningWorktrees(true);
+    try {
+      await onCleanupWorktrees();
+    } finally {
+      setIsCleaningWorktrees(false);
     }
   };
 
@@ -250,7 +263,8 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
               >
                 <div className={`w-2 h-2 rounded-full ${fileExists ? 'bg-green-500' : 'bg-yellow-500'}`} />
                 <span className="text-xs text-surface-400 font-mono truncate max-w-[250px]">
-                  {filePath ? filePath.split('/').slice(-2).join('/') : 'No file loaded'}
+                  {/* GAP #1 FIX: More helpful text when no file loaded */}
+                  {filePath ? filePath.split('/').slice(-2).join('/') : 'Click to select file'}
                 </span>
                 <svg className={`w-3 h-3 text-surface-500 transition-transform ${showPathPicker ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -390,6 +404,20 @@ export function Header({ filePath, fileExists, storageMode, onNewTask, onRefresh
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
               </svg>
               Cleanup
+            </button>
+          )}
+
+          {onCleanupWorktrees && (
+            <button
+              onClick={handleCleanupWorktrees}
+              disabled={isCleaningWorktrees}
+              className="hidden sm:flex items-center gap-2 px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 font-medium text-sm rounded-lg transition-colors border border-surface-700 disabled:opacity-50"
+              title="Remove orphaned worktree directories"
+            >
+              <svg className={`w-4 h-4 ${isCleaningWorktrees ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              {isCleaningWorktrees ? 'Cleaning...' : 'Worktrees'}
             </button>
           )}
 

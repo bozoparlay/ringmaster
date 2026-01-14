@@ -18,6 +18,7 @@ import type { DataSource } from '@/components';
 import { useBacklog } from '@/hooks/useBacklog';
 import { useProjectConfig } from '@/hooks/useProjectConfig';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
+import { setStorageMode, getStorageMode } from '@/lib/storage';
 
 const LAST_PATH_KEY = 'ringmaster-last-path';
 const LAST_SOURCE_KEY = 'ringmaster-last-source';
@@ -65,10 +66,17 @@ export default function Home() {
   } = useProjectConfig();
 
   // Load last path and source from localStorage on mount
+  // GAP #16 FIX: Also auto-set storage mode to 'file' if we have a saved path
   useEffect(() => {
     const savedPath = getLastPath();
     if (savedPath) {
       setBacklogPath(savedPath);
+      // GAP #16: If we have a saved file path, ensure storage mode is set to 'file'
+      // This provides seamless continuation from previous session
+      const currentMode = getStorageMode();
+      if (currentMode !== 'file') {
+        setStorageMode('file');
+      }
     }
     const savedSource = getLastSource();
     setActiveSource(savedSource);
@@ -116,6 +124,29 @@ export default function Home() {
       await addItem(task.title, task.description, task.priority, task.effort, task.value, task.category);
     }
     setIsNewTaskOpen(false);
+  };
+
+  const handleCleanupWorktrees = async () => {
+    try {
+      const response = await fetch('/api/cleanup-worktrees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoDir: filePath ? filePath.replace(/\/[^/]+$/, '') : undefined }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        const freedMB = (result.freedBytes / (1024 * 1024)).toFixed(1);
+        if (result.cleaned.length > 0) {
+          alert(`Cleaned ${result.cleaned.length} orphaned worktrees, freed ${freedMB} MB`);
+        } else {
+          alert('No orphaned worktrees found');
+        }
+      } else {
+        alert(`Cleanup failed: ${result.error}`);
+      }
+    } catch (err) {
+      alert(`Cleanup error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   };
 
   // Get GitHub token for the GitHub view
@@ -175,6 +206,7 @@ export default function Home() {
           gitHubUser={gitHubUser}
           isGitHubConnected={isGitHubConnected}
           onOpenGitHubSettings={() => setIsGitHubSettingsOpen(true)}
+          onCleanupWorktrees={handleCleanupWorktrees}
         />
 
         {/* Source Selector Tabs */}

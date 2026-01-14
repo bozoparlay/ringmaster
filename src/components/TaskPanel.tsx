@@ -1053,6 +1053,19 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </div>
           )}
 
+          {/* GAP #18 FIX: Open in IDE button for ready_to_ship tasks (last-minute fixes) */}
+          {isReadyToShip && editedItem.worktreePath && (
+            <button
+              onClick={() => onTackle(editedItem)}
+              className="w-full flex items-center justify-center gap-2 bg-surface-800 hover:bg-surface-700 border border-surface-600 text-surface-200 font-medium py-2 px-4 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+              Open in IDE
+            </button>
+          )}
+
           {/* Ship button (for ready_to_ship status) */}
           {/* GAP #11 FIX: PR should already exist at this point. Button merges and cleans up */}
           {isReadyToShip && onShip && (
