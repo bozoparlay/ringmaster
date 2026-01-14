@@ -26,6 +26,8 @@ export interface BacklogItem {
   branch?: string;           // Git branch name (e.g., "task/abc12345-feature-name")
   worktreePath?: string;     // Path to git worktree (e.g., ".tasks/task-abc12345")
   reviewFeedback?: string;   // Feedback from code review if it failed
+  prUrl?: string;            // Pull request URL when created
+  prNumber?: number;         // Pull request number
   // GitHub issue reference (for linking, not sync)
   githubIssueNumber?: number;    // Linked GitHub issue number (simple reference)
   githubIssueUrl?: string;       // Full URL for quick access

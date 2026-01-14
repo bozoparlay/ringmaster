@@ -187,8 +187,51 @@ export function KanbanBoard({
   // Handle review modal actions
   const handleReviewContinue = async () => {
     if (!reviewItem) return;
-    // Move to ready_to_ship
-    await onUpdateItem({ ...reviewItem, status: 'ready_to_ship' });
+
+    // If PR wasn't created during review (e.g., internal API call failed), create it now
+    let finalPrUrl = prUrl;
+    let finalPrNumber = prNumber;
+    if (!prUrl && !prError) {
+      console.log('[KanbanBoard] No PR from review, creating now...');
+      try {
+        const response = await fetch('/api/create-pr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: reviewItem.id,
+            title: reviewItem.title,
+            description: reviewItem.description,
+            branch: reviewItem.branch,
+            baseBranch: 'main',
+            backlogPath,
+            githubIssueNumber: reviewItem.githubIssueNumber,
+          }),
+        });
+        const prResult = await response.json();
+        if (prResult.success) {
+          finalPrUrl = prResult.prUrl;
+          finalPrNumber = prResult.prNumber;
+          setPrUrl(finalPrUrl);
+          setPrNumber(finalPrNumber);
+          console.log(`[KanbanBoard] PR created: ${finalPrUrl}`);
+        } else {
+          console.warn('[KanbanBoard] PR creation failed:', prResult.error);
+          setPrError(prResult.error);
+        }
+      } catch (err) {
+        console.error('[KanbanBoard] PR creation error:', err);
+        setPrError(err instanceof Error ? err.message : 'PR creation failed');
+      }
+    }
+
+    // Move to ready_to_ship, clear old review feedback since review passed, store PR info
+    await onUpdateItem({
+      ...reviewItem,
+      status: 'ready_to_ship',
+      reviewFeedback: undefined,
+      prUrl: finalPrUrl,
+      prNumber: finalPrNumber,
+    });
 
     // Update GitHub labels if linked (remove "in-progress", add "review")
     if (reviewItem.githubIssueNumber && getStorageMode() === 'github') {
