@@ -16,8 +16,7 @@ export default function AppleIcon() {
     (
       <div
         style={{
-          fontSize: 24,
-          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+          background: '#0a0a0f',
           width: '100%',
           height: '100%',
           display: 'flex',
@@ -27,32 +26,32 @@ export default function AppleIcon() {
         }}
       >
         <svg
-          width="120"
-          height="120"
-          viewBox="0 0 24 24"
+          width="140"
+          height="140"
+          viewBox="0 0 140 140"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          {/* Circus tent / ringmaster top hat shape */}
-          <path
-            d="M12 2L3 10h18L12 2z"
-            fill="#f59e0b"
-          />
-          <path
-            d="M4 10v10a2 2 0 002 2h12a2 2 0 002-2V10H4z"
-            fill="#fbbf24"
-          />
-          {/* Ring */}
+          {/* Outer ring */}
           <circle
-            cx="12"
-            cy="15"
-            r="4"
-            stroke="#1a1a2e"
-            strokeWidth="2"
+            cx="70"
+            cy="70"
+            r="58"
+            stroke="rgba(245, 158, 11, 0.4)"
+            strokeWidth="5"
             fill="none"
           />
-          {/* Star accent */}
-          <circle cx="12" cy="15" r="1.5" fill="#1a1a2e" />
+          {/* Inner ring */}
+          <circle
+            cx="70"
+            cy="70"
+            r="40"
+            stroke="rgba(245, 158, 11, 0.6)"
+            strokeWidth="4"
+            fill="none"
+          />
+          {/* Center dot */}
+          <circle cx="70" cy="70" r="12" fill="#f59e0b" />
         </svg>
       </div>
     ),
