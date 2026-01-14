@@ -134,7 +134,8 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
     status,
     tags,
     acceptanceCriteria: acceptanceCriteria.length > 0 ? acceptanceCriteria : undefined,
-    category: 'GitHub Issues',
+    // Category extracted from first non-metadata label if present (e.g., 'bug', 'feature')
+    category: tags.length > 0 ? tags[0] : undefined,
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,
     order: issue.number,
