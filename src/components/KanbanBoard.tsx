@@ -22,6 +22,8 @@ import { TaskPanel } from './TaskPanel';
 import { TackleModal } from './TackleModal';
 import { ReviewModal } from './ReviewModal';
 import { Toast, ToastType } from './Toast';
+import { TrashDropZone } from './TrashDropZone';
+import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
 import { GitHubSyncService, getGitHubSyncConfig, isGitHubSyncConfigured } from '@/lib/storage/github-sync';
 import { getStorageMode } from '@/lib/storage/factory';
@@ -129,6 +131,10 @@ export function KanbanBoard({
   const [prUrl, setPrUrl] = useState<string | undefined>();
   const [prNumber, setPrNumber] = useState<number | undefined>();
   const [prError, setPrError] = useState<string | undefined>();
+
+  // Delete confirmation modal state
+  const [itemToDelete, setItemToDelete] = useState<BacklogItem | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -382,6 +388,13 @@ export function KanbanBoard({
     if (!activeItem) return;
 
     const overId = over.id as string;
+
+    // Check if dropped on trash zone
+    if (overId === 'trash-drop-zone') {
+      setItemToDelete(activeItem);
+      setIsDeleteConfirmOpen(true);
+      return;
+    }
 
     // If dropped on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
@@ -732,6 +745,21 @@ export function KanbanBoard({
     setTackleItem(null);
   };
 
+  // Handle confirmed deletion from trash drop zone
+  const handleConfirmTrashDelete = async () => {
+    if (itemToDelete) {
+      await handleDeleteItem(itemToDelete.id);
+      showToast(`Deleted "${itemToDelete.title}"`, 'info');
+    }
+    setIsDeleteConfirmOpen(false);
+    setItemToDelete(null);
+  };
+
+  const handleCancelTrashDelete = () => {
+    setIsDeleteConfirmOpen(false);
+    setItemToDelete(null);
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
@@ -803,6 +831,9 @@ export function KanbanBoard({
               />
             ) : null}
           </DragOverlay>
+
+          {/* Trash Drop Zone - appears when dragging */}
+          <TrashDropZone isDragging={!!activeId} />
         </DndContext>
       </div>
 
@@ -869,6 +900,14 @@ export function KanbanBoard({
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        item={itemToDelete}
+        isOpen={isDeleteConfirmOpen}
+        onConfirm={handleConfirmTrashDelete}
+        onCancel={handleCancelTrashDelete}
+      />
 
       {/* Floating Action Button */}
       <button
