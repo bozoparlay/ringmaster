@@ -141,24 +141,3 @@ Create a nice looking favicon and apply it. Use the frontend design skill
 *Value: medium*
 
 ---
-
-## [in_progress] Quick Tasks
-
-### Test task for tackle workflow
-<!-- ringmaster:id=80e1ff4e-d7b2-478c-9e30-fe1bdab13c06 -->
-**Priority**: Medium
-
----
-
-## [ready_to_ship] Uncategorized
-
-### Integration Test Task
-<!-- ringmaster:id=46f4d7ae-6373-4f31-8257-e2dab375ee3c github=410 -->
-**Priority**: Medium | **Effort**: Medium
-
-**Description**:
-*Priority: medium*
-*Effort: medium*
-*Value: medium*
-
----
