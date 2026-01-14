@@ -134,16 +134,3 @@ Scoring a task that is pretty unique is coming back as having a ton of similarit
 *Value: medium*
 
 ---
-
-## [ready_to_ship] Uncategorized
-
-### Add favicon
-<!-- ringmaster:id=354819bc-54e5-4fbb-b226-d3fc30e58f09 github=409 -->
-**Priority**: Medium | **Effort**: Medium
-**Branch**: task/354819bc-add-favicon
-**Worktree**: .tasks/task-354819bc
-
-**Description**:
-Create a nice looking favicon and apply it. Use the frontend design skill
-
----
