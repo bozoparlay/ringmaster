@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 12
-- **Issues Remaining**: 6
+- **Issues Resolved**: 13
+- **Issues Remaining**: 5
 
 ## Issues Summary
 
@@ -25,7 +25,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 501 | Maker server health more subtle | Medium | **COMPLETED** |
 | 500 | Persist the value on Github view | Medium | **COMPLETED** |
 | 499 | Add rescope indicator for Github view | Medium | **COMPLETED** |
-| 498 | Add Dropdown for Categories | Medium | Pending |
+| 498 | Add Dropdown for Categories | Medium | **COMPLETED** |
 | 407 | Improve Similarity Scoring | Medium | Pending |
 | 404 | Fix drag and drop | High | **COMPLETED** |
 | 403 | Improve Grading of Tasks | Medium | Pending |
@@ -449,5 +449,57 @@ The explicit "Save Changes" button in the task editing panel required users to m
 - [x] No "Save Changes" button in footer
 - [x] Closing panel preserves all changes (verified after reopen)
 - [x] Card updates in real-time as edits are made
+
+---
+
+### Issue #498: Add Dropdown for Categories
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+The category field in the TaskPanel was a plain text input, requiring users to type category names from memory. This led to inconsistent naming (e.g., "Bug Fix" vs "Bug Fixes" vs "Bugfixes") and made it hard to discover available categories.
+
+#### Implementation
+1. **Created `CategorySelector` component** (`src/components/CategorySelector.tsx`):
+   - Combobox-style selector combining dropdown with text input
+   - Shows existing categories from current tasks merged with defaults
+   - 10 default category suggestions: UI/UX Improvements, Infrastructure, Admin Tools, User Management, Testing, Security, Performance, Bug Fixes, Documentation, Technical Debt
+   - Filters suggestions as user types (case-insensitive)
+   - Allows custom categories (shows "Create [category]" option)
+   - Clear button to remove category
+   - Keyboard support: Escape closes, ArrowDown opens, Enter selects first match
+
+2. **Integrated into TaskPanel**:
+   - Added `existingCategories` prop to TaskPanel interface
+   - Replaced plain text input with CategorySelector
+   - Auto-save triggers on category change
+
+3. **Updated views to pass existing categories**:
+   - BacklogView: Extracts categories from items with useMemo
+   - GitHubIssuesView: Same pattern for GitHub issues
+
+4. **Fixed infinite render loop**:
+   - Initial implementation caused "Maximum update depth exceeded" error
+   - Root cause: `allCategories` computed inline created new array reference on every render
+   - Fix: Memoized with `useMemo` to maintain stable reference
+
+#### Files Created
+- `src/components/CategorySelector.tsx` - Combobox category selector
+
+#### Files Changed
+- `src/components/TaskPanel.tsx` - Added existingCategories prop, integrated CategorySelector
+- `src/components/views/BacklogView.tsx` - Extract and pass existingCategories
+- `src/components/views/GitHubIssuesView.tsx` - Extract and pass existingCategories
+- `src/components/index.ts` - Export CategorySelector
+
+#### Testing (Playwright Validated)
+- [x] Click dropdown button shows all default categories alphabetically sorted
+- [x] Selecting "Security" updates input, task card, and panel header
+- [x] Auto-save triggers (console shows "[backlog] Written to file")
+- [x] Typing "My Custom Category" works as custom category
+- [x] Clear button removes category value
+- [x] No infinite render loop (useMemo fix working)
+- [x] Existing categories from tasks appear in dropdown
 
 ---

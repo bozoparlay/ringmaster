@@ -17,6 +17,7 @@ import { SaveStatusIndicator } from './SaveStatusIndicator';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
 import { getAISettings } from './SettingsModal';
 import { Toast } from './Toast';
+import { CategorySelector } from './CategorySelector';
 import { useAutoSave } from '@/hooks/useAutoSave';
 
 // Helper to get configured GitHub repo
@@ -46,6 +47,7 @@ interface TaskPanelProps {
   backlogPath?: string;
   isGitHubView?: boolean; // When true, editing opens GitHub instead
   isQuickTaskView?: boolean; // When true, show "Promote to Backlog" option
+  existingCategories?: string[]; // List of categories from existing tasks for dropdown
 }
 
 
@@ -95,7 +97,7 @@ const valueColors: Record<Value, string> = {
   high: 'bg-red-500',
 };
 
-export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onReview, onShip, onUnlinkGitHub, onSendToGitHub, onAddToBacklog, backlogPath, isGitHubView, isQuickTaskView }: TaskPanelProps) {
+export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onReview, onShip, onUnlinkGitHub, onSendToGitHub, onAddToBacklog, backlogPath, isGitHubView, isQuickTaskView, existingCategories }: TaskPanelProps) {
   const [editedItem, setEditedItem] = useState<BacklogItem | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -843,12 +845,11 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
               Category
             </label>
-            <input
-              type="text"
-              value={editedItem.category || ''}
-              onChange={(e) => setEditedItem({ ...editedItem, category: e.target.value || undefined })}
-              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-4 py-2 text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors"
-              placeholder="e.g., Security, UX Improvements"
+            <CategorySelector
+              value={editedItem.category}
+              onChange={(category) => setEditedItem({ ...editedItem, category })}
+              existingCategories={existingCategories}
+              placeholder="Select or type category..."
             />
           </div>
 

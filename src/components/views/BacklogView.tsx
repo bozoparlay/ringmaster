@@ -201,6 +201,13 @@ export function BacklogView({
   const [itemToDelete, setItemToDelete] = useState<BacklogItem | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
+  // Extract existing categories from all items for dropdown
+  const existingCategories = useMemo(() => {
+    return Array.from(
+      new Set(items.map((item) => item.category).filter(Boolean) as string[])
+    ).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }, [items]);
+
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
   };
@@ -775,6 +782,7 @@ export function BacklogView({
           return { issueNumber: data.issue.number, issueUrl: data.issue.url };
         }}
         backlogPath={backlogPath}
+        existingCategories={existingCategories}
       />
 
       {/* Tackle Modal */}

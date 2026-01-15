@@ -1,5 +1,6 @@
 export { AiLoadingState } from './AiLoadingState';
 export { SaveStatusIndicator } from './SaveStatusIndicator';
+export { CategorySelector } from './CategorySelector';
 export { Header } from './Header';
 export { KanbanColumn } from './KanbanColumn';
 export { TaskCard, TaskCardSkeleton } from './TaskCard';

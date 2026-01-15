@@ -368,6 +368,13 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
 
   const items = useMemo(() => issues.map(issueToBacklogItem), [issues]);
 
+  // Extract existing categories from all items for dropdown
+  const existingCategories = useMemo(() => {
+    return Array.from(
+      new Set(items.map((item) => item.category).filter(Boolean) as string[])
+    ).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }, [items]);
+
   // Check if actively searching
   const isSearching = searchQuery.trim().length > 0;
 
@@ -868,6 +875,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
           setIsPanelOpen(false);
         } : undefined}
         isGitHubView
+        existingCategories={existingCategories}
       />
 
       {/* Tackle Modal */}
