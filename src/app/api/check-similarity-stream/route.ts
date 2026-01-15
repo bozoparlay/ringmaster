@@ -74,7 +74,7 @@ async function analyzeBatch(
     `[${i}] ID: ${t.id}\n    Title: ${t.title}\n    Description: ${t.description?.slice(0, 150) || 'No description'}${t.description && t.description.length > 150 ? '...' : ''}`
   ).join('\n\n');
 
-  const prompt = `Quickly check if this NEW task is similar to any of these ${batch.length} EXISTING tasks.
+  const prompt = `Are any of these EXISTING tasks essentially THE SAME work as the NEW task?
 
 NEW TASK:
 Title: ${newTask.title}
@@ -83,15 +83,20 @@ Description: ${newTask.description?.slice(0, 200) || 'No description'}
 EXISTING TASKS:
 ${tasksContext}
 
-Return ONLY JSON (no other text):
-{"similar": [{"index": <number>, "similarity": <0.0-1.0>, "recommendation": "merge"|"extend"|"duplicate", "reason": "<10 words max>"}]}
+Return ONLY JSON: {"similar": [{"index": <number>, "similarity": <0.0-1.0>, "recommendation": "duplicate"|"merge"|"extend", "reason": "<10 words>"}]}
 
-Rules:
-- Only include tasks with similarity >= 0.4
-- similarity >= 0.8 = "duplicate"
-- 0.6-0.8 = "merge"
-- 0.4-0.6 = "extend"
-- Empty array if no matches: {"similar": []}`;
+STRICT SCORING - Only flag if solving one task would complete/partially complete the other:
+- 0.85+ "duplicate": Identical goal, same solution needed
+- 0.70-0.84 "merge": Significant overlap in implementation work
+- 0.55-0.69 "extend": One task could be a subtask of the other
+
+DO NOT FLAG as similar:
+- Tasks in the same feature area but different functionality
+- Tasks that touch the same code/files but do different things
+- Tasks with similar keywords but different outcomes
+- UI task vs backend task for same feature (these are different work)
+
+Return EMPTY {"similar": []} unless you are CONFIDENT they overlap. When in doubt, do NOT flag.`;
 
   try {
     console.log(`[similarity-batch-${batchIndex}] Calling Bedrock with ${batch.length} tasks`);
@@ -130,7 +135,7 @@ Rules:
           recommendation: s.recommendation as 'merge' | 'extend' | 'duplicate',
           reason: s.reason,
         }))
-        .filter((s: SimilarTask) => s.id && s.similarity >= 0.4);
+        .filter((s: SimilarTask) => s.id && s.similarity >= 0.55);
       return similar;
     }
     return [];

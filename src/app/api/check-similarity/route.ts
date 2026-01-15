@@ -53,7 +53,7 @@ async function analyzeSimilarity(
     `[${i}] ID: ${t.id}\n    Title: ${t.title}\n    Description: ${t.description?.slice(0, 200) || 'No description'}${t.description && t.description.length > 200 ? '...' : ''}\n    Category: ${t.category || 'Uncategorized'}`
   ).join('\n\n');
 
-  const prompt = `Analyze if this NEW task is similar to any EXISTING tasks.
+  const prompt = `Are any of these EXISTING tasks essentially THE SAME work as the NEW task?
 
 NEW TASK:
 Title: ${newTask.title}
@@ -63,26 +63,32 @@ Category: ${newTask.category || 'Uncategorized'}
 EXISTING TASKS:
 ${tasksContext}
 
-For each existing task that is similar (semantically related, overlapping scope, or duplicate), return JSON:
+Return JSON:
 {
   "similar": [
     {
       "index": <number>,
       "similarity": <0.0-1.0>,
-      "recommendation": "merge" | "extend" | "duplicate",
+      "recommendation": "duplicate" | "merge" | "extend",
       "reason": "<brief explanation>"
     }
   ],
   "recommendation": "proceed" | "review_similar"
 }
 
-Guidelines:
-- similarity >= 0.8: "duplicate" - essentially the same task
-- similarity 0.6-0.8: "merge" - related, should be combined
-- similarity 0.4-0.6: "extend" - related, but distinct enough to be separate
-- similarity < 0.4: don't include
+STRICT SCORING - Only flag if solving one task would complete/partially complete the other:
+- 0.85+ "duplicate": Identical goal, same solution needed
+- 0.70-0.84 "merge": Significant overlap in implementation work
+- 0.55-0.69 "extend": One task could be a subtask of the other
+- Below 0.55: Do NOT include
 
-If no similar tasks found, return: {"similar": [], "recommendation": "proceed"}
+DO NOT FLAG as similar:
+- Tasks in the same feature area but different functionality
+- Tasks that touch the same code/files but do different things
+- Tasks with similar keywords but different outcomes
+- UI task vs backend task for same feature (these are different work)
+
+Return {"similar": [], "recommendation": "proceed"} unless you are CONFIDENT they overlap.
 
 Return ONLY valid JSON, no other text.`;
 
@@ -125,7 +131,7 @@ Return ONLY valid JSON, no other text.`;
             similarity: s.similarity,
             recommendation: s.recommendation as 'merge' | 'extend' | 'duplicate',
             reason: s.reason,
-          })).filter((s: SimilarTask) => s.id);
+          })).filter((s: SimilarTask) => s.id && s.similarity >= 0.55);
 
           resolve({
             similar,
