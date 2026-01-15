@@ -217,6 +217,8 @@ export default function Home() {
           source={activeSource}
           onSourceChange={handleSourceChange}
           counts={sourceCounts}
+          isGitHubConnected={isGitHubConnected}
+          repoName={project ? `${project.owner}/${project.repo}` : undefined}
         />
 
         {/* Error banner */}

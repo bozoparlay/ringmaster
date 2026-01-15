@@ -49,6 +49,10 @@ interface SourceSelectorProps {
   onSourceChange: (source: DataSource) => void;
   counts?: Record<DataSource, number>;
   disabled?: boolean;
+  /** Whether GitHub is connected (shows indicator) */
+  isGitHubConnected?: boolean;
+  /** Repo name to display (e.g., "owner/repo") */
+  repoName?: string;
 }
 
 export function SourceSelector({
@@ -56,6 +60,8 @@ export function SourceSelector({
   onSourceChange,
   counts = { backlog: 0, github: 0, quick: 0 },
   disabled = false,
+  isGitHubConnected = false,
+  repoName,
 }: SourceSelectorProps) {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent, tabId: DataSource) => {
@@ -156,14 +162,37 @@ export function SourceSelector({
                   {count > 99 ? '99+' : count}
                 </span>
               )}
+
+              {/* GitHub connectivity indicator - subtle dot next to GitHub tab */}
+              {tab.id === 'github' && (
+                <span
+                  className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                    isGitHubConnected ? 'bg-green-500' : 'bg-surface-500'
+                  }`}
+                  title={isGitHubConnected ? 'GitHub connected' : 'GitHub not connected'}
+                />
+              )}
             </button>
           );
         })}
       </div>
 
       {/* Subtle description of current source */}
-      <p className="mt-2 text-xs text-surface-500 font-mono">
-        {SOURCE_TABS.find((t) => t.id === source)?.description}
+      <p className="mt-2 text-xs text-surface-500 font-mono flex items-center gap-2">
+        {source === 'github' && repoName ? repoName : SOURCE_TABS.find((t) => t.id === source)?.description}
+        {/* Show connection status indicator in description for GitHub mode */}
+        {source === 'github' && (
+          <span
+            className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${
+              isGitHubConnected
+                ? 'bg-green-500/10 text-green-400'
+                : 'bg-surface-700 text-surface-400'
+            }`}
+          >
+            <span className={`w-1 h-1 rounded-full ${isGitHubConnected ? 'bg-green-500' : 'bg-surface-500'}`} />
+            {isGitHubConnected ? 'connected' : 'disconnected'}
+          </span>
+        )}
       </p>
     </div>
   );

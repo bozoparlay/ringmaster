@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 2
-- **Issues Remaining**: 16
+- **Issues Resolved**: 3
+- **Issues Remaining**: 15
 
 ## Issues Summary
 
@@ -21,7 +21,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 506 | Confirm GitHub test can be edited | Medium | Pending |
 | 505 | Confirm similarity check | Medium | Pending |
 | 504 | New tasks don't appear until refresh | Medium | Pending |
-| 502 | Add github connectivity indicator | Medium | Pending |
+| 502 | Add github connectivity indicator | Medium | **COMPLETED** |
 | 501 | Maker server health more subtle | Medium | **COMPLETED** |
 | 500 | Persist the value on Github view | Medium | Pending |
 | 499 | Add rescope indicator for Github view | Medium | Pending |
@@ -87,5 +87,31 @@ Changed the HealthIndicator to only show the text label when the server is NOT h
 - [x] Hover shows full tooltip with status details
 - [x] "Checking..." text still shows during initial load
 - [x] Degraded/unhealthy would still show text labels
+
+---
+
+### Issue #502: Add github connectivity indicator
+**Status**: COMPLETED
+**Started**: 2026-01-14
+**Completed**: 2026-01-14
+
+#### Problem
+Need a GitHub connectivity indicator next to the repo name, similar to the server health indicator.
+
+#### Implementation
+Added GitHub connectivity indicator to the SourceSelector component:
+1. Small green/gray dot on the GitHub tab showing connection status
+2. Description area shows repo name (e.g., "bozoparlay/ringmaster") instead of just "Issues"
+3. "connected"/"disconnected" badge in the description when GitHub tab is selected
+
+#### Files Changed
+- `src/components/SourceSelector.tsx` - Added isGitHubConnected and repoName props, connectivity indicators
+- `src/app/page.tsx` - Pass isGitHubConnected and repoName to SourceSelector
+
+#### Testing (Playwright Validated)
+- [x] Green dot shows on GitHub tab when connected
+- [x] Gray dot shows when disconnected
+- [x] Repo name displays in description (e.g., "bozoparlay/ringmaster")
+- [x] "connected" badge shows when in GitHub mode and connected
 
 ---
