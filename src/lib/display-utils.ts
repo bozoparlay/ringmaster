@@ -35,6 +35,23 @@ export function cleanDescriptionForDisplay(description: string | undefined): str
     cleaned = cleaned.replace(pattern, '');
   }
 
+  // Strip markdown formatting for plain text preview
+  cleaned = cleaned
+    // Remove markdown headers (## Header -> Header)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold/italic (**text** or *text* -> text)
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    // Remove inline code (`code` -> code)
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove links but keep text ([text](url) -> text)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove horizontal rules
+    .replace(/^[-*_]{3,}$/gm, '')
+    // Remove list markers (-, *, +, 1.)
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '');
+
   // Clean up excessive whitespace left after removal
   cleaned = cleaned
     .replace(/^\s*\n+/gm, '\n')  // Remove leading empty lines
