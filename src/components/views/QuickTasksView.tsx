@@ -153,13 +153,21 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
   }, [tasks, saveTasks]);
 
   const updateTask = useCallback((updatedTask: BacklogItem) => {
-    const newTasks = tasks.map(t =>
-      t.id === updatedTask.id
-        ? { ...updatedTask, updatedAt: new Date().toISOString() }
-        : t
-    );
-    saveTasks(newTasks);
-  }, [tasks, saveTasks]);
+    setTasks(prevTasks => {
+      const newTasks = prevTasks.map(t =>
+        t.id === updatedTask.id
+          ? { ...updatedTask, updatedAt: new Date().toISOString() }
+          : t
+      );
+      // Save directly to localStorage, don't call saveTasks (which would call setTasks again)
+      try {
+        localStorage.setItem(QUICK_TASKS_KEY, JSON.stringify(newTasks));
+      } catch (err) {
+        console.error('Failed to save quick tasks:', err);
+      }
+      return newTasks;
+    });
+  }, []);
 
   const deleteTask = useCallback((id: string) => {
     const newTasks = tasks.filter(t => t.id !== id);
@@ -199,11 +207,9 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
     setTackleItem(null);
   }, [updateTask]);
 
-  // Save edited task from panel
+  // Save edited task from panel (auto-save, don't close panel)
   const handleSaveTask = useCallback((updatedItem: BacklogItem) => {
     updateTask(updatedItem);
-    setIsPanelOpen(false);
-    setSelectedItem(null);
   }, [updateTask]);
 
   // Delete task from panel

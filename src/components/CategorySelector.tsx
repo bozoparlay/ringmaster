@@ -2,6 +2,10 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 
+// Stable empty array to prevent infinite re-renders when existingCategories isn't provided
+// Using [] directly in default params creates a new reference each render!
+const EMPTY_CATEGORIES: string[] = [];
+
 // Default category suggestions for new projects
 const DEFAULT_CATEGORIES = [
   'UI/UX Improvements',
@@ -37,13 +41,12 @@ interface CategorySelectorProps {
 export function CategorySelector({
   value,
   onChange,
-  existingCategories = [],
+  existingCategories = EMPTY_CATEGORIES,
   placeholder = 'Select or type category...',
   className = '',
 }: CategorySelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value || '');
-  const [filteredCategories, setFilteredCategories] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -64,18 +67,16 @@ export function CategorySelector({
     setInputValue(value || '');
   }, [value]);
 
-  // Filter categories based on input
-  useEffect(() => {
+  // Filter categories based on input - using useMemo instead of useEffect+setState
+  // to avoid triggering re-renders that could cause infinite loops
+  const filteredCategories = useMemo(() => {
     if (!inputValue.trim()) {
-      setFilteredCategories(allCategories);
-    } else {
-      const searchTerm = inputValue.toLowerCase();
-      setFilteredCategories(
-        allCategories.filter((cat) =>
-          cat.toLowerCase().includes(searchTerm)
-        )
-      );
+      return allCategories;
     }
+    const searchTerm = inputValue.toLowerCase();
+    return allCategories.filter((cat) =>
+      cat.toLowerCase().includes(searchTerm)
+    );
   }, [inputValue, allCategories]);
 
   // Close dropdown when clicking outside

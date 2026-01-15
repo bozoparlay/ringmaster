@@ -2,6 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import ReactMarkdown from 'react-markdown';
 import type { BacklogItem, Priority } from '@/types/backlog';
 import { QUALITY_THRESHOLD } from '@/lib/task-quality';
 import { cleanDescriptionForDisplay } from '@/lib/display-utils';
@@ -120,11 +121,13 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
           </h3>
         </div>
 
-        {/* Description preview - cleaned of internal metadata */}
+        {/* Description preview - renders markdown, cleaned of internal metadata */}
         {item.description && (
-          <p className="text-xs text-surface-400 line-clamp-2 mb-2.5 leading-relaxed">
-            {cleanDescriptionForDisplay(item.description)}
-          </p>
+          <div className="text-xs text-surface-400 line-clamp-2 mb-2.5 leading-relaxed prose prose-invert prose-xs max-w-none prose-p:m-0 prose-p:leading-relaxed prose-headings:text-surface-300 prose-headings:text-xs prose-headings:font-medium prose-headings:m-0 prose-strong:text-surface-300 prose-code:text-accent prose-code:text-[10px] prose-code:bg-surface-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
+            <ReactMarkdown>
+              {cleanDescriptionForDisplay(item.description)}
+            </ReactMarkdown>
+          </div>
         )}
 
         {/* Footer with category, priority, and metadata */}

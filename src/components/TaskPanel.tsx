@@ -19,6 +19,7 @@ import { getAISettings } from './SettingsModal';
 import { Toast } from './Toast';
 import { CategorySelector } from './CategorySelector';
 import { useAutoSave } from '@/hooks/useAutoSave';
+import { SessionContinuityPanel } from './SessionContinuityPanel';
 
 // Helper to get configured GitHub repo
 function getGitHubRepo(): string | null {
@@ -39,6 +40,7 @@ interface TaskPanelProps {
   onSave: (item: BacklogItem) => void;
   onDelete: (id: string) => Promise<void>;
   onTackle: (item: BacklogItem) => void;
+  onContinue?: (item: BacklogItem, sessionId: string, prompt: string) => void;
   onReview?: (item: BacklogItem) => void;
   onShip?: (item: BacklogItem) => Promise<void>;
   onUnlinkGitHub?: (item: BacklogItem) => Promise<void>;
@@ -48,6 +50,7 @@ interface TaskPanelProps {
   isGitHubView?: boolean; // When true, editing opens GitHub instead
   isQuickTaskView?: boolean; // When true, show "Promote to Backlog" option
   existingCategories?: string[]; // List of categories from existing tasks for dropdown
+  taskSource?: 'file' | 'github' | 'quick'; // Source of the task for execution tracking
 }
 
 
@@ -97,7 +100,7 @@ const valueColors: Record<Value, string> = {
   high: 'bg-red-500',
 };
 
-export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onReview, onShip, onUnlinkGitHub, onSendToGitHub, onAddToBacklog, backlogPath, isGitHubView, isQuickTaskView, existingCategories }: TaskPanelProps) {
+export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, onContinue, onReview, onShip, onUnlinkGitHub, onSendToGitHub, onAddToBacklog, backlogPath, isGitHubView, isQuickTaskView, existingCategories, taskSource = 'file' }: TaskPanelProps) {
   const [editedItem, setEditedItem] = useState<BacklogItem | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -124,18 +127,22 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
   const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
 
+  // Stable reference to onSave to prevent re-render loops
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
   // Auto-save handler - saves without closing panel
   const handleAutoSave = useCallback((itemToSave: BacklogItem) => {
     // Calculate quality score to save with the item
     const quality = validateTaskQuality(itemToSave.title, itemToSave.description || '', itemToSave.acceptanceCriteria);
 
     // Save with quality scores attached
-    onSave({
+    onSaveRef.current({
       ...itemToSave,
       qualityScore: quality.score,
       qualityIssues: quality.issues,
     });
-  }, [onSave]);
+  }, []); // Empty deps - uses ref for stable callback
 
   // Auto-save hook - triggers 500ms after changes stop
   const { status: saveStatus, error: saveError, saveNow, hasUnsavedChanges } = useAutoSave({
@@ -972,6 +979,16 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
                 </span>
               )}
             </div>
+          )}
+
+          {/* Session Continuity - Continue where you left off */}
+          {isInProgress && onContinue && (
+            <SessionContinuityPanel
+              taskSource={taskSource}
+              taskId={editedItem.id}
+              taskTitle={editedItem.title}
+              onContinue={(sessionId, prompt) => onContinue(editedItem, sessionId, prompt)}
+            />
           )}
 
           {/* GAP #6 FIX: Open in IDE button for in_progress tasks with worktree */}
