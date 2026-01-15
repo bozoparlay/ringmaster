@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 13
-- **Issues Remaining**: 5
+- **Issues Resolved**: 14
+- **Issues Remaining**: 4
 
 ## Issues Summary
 
@@ -16,7 +16,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 511 | Automate Generating package context | Medium | Pending |
 | 510 | Improve AI Assist - Analyze and Suggest | Medium | **COMPLETED** |
 | 509 | Get rid of the save button | Low | **COMPLETED** |
-| 508 | Add sort options on backlog | Low | Pending |
+| 508 | Add sort options on backlog | Low | **COMPLETED** |
 | 507 | Make things cost effective | Medium | Pending |
 | 506 | Confirm GitHub test can be edited | Medium | **COMPLETED** |
 | 505 | Confirm similarity check | Medium | **COMPLETED** |
@@ -501,5 +501,51 @@ The category field in the TaskPanel was a plain text input, requiring users to t
 - [x] Clear button removes category value
 - [x] No infinite render loop (useMemo fix working)
 - [x] Existing categories from tasks appear in dropdown
+
+---
+
+### Issue #508: Add sort options on backlog
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+Backlog items were displayed in a fixed priority-based order, making it difficult to quickly organize tasks by different criteria like effort, value, or creation date.
+
+#### Implementation
+1. **Created sorting utility library** (`src/lib/sorting.ts`):
+   - Defined `SortField` type: priority, effort, value, created, updated, title
+   - Defined `SortDirection` type: asc, desc
+   - `sortItems()` function to sort BacklogItem arrays by any field
+   - `loadSortPrefs()` / `saveSortPrefs()` for localStorage persistence
+   - Weight mappings for priority, effort, and value fields
+   - Default config: Priority descending (critical first)
+
+2. **Created `SortControl` component** (`src/components/SortControl.tsx`):
+   - Dropdown to select sort field
+   - Direction toggle button with rotating arrow icon
+   - Clear visual feedback for current state
+
+3. **Integrated into BacklogView**:
+   - Added sortConfig state with localStorage hydration on mount
+   - Updated columnData useMemo to use sortItems() for all columns
+   - Up Next selection still based on priority (for business logic) but display order follows user preference
+   - Added SortControl to toolbar next to filter
+
+#### Files Created
+- `src/lib/sorting.ts` - Sort utility functions and localStorage persistence
+- `src/components/SortControl.tsx` - Sort dropdown and direction toggle
+
+#### Files Changed
+- `src/components/views/BacklogView.tsx` - Integrated sorting state and control
+- `src/components/index.ts` - Export SortControl
+
+#### Testing (Playwright Validated)
+- [x] Sort dropdown displays all 6 sort fields
+- [x] Direction toggle shows "Ascending/Descending (click to change)"
+- [x] Arrow icon rotates when direction changes
+- [x] Changed sort to "Title" / "Ascending" - persisted after page refresh
+- [x] Default sort is Priority descending (critical items first)
+- [x] localStorage key: `bozo_backlog_sort_prefs`
 
 ---

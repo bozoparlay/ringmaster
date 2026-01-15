@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -25,9 +25,12 @@ import { ReviewModal } from '../ReviewModal';
 import { Toast, ToastType } from '../Toast';
 import { TrashDropZone } from '../TrashDropZone';
 import { DeleteConfirmationModal } from '../DeleteConfirmationModal';
+import { SortControl } from '../SortControl';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
 import { getGitHubSyncConfig, GitHubSyncService } from '@/lib/storage/github-sync';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
+import type { SortConfig } from '@/lib/sorting';
+import { sortItems, loadSortPrefs, saveSortPrefs, DEFAULT_SORT_CONFIG } from '@/lib/sorting';
 
 /**
  * Close a GitHub issue when deleting a task that's linked to one.
@@ -186,6 +189,20 @@ export function BacklogView({
   const [tackleItem, setTackleItem] = useState<BacklogItem | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+
+  // Sort configuration - loaded from localStorage on mount
+  const [sortConfig, setSortConfig] = useState<SortConfig>(DEFAULT_SORT_CONFIG);
+
+  // Load sort preferences from localStorage on mount
+  useEffect(() => {
+    setSortConfig(loadSortPrefs());
+  }, []);
+
+  // Handle sort config changes - update state and persist
+  const handleSortChange = useCallback((newConfig: SortConfig) => {
+    setSortConfig(newConfig);
+    saveSortPrefs(newConfig);
+  }, []);
 
   // Review modal state
   const [isReviewOpen, setIsReviewOpen] = useState(false);
@@ -354,33 +371,33 @@ export function BacklogView({
       }
     });
 
-    columns.backlog.sort((a, b) => {
-      const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
-      if (priorityDiff !== 0) return priorityDiff;
-      return a.order - b.order;
-    });
+    // Sort the backlog using the user's sort preference
+    columns.backlog = sortItems(columns.backlog, sortConfig);
 
     let upNextItemIds = new Set<string>();
     if (!isSearching) {
-      const eligibleForUpNext = columns.backlog.filter(
+      // Up Next selection still based on priority (critical/high/medium get promoted)
+      // Sort by priority first to select the right items for Up Next
+      const prioritySorted = [...columns.backlog].sort((a, b) =>
+        PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority]
+      );
+      const eligibleForUpNext = prioritySorted.filter(
         item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
       );
       const upNextLimit = calculateUpNextLimit(columns.backlog.length);
       const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
       upNextItemIds = new Set(upNextItems.map(item => item.id));
-      columns.up_next = upNextItems;
+      // Keep the user's sort order for Up Next display
+      columns.up_next = columns.backlog.filter(item => upNextItemIds.has(item.id));
     }
 
+    // Sort other columns using the same user preference
     ['in_progress', 'review', 'ready_to_ship'].forEach((status) => {
-      columns[status as Status].sort((a, b) => {
-        const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
-        if (priorityDiff !== 0) return priorityDiff;
-        return a.order - b.order;
-      });
+      columns[status as Status] = sortItems(columns[status as Status], sortConfig);
     });
 
     return { columnItems: columns, upNextIds: upNextItemIds };
-  }, [items, priorityFilter, searchQuery, isSearching]);
+  }, [items, priorityFilter, searchQuery, isSearching, sortConfig]);
 
   const { columnItems, upNextIds } = columnData;
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
@@ -654,7 +671,7 @@ export function BacklogView({
     <div className="h-full flex flex-col">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-surface-800/50">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <span className="text-xs text-surface-500 uppercase tracking-wider">Filter:</span>
             <select
@@ -670,6 +687,7 @@ export function BacklogView({
               <option value="someday">Someday</option>
             </select>
           </div>
+          <SortControl config={sortConfig} onChange={handleSortChange} />
         </div>
 
         <div className="flex items-center gap-4 text-xs text-surface-500">
