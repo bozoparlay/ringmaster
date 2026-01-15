@@ -5,19 +5,21 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 15
-- **Issues Remaining**: 3
+- **Issues Resolved**: 19
+- **Issues Remaining**: 0
+- **Completed**: 2026-01-15
 
 ## Issues Summary
 
 | # | Title | Priority | Status |
 |---|-------|----------|--------|
+| 513 | Github issues that are marked move accordingly | Medium | **COMPLETED** |
 | 512 | Improve Search on github view | Medium | **COMPLETED** |
-| 511 | Automate Generating package context | Medium | Pending |
+| 511 | Automate Generating package context | Medium | **COMPLETED** |
 | 510 | Improve AI Assist - Analyze and Suggest | Medium | **COMPLETED** |
 | 509 | Get rid of the save button | Low | **COMPLETED** |
 | 508 | Add sort options on backlog | Low | **COMPLETED** |
-| 507 | Make things cost effective | Medium | Pending |
+| 507 | Make things cost effective | Medium | **COMPLETED** |
 | 506 | Confirm GitHub test can be edited | Medium | **COMPLETED** |
 | 505 | Confirm similarity check | Medium | **COMPLETED** |
 | 504 | New tasks don't appear until refresh | Medium | **COMPLETED** |
@@ -26,7 +28,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 500 | Persist the value on Github view | Medium | **COMPLETED** |
 | 499 | Add rescope indicator for Github view | Medium | **COMPLETED** |
 | 498 | Add Dropdown for Categories | Medium | **COMPLETED** |
-| 407 | Improve Similarity Scoring | Medium | Pending |
+| 407 | Improve Similarity Scoring | Medium | **COMPLETED** |
 | 404 | Fix drag and drop | High | **COMPLETED** |
 | 403 | Improve Grading of Tasks | Medium | **COMPLETED** |
 | 402 | Setup docker container | High | **COMPLETED** |
@@ -600,5 +602,194 @@ Rewrote the scoring algorithm with a weighted component model:
 - [x] Breakdown shows which components pass/fail (✓/! indicators)
 - [x] Real-time score updates as user types
 - [x] Proportional scaling within each weight tier
+
+---
+
+### Issue #407: Improve Similarity Scoring
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+The similarity detection system was too lenient, flagging unrelated tasks as potential duplicates. The AI prompt used broad language like "semantically related" which led to false positives for tasks that merely touched the same feature area but did different work.
+
+#### Root Cause
+1. The AI prompt asked "Are these tasks semantically related?" which is too broad
+2. Threshold was too low (0.4) - caught many unrelated tasks
+3. No explicit guidance to avoid common false positive scenarios
+
+#### Implementation
+Updated both similarity check API routes with stricter criteria:
+
+1. **Rewrote AI prompt** to be more specific:
+   - Changed from "semantically related" to "Would solving one task also solve/partially solve the other?"
+   - Added explicit scoring guidance: 0.85+ duplicate, 0.70-0.84 merge, 0.55-0.69 extend
+   - Added "DO NOT FLAG" section listing common false positives to avoid
+
+2. **Raised minimum threshold** from 0.4 to 0.55:
+   - Only shows similarities where one task extends/completes another
+   - Filters out general "same feature area" matches
+
+3. **Updated threshold definitions** for clarity:
+   - 0.85+ = "duplicate" (identical goal, same solution)
+   - 0.70-0.84 = "merge" (significant overlap in implementation)
+   - 0.55-0.69 = "extend" (one task could be subtask of other)
+
+#### Files Changed
+- `src/app/api/check-similarity-stream/route.ts` - Stricter prompt and 0.55 threshold
+- `src/app/api/check-similarity/route.ts` - Same changes for non-streaming version
+
+#### Testing (Playwright Validated)
+- [x] "Add caching layer for API responses" → No false positive (correct!)
+- [x] "Fix similarity detection - tasks showing false positives" → 85% match, flagged as duplicate (correct!)
+- [x] New prompt explicitly asks about solving/completing relationship
+- [x] Threshold raised to 0.55 filters out weak matches
+
+---
+
+### Issue #507: Make things cost effective
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+Users couldn't differentiate which AI model was used for different operations. All AI features used a single model setting, but different operations have different cost/quality tradeoffs (e.g., similarity checks should be fast/cheap, while AI Assist needs high quality).
+
+#### Implementation
+Added per-operation model selection in the Settings modal:
+
+1. **Extended AISettings interface**:
+   - Added `similarityModel` field (default: Haiku - fast & cheap)
+   - Added `reviewModel` field (default: Sonnet 4 - balanced quality)
+   - Existing `model` field now for AI Assist (default: Opus 4.5 - high quality)
+
+2. **Created helper functions**:
+   - `getSimilarityModelId()` - Gets configured model ID for similarity checks
+   - `getReviewModelId()` - Gets configured model ID for task reviews
+   - Both functions fall back to sensible defaults if not configured
+
+3. **Updated Settings UI**:
+   - Added 3 separate model dropdowns with labels:
+     - "AI Assist Model" (High quality)
+     - "Similarity Check Model" (Fast & cheap)
+     - "Task Review Model" (Balanced)
+   - Each dropdown shows visual badge indicating expected cost/quality tier
+
+4. **Integrated model selection**:
+   - Updated `InlineSimilarityProgress` to use `getSimilarityModelId()`
+   - Updated `check-similarity-stream` API to accept `modelId` parameter
+   - Model ID passed from client to API with each request
+
+#### Files Changed
+- `src/components/SettingsModal.tsx` - Added model fields, UI, helper functions
+- `src/components/InlineSimilarityProgress.tsx` - Use getSimilarityModelId()
+- `src/app/api/check-similarity-stream/route.ts` - Accept modelId parameter
+- `src/components/index.ts` - Export new helper functions
+
+#### Testing (Playwright Validated)
+- [x] Settings modal shows 3 separate model dropdowns
+- [x] Each dropdown has descriptive label and cost/quality badge
+- [x] Default models: Opus 4.5 (AI Assist), Haiku (Similarity), Sonnet 4 (Review)
+- [x] Similarity check uses configured model from settings
+- [x] Visual badges: "High quality", "Fast & cheap", "Balanced"
+
+---
+
+### Issue #511: Automate Generating package context
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+Need an automated utility to analyze the codebase and generate comprehensive documentation files that can be fed to AI assistants for better code suggestions and architectural guidance.
+
+#### Implementation
+Created a simple, language-agnostic context generator:
+
+1. **Created `scripts/context-generator/index.ts`**:
+   - Scans any codebase directory (default: `./src`)
+   - Detects primary language by file extension counts
+   - Extracts first comment/docstring from each file as description
+   - Generates structured `.ringmaster/CONTEXT.md` output
+   - Works in under 1 second for most codebases
+
+2. **Language support**:
+   - TypeScript, JavaScript, Python, Go, Rust
+   - Java, Kotlin, Ruby, PHP, Swift
+   - C, C++, Shell scripts
+   - Config files: JSON, YAML, TOML
+
+3. **Output format**:
+   - Overview with file/line counts and primary language
+   - Directory tree structure
+   - Key files with descriptions extracted from comments
+   - Directory summaries with file listings
+
+4. **Configuration**:
+   - Excludes: node_modules, .git, .next, dist, build, etc.
+   - Max file size: 50KB
+   - Configurable depth limit: 10 levels
+
+#### Files Created
+- `scripts/context-generator/index.ts` - Main context generator script
+- `.ringmaster/CONTEXT.md` - Generated output (gitignored)
+
+#### Files Changed
+- `package.json` - Added `generate-context` npm script
+- `.gitignore` - Added `.ringmaster/` to ignore generated files
+
+#### Testing (Validated)
+- [x] Run `npm run generate-context ./src` completes in 0.18s
+- [x] Generated CONTEXT.md shows 94 files, 22,220 lines
+- [x] Detected TypeScript as primary language
+- [x] Extracted file descriptions from comments
+- [x] Directory structure properly formatted
+- [x] Output saved to `.ringmaster/CONTEXT.md`
+
+---
+
+### Issue #513: Github issues that are marked move accordingly
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+Need bidirectional synchronization between GitHub Issues and the internal task board. When GitHub issue labels change (e.g., `status: in-progress` added), the UI should automatically reflect those changes without requiring manual refresh.
+
+#### Implementation
+Implemented polling-based auto-sync with infinite loop prevention:
+
+1. **Auto-sync polling** (60 second default):
+   - Added `useEffect` hook that sets up `setInterval` for periodic syncing
+   - Interval configurable via localStorage: `ringmaster:github:syncInterval` (in seconds)
+   - Minimum interval: 30 seconds (respects GitHub API rate limits)
+   - Automatically starts when GitHub view is opened, stops when unmounted
+
+2. **Cooldown mechanism** to prevent infinite loops:
+   - Track timestamp of last local update in `lastLocalUpdateRef`
+   - Background sync skips refresh if within 5 second cooldown window
+   - This prevents: local change → GitHub update → immediate sync → conflict
+
+3. **Visual feedback**:
+   - Added sync status indicator: "synced Xs ago" in toolbar
+   - Shows "syncing..." with pulse animation during background sync
+   - Refresh button animates (spin) during sync
+   - Tooltip shows configured interval: "Auto-syncs every 60s"
+
+4. **Dual sync modes**:
+   - Manual refresh: User clicks button, full loading state
+   - Background sync: Silent polling, non-intrusive indicator
+
+#### Files Changed
+- `src/components/views/GitHubIssuesView.tsx` - Added polling, cooldown, visual indicators
+
+#### Testing (Playwright Validated)
+- [x] GitHub view starts auto-sync on mount (console: "Starting auto-sync every 60s")
+- [x] Sync indicator shows "synced 0s ago" after initial load
+- [x] Indicator updates to "synced 23s ago" as time passes
+- [x] Refresh button shows spin animation during background sync
+- [x] Cooldown mechanism: Local updates set timestamp, sync respects 5s window
+- [x] Manual refresh button works (calls `fetchIssues(false)`)
+- [x] Tooltip shows "Auto-syncs every 60s" on hover
 
 ---
