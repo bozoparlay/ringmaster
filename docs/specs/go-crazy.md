@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 3
-- **Issues Remaining**: 15
+- **Issues Resolved**: 4
+- **Issues Remaining**: 14
 
 ## Issues Summary
 
@@ -20,7 +20,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 507 | Make things cost effective | Medium | Pending |
 | 506 | Confirm GitHub test can be edited | Medium | Pending |
 | 505 | Confirm similarity check | Medium | Pending |
-| 504 | New tasks don't appear until refresh | Medium | Pending |
+| 504 | New tasks don't appear until refresh | Medium | **COMPLETED** |
 | 502 | Add github connectivity indicator | Medium | **COMPLETED** |
 | 501 | Maker server health more subtle | Medium | **COMPLETED** |
 | 500 | Persist the value on Github view | Medium | Pending |
@@ -113,5 +113,33 @@ Added GitHub connectivity indicator to the SourceSelector component:
 - [x] Gray dot shows when disconnected
 - [x] Repo name displays in description (e.g., "bozoparlay/ringmaster")
 - [x] "connected" badge shows when in GitHub mode and connected
+
+---
+
+### Issue #504: New tasks don't appear until refresh
+**Status**: COMPLETED
+**Started**: 2026-01-14
+**Completed**: 2026-01-14
+
+#### Problem
+When creating a new GitHub issue through the UI, users had to manually refresh the page to see the new task appear in the kanban board.
+
+#### Implementation
+Added optimistic update pattern to GitHubIssuesView:
+1. Create a temporary issue with negative ID (`-Date.now()`) immediately
+2. Add it to the UI state instantly - modal closes, task appears
+3. Make the GitHub API call in the background
+4. On success: Replace temp issue with real issue from API response
+5. On failure: Remove temp issue, show error toast
+
+#### Files Changed
+- `src/components/views/GitHubIssuesView.tsx` - Added `handleCreateGitHubTask` with optimistic update logic
+
+#### Testing (Playwright Validated)
+- [x] New task appears in Backlog column immediately after clicking "Add Task"
+- [x] Issue count updates instantly (19 → 20)
+- [x] Toast shows "Created issue #514: Test optimistic update issue"
+- [x] Modal closes immediately - no waiting for API response
+- [x] Real issue number assigned after GitHub API completes
 
 ---

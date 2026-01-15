@@ -181,7 +181,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     setToast({ message, type });
   };
 
-  // Handle creating a new GitHub issue from the modal
+  // Handle creating a new GitHub issue from the modal with optimistic update
   const handleCreateGitHubTask = async (task: {
     title: string;
     description: string;
@@ -196,6 +196,36 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       return;
     }
 
+    // Generate a temporary negative ID for optimistic update
+    const tempId = -Date.now();
+    const now = new Date().toISOString();
+    const priority = task.priority || 'medium';
+
+    // Create optimistic issue that will appear immediately
+    const optimisticIssue: GitHubIssue = {
+      number: tempId,
+      title: task.title,
+      body: task.description,
+      state: 'open',
+      html_url: '',
+      created_at: now,
+      updated_at: now,
+      labels: [
+        { name: `priority:${priority}`, color: 'FBCA04' },
+        { name: 'status: backlog', color: 'EDEDED' },
+        ...(task.effort ? [{ name: `effort:${task.effort}`, color: 'FEF2C0' }] : []),
+        ...(task.value ? [{ name: `value:${task.value}`, color: 'EDEDED' }] : []),
+        ...(task.category ? [{ name: `category:${task.category}`, color: 'EDEDED' }] : []),
+      ],
+      assignee: null,
+      user: { login: 'you' },
+    };
+
+    // Optimistically add the issue to the list
+    setIssues(prev => [optimisticIssue, ...prev]);
+    setIsNewTaskOpen(false);
+    showToast('Creating issue...', 'info');
+
     setIsCreatingIssue(true);
     try {
       const response = await fetch('/api/github/create-issue', {
@@ -205,7 +235,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
           task: {
             title: task.title,
             description: task.description,
-            priority: task.priority || 'medium',
+            priority,
             effort: task.effort,
             value: task.value,
             category: task.category,
@@ -219,15 +249,33 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
 
       const result = await response.json();
       if (result.success) {
+        // Replace optimistic issue with the real one from the API
+        setIssues(prev => prev.map(issue =>
+          issue.number === tempId
+            ? {
+                number: result.issue.number,
+                title: result.issue.title,
+                body: result.issue.body,
+                state: result.issue.state,
+                html_url: result.issue.html_url,
+                created_at: result.issue.created_at,
+                updated_at: result.issue.updated_at,
+                labels: result.issue.labels || optimisticIssue.labels,
+                assignee: result.issue.assignee,
+                user: result.issue.user,
+              }
+            : issue
+        ));
         showToast(`Created issue #${result.issue.number}: ${result.issue.title}`, 'success');
-        setIsNewTaskOpen(false);
-        // Refresh the issue list
-        fetchIssues();
       } else {
+        // Remove optimistic issue on failure
+        setIssues(prev => prev.filter(issue => issue.number !== tempId));
         showToast(`Failed to create issue: ${result.error}`, 'error');
       }
     } catch (err) {
       console.error('Failed to create GitHub issue:', err);
+      // Remove optimistic issue on failure
+      setIssues(prev => prev.filter(issue => issue.number !== tempId));
       showToast('Failed to create GitHub issue', 'error');
     } finally {
       setIsCreatingIssue(false);
