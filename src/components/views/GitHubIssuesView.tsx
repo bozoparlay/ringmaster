@@ -26,6 +26,7 @@ import { NewTaskModal } from '../NewTaskModal';
 import type { BacklogItem, Priority, Effort, Status, Value } from '@/types/backlog';
 import { COLUMN_ORDER, PRIORITY_WEIGHT } from '@/types/backlog';
 import { parseAcceptanceCriteriaFromMarkdown } from '@/lib/utils/parse-acceptance-criteria';
+import { validateTaskQuality } from '@/lib/task-quality';
 
 interface GitHubIssue {
   number: number;
@@ -131,6 +132,13 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
   // Parse acceptance criteria from issue body checkboxes
   const acceptanceCriteria = parseAcceptanceCriteriaFromMarkdown(issue.body);
 
+  // Calculate quality score for rescope indicator
+  const quality = validateTaskQuality(
+    issue.title,
+    issue.body || '',
+    acceptanceCriteria.length > 0 ? acceptanceCriteria : undefined
+  );
+
   return {
     id: `github-${issue.number}`,
     title: issue.title,
@@ -147,6 +155,8 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
     order: issue.number,
     githubIssueNumber: issue.number,
     githubIssueUrl: issue.html_url,
+    qualityScore: quality.score,
+    qualityIssues: quality.issues.length > 0 ? quality.issues : undefined,
   };
 }
 

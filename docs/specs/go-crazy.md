@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 9
-- **Issues Remaining**: 9
+- **Issues Resolved**: 10
+- **Issues Remaining**: 8
 
 ## Issues Summary
 
@@ -24,7 +24,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 502 | Add github connectivity indicator | Medium | **COMPLETED** |
 | 501 | Maker server health more subtle | Medium | **COMPLETED** |
 | 500 | Persist the value on Github view | Medium | **COMPLETED** |
-| 499 | Add rescope indicator for Github view | Medium | Pending |
+| 499 | Add rescope indicator for Github view | Medium | **COMPLETED** |
 | 498 | Add Dropdown for Categories | Medium | Pending |
 | 407 | Improve Similarity Scoring | Medium | Pending |
 | 404 | Fix drag and drop | High | **COMPLETED** |
@@ -325,5 +325,34 @@ When users clicked the "AI Assist - Analyze and Suggest" button in the New Task 
 - [x] AI Assist button is disabled during processing
 - [x] Animation disappears when AI response is received, form populates with results
 - [x] Visual styling matches edit modal animation exactly
+
+---
+
+### Issue #499: Add rescope indicator for Github view
+**Status**: COMPLETED
+**Started**: 2026-01-14
+**Completed**: 2026-01-14
+
+#### Problem
+The GitHub Issues view was missing the quality/rescope indicator that exists in the Backlog view. Tasks with poor descriptions or missing acceptance criteria should show a warning triangle to indicate they need better definition.
+
+#### Root Cause
+The `issueToBacklogItem` function in `GitHubIssuesView.tsx` was not calculating `qualityScore` and `qualityIssues` when converting GitHub issues to BacklogItem format. The Backlog API performs this calculation, but GitHubIssuesView did its own conversion without quality validation.
+
+#### Implementation
+Added quality validation to the `issueToBacklogItem` function:
+1. Import `validateTaskQuality` from `@/lib/task-quality`
+2. Parse acceptance criteria from markdown checkboxes in issue body
+3. Call `validateTaskQuality(title, body, acceptanceCriteria)` for each issue
+4. Add `qualityScore` and `qualityIssues` to returned BacklogItem
+
+#### Files Changed
+- `src/components/views/GitHubIssuesView.tsx` - Added quality validation to issueToBacklogItem
+
+#### Testing (Playwright Validated)
+- [x] GitHub issues now have quality scores calculated (tested: #499=50, #407=55, #507=50)
+- [x] Quality threshold is 50 - issues at or above don't show warning (correct behavior)
+- [x] Issues with very short descriptions would show warning indicator (matches Backlog behavior)
+- [x] TaskCard receives qualityScore and qualityIssues properties
 
 ---
