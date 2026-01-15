@@ -407,6 +407,83 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
 
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
+  // Update GitHub issue metadata labels (priority, effort, value)
+  // Uses OPTIMISTIC UPDATES: UI updates instantly, syncs to GitHub in background
+  const updateIssueLabels = (
+    issueNumber: number,
+    changes: {
+      priority?: { old?: Priority; new: Priority };
+      effort?: { old?: Effort; new: Effort };
+      value?: { old?: Value; new: Value };
+    }
+  ) => {
+    if (!repo) {
+      showToast('GitHub repository not configured', 'error');
+      return;
+    }
+
+    // 1. OPTIMISTIC UPDATE - Update local state immediately
+    const previousIssues = [...issues];
+
+    setIssues(prev => prev.map(i => {
+      if (i.number === issueNumber) {
+        let updatedLabels = [...i.labels];
+
+        // Update priority label
+        if (changes.priority) {
+          updatedLabels = updatedLabels.filter(l => !l.name.startsWith('priority:'));
+          updatedLabels.push({ name: `priority:${changes.priority.new}`, color: 'FBCA04' });
+        }
+
+        // Update effort label
+        if (changes.effort) {
+          updatedLabels = updatedLabels.filter(l => !l.name.startsWith('effort:'));
+          updatedLabels.push({ name: `effort:${changes.effort.new}`, color: 'FEF2C0' });
+        }
+
+        // Update value label
+        if (changes.value) {
+          updatedLabels = updatedLabels.filter(l => !l.name.startsWith('value:'));
+          updatedLabels.push({ name: `value:${changes.value.new}`, color: 'EDEDED' });
+        }
+
+        return { ...i, labels: updatedLabels };
+      }
+      return i;
+    }));
+
+    // 2. BACKGROUND SYNC - Fire and forget, handle errors with rollback
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    fetch('/api/github/update-labels', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        repo: `${repo.owner}/${repo.repo}`,
+        issueNumber,
+        ...changes,
+      }),
+    })
+      .then(async response => {
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed: ${response.status}`);
+        }
+        // Sync succeeded silently
+      })
+      .catch(err => {
+        // 3. ROLLBACK on failure
+        console.error('[labels-sync] Failed to sync:', err);
+        setIssues(previousIssues);
+        showToast(`Failed to sync label changes for #${issueNumber}`, 'error');
+      });
+  };
+
   // Update GitHub issue labels when status changes
   // Uses OPTIMISTIC UPDATES: UI updates instantly, syncs to GitHub in background
   const updateIssueStatus = (issueNumber: number, fromStatus: Status, toStatus: Status) => {
@@ -699,11 +776,34 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
         onSave={(updatedItem) => {
-          // Check if status changed - if so, sync to GitHub (optimistic update)
-          if (selectedItem && updatedItem.status !== selectedItem.status && updatedItem.githubIssueNumber) {
-            updateIssueStatus(updatedItem.githubIssueNumber, selectedItem.status, updatedItem.status);
+          if (selectedItem && updatedItem.githubIssueNumber) {
+            // Check if status changed - sync to GitHub
+            if (updatedItem.status !== selectedItem.status) {
+              updateIssueStatus(updatedItem.githubIssueNumber, selectedItem.status, updatedItem.status);
+            }
+
+            // Check if priority, effort, or value changed - sync to GitHub
+            const labelChanges: {
+              priority?: { old?: Priority; new: Priority };
+              effort?: { old?: Effort; new: Effort };
+              value?: { old?: Value; new: Value };
+            } = {};
+
+            if (updatedItem.priority !== selectedItem.priority) {
+              labelChanges.priority = { old: selectedItem.priority, new: updatedItem.priority };
+            }
+            if (updatedItem.effort !== selectedItem.effort) {
+              labelChanges.effort = { old: selectedItem.effort, new: updatedItem.effort! };
+            }
+            if (updatedItem.value !== selectedItem.value) {
+              labelChanges.value = { old: selectedItem.value, new: updatedItem.value! };
+            }
+
+            // Only call updateIssueLabels if there are label changes
+            if (Object.keys(labelChanges).length > 0) {
+              updateIssueLabels(updatedItem.githubIssueNumber, labelChanges);
+            }
           }
-          // Other fields are edited on GitHub directly via the "Edit on GitHub" link
           setIsPanelOpen(false);
         }}
         onDelete={async () => {

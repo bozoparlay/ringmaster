@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 4
-- **Issues Remaining**: 14
+- **Issues Resolved**: 5
+- **Issues Remaining**: 13
 
 ## Issues Summary
 
@@ -23,7 +23,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 504 | New tasks don't appear until refresh | Medium | **COMPLETED** |
 | 502 | Add github connectivity indicator | Medium | **COMPLETED** |
 | 501 | Maker server health more subtle | Medium | **COMPLETED** |
-| 500 | Persist the value on Github view | Medium | Pending |
+| 500 | Persist the value on Github view | Medium | **COMPLETED** |
 | 499 | Add rescope indicator for Github view | Medium | Pending |
 | 498 | Add Dropdown for Categories | Medium | Pending |
 | 407 | Improve Similarity Scoring | Medium | Pending |
@@ -141,5 +141,36 @@ Added optimistic update pattern to GitHubIssuesView:
 - [x] Toast shows "Created issue #514: Test optimistic update issue"
 - [x] Modal closes immediately - no waiting for API response
 - [x] Real issue number assigned after GitHub API completes
+
+---
+
+### Issue #500: Persist the value on Github view
+**Status**: COMPLETED
+**Started**: 2026-01-14
+**Completed**: 2026-01-14
+
+#### Problem
+Changes made to the Value field (and other metadata like Priority and Effort) on GitHub issues didn't persist. The UI allowed editing but the changes weren't synced back to GitHub labels.
+
+#### Root Cause
+The `TaskPanel.onSave` handler in `GitHubIssuesView` only synced status changes to GitHub. Priority, Effort, and Value changes were ignored.
+
+#### Implementation
+1. Created new API endpoint `/api/github/update-labels` that handles updating `priority:*`, `effort:*`, and `value:*` labels
+2. Added `updateIssueLabels` function in GitHubIssuesView with optimistic updates:
+   - Immediately updates local state
+   - Fires background API call to sync to GitHub
+   - Rolls back on failure with error toast
+3. Updated `onSave` handler to detect and sync priority, effort, and value changes
+
+#### Files Changed
+- `src/app/api/github/update-labels/route.ts` - New API endpoint for label updates
+- `src/components/views/GitHubIssuesView.tsx` - Added updateIssueLabels function and enhanced onSave handler
+
+#### Testing (Playwright Validated)
+- [x] Change Value from Medium to High - UI updates instantly
+- [x] Save Changes closes panel - shows $H on card
+- [x] Refresh from GitHub - Value persists as High ($H)
+- [x] Label synced to GitHub (value:high label added)
 
 ---
