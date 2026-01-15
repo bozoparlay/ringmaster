@@ -17,8 +17,8 @@ const bedrockClient = new BedrockRuntimeClient({
   }),
 });
 
-// Use Haiku for fast similarity checks (much faster than Sonnet)
-const CLAUDE_MODEL_ID = 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
+// Default model for fast similarity checks (can be overridden by client)
+const DEFAULT_SIMILARITY_MODEL_ID = 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
 
 interface ExistingItem {
   id: string;
@@ -35,6 +35,8 @@ interface SimilarityRequest {
   backlogPath?: string;
   /** Pre-loaded items to check against (for GitHub mode) */
   existingItems?: ExistingItem[];
+  /** Model ID to use for similarity checks (from user settings) */
+  modelId?: string;
 }
 
 interface SimilarTask {
@@ -68,7 +70,8 @@ function formatSSE(event: StreamEvent): string {
 async function analyzeBatch(
   newTask: { title: string; description: string; category?: string },
   batch: Array<{ id: string; title: string; description: string; category?: string }>,
-  batchIndex: number
+  batchIndex: number,
+  modelId: string = DEFAULT_SIMILARITY_MODEL_ID
 ): Promise<SimilarTask[]> {
   const tasksContext = batch.map((t, i) =>
     `[${i}] ID: ${t.id}\n    Title: ${t.title}\n    Description: ${t.description?.slice(0, 150) || 'No description'}${t.description && t.description.length > 150 ? '...' : ''}`
@@ -99,9 +102,9 @@ DO NOT FLAG as similar:
 Return EMPTY {"similar": []} unless you are CONFIDENT they overlap. When in doubt, do NOT flag.`;
 
   try {
-    console.log(`[similarity-batch-${batchIndex}] Calling Bedrock with ${batch.length} tasks`);
+    console.log(`[similarity-batch-${batchIndex}] Calling Bedrock with ${batch.length} tasks, model: ${modelId}`);
     const command = new ConverseCommand({
-      modelId: CLAUDE_MODEL_ID,
+      modelId: modelId,
       messages: [
         {
           role: 'user',
@@ -159,7 +162,10 @@ export async function POST(request: Request) {
     });
   }
 
-  const { title, description, category, backlogPath, existingItems } = body;
+  const { title, description, category, backlogPath, existingItems, modelId } = body;
+
+  // Use provided model ID or fall back to default
+  const effectiveModelId = modelId || DEFAULT_SIMILARITY_MODEL_ID;
 
   // Require title AND either backlogPath or existingItems
   if (!title || (!backlogPath && !existingItems)) {
@@ -276,7 +282,7 @@ export async function POST(request: Request) {
         try {
           // Use circuit breaker for the batch analysis
           const batchResults = await bedrockCircuitBreaker.execute(async () => {
-            return await analyzeBatch(newTask, batch, i);
+            return await analyzeBatch(newTask, batch, i, effectiveModelId);
           });
 
           totalProcessed += batch.length;

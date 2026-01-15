@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getSimilarityModelId } from './SettingsModal';
 
 interface SimilarTask {
   id: string;
@@ -66,11 +67,14 @@ export function InlineSimilarityProgress({
     // Use params from ref (captured at mount) to avoid dependency on props
     const { title: t, description: d, category: c, backlogPath: bp, existingItems: ei } = paramsRef.current;
 
+    // Get configured model for similarity checks
+    const modelId = getSimilarityModelId();
+
     try {
       const response = await fetch('/api/check-similarity-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: t, description: d, category: c, backlogPath: bp, existingItems: ei }),
+        body: JSON.stringify({ title: t, description: d, category: c, backlogPath: bp, existingItems: ei, modelId }),
         signal: controller.signal,
       });
 

@@ -9,7 +9,9 @@ import { useState, useEffect, useCallback } from 'react';
 type SettingsSection = 'ai' | 'editor' | 'git' | 'tasks' | 'github';
 
 interface AISettings {
-  model: string;
+  model: string;           // Primary model for AI Assist
+  similarityModel: string; // Model for similarity checks (defaults to haiku)
+  reviewModel: string;     // Model for task review (defaults to sonnet)
   region: string;
   profile: string;
   enabled: boolean;
@@ -52,6 +54,8 @@ interface ProjectSettings {
 const DEFAULT_SETTINGS: ProjectSettings = {
   ai: {
     model: 'claude-opus-4-5',
+    similarityModel: 'claude-haiku',    // Fast/cheap for quick checks
+    reviewModel: 'claude-sonnet-4',     // Good quality for reviews
     region: 'us-east-1',
     profile: 'claude',
     enabled: true,
@@ -189,13 +193,31 @@ export function getAIModelId(): string {
   return model?.modelId || AI_MODELS[0].modelId;
 }
 
-export function getAISettings(): AISettings & { modelId: string } {
+export function getAISettings(): AISettings & { modelId: string; similarityModelId: string; reviewModelId: string } {
   const settings = loadSettings();
   const model = AI_MODELS.find(m => m.id === settings.ai.model);
+  const similarityModel = AI_MODELS.find(m => m.id === (settings.ai.similarityModel || 'claude-haiku'));
+  const reviewModel = AI_MODELS.find(m => m.id === (settings.ai.reviewModel || 'claude-sonnet-4'));
   return {
     ...settings.ai,
     modelId: model?.modelId || AI_MODELS[0].modelId,
+    similarityModelId: similarityModel?.modelId || AI_MODELS.find(m => m.id === 'claude-haiku')?.modelId || AI_MODELS[AI_MODELS.length - 1].modelId,
+    reviewModelId: reviewModel?.modelId || AI_MODELS.find(m => m.id === 'claude-sonnet-4')?.modelId || AI_MODELS[2].modelId,
   };
+}
+
+// Get model ID for similarity checks
+export function getSimilarityModelId(): string {
+  const settings = loadSettings();
+  const model = AI_MODELS.find(m => m.id === (settings.ai.similarityModel || 'claude-haiku'));
+  return model?.modelId || AI_MODELS.find(m => m.id === 'claude-haiku')?.modelId || AI_MODELS[AI_MODELS.length - 1].modelId;
+}
+
+// Get model ID for task review
+export function getReviewModelId(): string {
+  const settings = loadSettings();
+  const model = AI_MODELS.find(m => m.id === (settings.ai.reviewModel || 'claude-sonnet-4'));
+  return model?.modelId || AI_MODELS.find(m => m.id === 'claude-sonnet-4')?.modelId || AI_MODELS[2].modelId;
 }
 
 // ============================================================================
@@ -489,10 +511,10 @@ function AISection({ settings, updateSettings, onResetSection, dynamicModels, is
       </div>
 
       {/* Model Selection with refresh */}
-      <div className="space-y-2">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider">
-            AI Model
+            AI Models
           </label>
           <button
             type="button"
@@ -530,12 +552,61 @@ function AISection({ settings, updateSettings, onResetSection, dynamicModels, is
           </p>
         )}
 
-        <SelectField
-          label=""
-          value={settings.ai.model}
-          onChange={(model) => updateSettings('ai', { model })}
-          options={availableModels}
-        />
+        {/* Per-operation model selection */}
+        <div className="space-y-3 p-3 rounded-lg bg-surface-800/30 border border-surface-700/50">
+          <p className="text-xs text-surface-400">Choose different models per operation to balance cost vs quality:</p>
+
+          {/* AI Assist Model (primary) */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-surface-300">AI Assist</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">High quality</span>
+            </div>
+            <select
+              value={settings.ai.model}
+              onChange={(e) => updateSettings('ai', { model: e.target.value })}
+              className="w-full bg-surface-800/50 border border-surface-700/50 rounded-lg px-3 py-2 text-sm text-surface-100 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+            >
+              {availableModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} - {m.description}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Similarity Check Model */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-surface-300">Similarity Check</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300">Fast & cheap</span>
+            </div>
+            <select
+              value={settings.ai.similarityModel || 'claude-haiku'}
+              onChange={(e) => updateSettings('ai', { similarityModel: e.target.value })}
+              className="w-full bg-surface-800/50 border border-surface-700/50 rounded-lg px-3 py-2 text-sm text-surface-100 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+            >
+              {availableModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} - {m.description}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Task Review Model */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-surface-300">Task Review</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">Balanced</span>
+            </div>
+            <select
+              value={settings.ai.reviewModel || 'claude-sonnet-4'}
+              onChange={(e) => updateSettings('ai', { reviewModel: e.target.value })}
+              className="w-full bg-surface-800/50 border border-surface-700/50 rounded-lg px-3 py-2 text-sm text-surface-100 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+            >
+              {availableModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} - {m.description}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   );
