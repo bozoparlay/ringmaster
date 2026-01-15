@@ -13,6 +13,8 @@ import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
 import { InlineOptionSelector } from './InlineOptionSelector';
 import { GitHubIssuePicker } from './GitHubIssuePicker';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
+import { getAISettings } from './SettingsModal';
+import { Toast } from './Toast';
 
 // Helper to get configured GitHub repo
 function getGitHubRepo(): string | null {
@@ -332,6 +334,9 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
+      // Get AI settings from project config
+      const aiSettings = getAISettings();
+
       const response = await fetch('/api/analyze-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -339,6 +344,12 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           title: editedItem.title.trim(),
           description: editedItem.description?.trim() || '',
           comments: aiComment.trim(),
+          aiSettings: {
+            model: aiSettings.model,
+            region: aiSettings.region,
+            profile: aiSettings.profile,
+            enabled: aiSettings.enabled,
+          },
         }),
         signal: controller.signal,
       });
@@ -431,6 +442,9 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
+      // Get AI settings from project config
+      const aiSettings = getAISettings();
+
       const response = await fetch('/api/analyze-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -438,6 +452,12 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           title: editedItem.title.trim(),
           description: editedItem.description?.trim() || '',
           comments: rescopePrompt,
+          aiSettings: {
+            model: aiSettings.model,
+            region: aiSettings.region,
+            profile: aiSettings.profile,
+            enabled: aiSettings.enabled,
+          },
         }),
         signal: controller.signal,
       });
@@ -1234,6 +1254,21 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
         </div>
       </div>
 
+      {/* AI Error Toast (supplements the inline error display) */}
+      {aiError && !isAnalyzing && (
+        <Toast
+          message={aiError}
+          type="error"
+          duration={6000}
+          onClose={() => setAiError(null)}
+          action={{
+            label: 'Open Settings',
+            onClick: () => {
+              setAiError(null);
+            },
+          }}
+        />
+      )}
     </>
   );
 }

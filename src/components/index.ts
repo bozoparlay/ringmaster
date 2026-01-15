@@ -11,6 +11,7 @@ export { ProjectSelector } from './ProjectSelector';
 export { StorageModeSelector } from './StorageModeSelector';
 export { GitHubSettingsModal } from './GitHubSettingsModal';
 export { GitHubConnectionPrompt } from './GitHubConnectionPrompt';
+export { SettingsModal, getProjectSettings, getAISettings, getAIModelId } from './SettingsModal';
 export { MigrationWizard } from './MigrationWizard';
 export { SourceSelector } from './SourceSelector';
 export type { DataSource } from './SourceSelector';

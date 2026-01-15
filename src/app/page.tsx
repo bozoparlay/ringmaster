@@ -8,6 +8,7 @@ import {
   ProjectSelector,
   GitHubConnectionPrompt,
   GitHubSettingsModal,
+  SettingsModal,
   SourceSelector,
   BacklogView,
   GitHubIssuesView,
@@ -48,6 +49,7 @@ export default function Home() {
   const [isCleanupOpen, setIsCleanupOpen] = useState(false);
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
   const [isGitHubSettingsOpen, setIsGitHubSettingsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [backlogPath, setBacklogPath] = useState<string | undefined>(undefined);
   const [activeSource, setActiveSource] = useState<DataSource>('backlog');
@@ -207,6 +209,7 @@ export default function Home() {
           isGitHubConnected={isGitHubConnected}
           onOpenGitHubSettings={() => setIsGitHubSettingsOpen(true)}
           onCleanupWorktrees={handleCleanupWorktrees}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
         {/* Source Selector Tabs */}
@@ -295,6 +298,12 @@ export default function Home() {
             window.location.reload();
           }}
           detectedRepo={project ? { owner: project.owner, repo: project.repo } : undefined}
+        />
+
+        {/* Settings Modal */}
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
         />
       </main>
     </>

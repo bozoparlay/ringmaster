@@ -11,15 +11,37 @@ import {
 // Bedrock API timeout - 30 seconds should be plenty for most requests
 const BEDROCK_TIMEOUT_MS = 30000;
 
-// Initialize Bedrock client with profile support
-const bedrockClient = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: fromIni({
-    profile: process.env.AWS_PROFILE || 'bozo',
-  }),
-});
+// Available AI models with their Bedrock IDs
+const AI_MODELS: Record<string, string> = {
+  'claude-opus-4-5': 'us.anthropic.claude-opus-4-5-20251101-v1:0',
+  'claude-sonnet-4-5': 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  'claude-sonnet-4': 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+  'claude-3-5-sonnet': 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+  'claude-haiku': 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+};
 
-const CLAUDE_MODEL_ID = 'us.anthropic.claude-sonnet-4-20250514-v1:0';
+// Default model - Claude Opus 4.5 (best quality)
+const DEFAULT_MODEL_ID = 'claude-opus-4-5';
+
+// Client cache to avoid recreating clients
+let cachedClient: BedrockRuntimeClient | null = null;
+let cachedClientKey = '';
+
+function getBedrockClient(region: string, profile: string): BedrockRuntimeClient {
+  const key = `${region}:${profile}`;
+  if (cachedClient && cachedClientKey === key) {
+    return cachedClient;
+  }
+
+  cachedClient = new BedrockRuntimeClient({
+    region: region || 'us-east-1',
+    credentials: fromIni({
+      profile: profile || 'bozo',
+    }),
+  });
+  cachedClientKey = key;
+  return cachedClient;
+}
 
 // Sanitize JSON string by escaping control characters within string values
 function sanitizeJsonString(str: string): string {
@@ -147,11 +169,30 @@ function validateTaskQuality(
 
 export async function POST(request: Request) {
   try {
-    const { title, description, comments } = await request.json();
+    const { title, description, comments, aiSettings } = await request.json();
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
+
+    // Extract AI settings with defaults
+    const model = aiSettings?.model || DEFAULT_MODEL_ID;
+    const region = aiSettings?.region || process.env.AWS_REGION || 'us-east-1';
+    const profile = aiSettings?.profile || process.env.AWS_PROFILE || 'bozo';
+    const enabled = aiSettings?.enabled !== false; // Default to enabled
+
+    // If AI is disabled, return fallback immediately
+    if (!enabled) {
+      console.log('[analyze-task] AI features disabled, using fallback');
+      return fallbackAnalysis(title, description);
+    }
+
+    // Resolve the model ID
+    const modelId = AI_MODELS[model] || AI_MODELS[DEFAULT_MODEL_ID];
+    console.log(`[analyze-task] Using model: ${model} (${modelId}), region: ${region}, profile: ${profile}`);
+
+    // Get or create Bedrock client with the specified config
+    const bedrockClient = getBedrockClient(region, profile);
 
     // Build the prompt based on whether we have comments (enhancement mode) or not (initial analysis)
     const hasComments = comments && comments.trim().length > 0;
@@ -264,7 +305,7 @@ The description should be detailed enough that a developer can implement it with
       // This prevents hung requests and fails fast if Bedrock is having issues
       const response = await bedrockCircuitBreaker.execute(async () => {
         const command = new ConverseCommand({
-          modelId: CLAUDE_MODEL_ID,
+          modelId: modelId,
           messages: [
             {
               role: 'user',

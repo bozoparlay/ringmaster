@@ -6,6 +6,8 @@ import { PRIORITY_LABELS, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
 import { InlineOptionSelector } from './InlineOptionSelector';
 import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
 import { InlineSimilarityProgress } from './InlineSimilarityProgress';
+import { getAISettings } from './SettingsModal';
+import { Toast } from './Toast';
 
 interface EnhancedTask {
   title: string;
@@ -92,6 +94,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
   const [similarTasks, setSimilarTasks] = useState<SimilarTask[]>([]);
   const [showSimilarModal, setShowSimilarModal] = useState(false);
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortCheckRef = useRef<AbortController | null>(null);
 
@@ -171,11 +174,24 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
     if (!title.trim()) return;
 
     setIsAnalyzing(true);
+    setAiError(null); // Clear any previous error
     try {
+      // Get AI settings from project config
+      const aiSettings = getAISettings();
+
       const response = await fetch('/api/analyze-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), description: description.trim() }),
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          aiSettings: {
+            model: aiSettings.model,
+            region: aiSettings.region,
+            profile: aiSettings.profile,
+            enabled: aiSettings.enabled,
+          },
+        }),
       });
 
       if (response.ok) {
@@ -191,10 +207,14 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
           setAcceptanceCriteria(analysis.acceptanceCriteria);
         }
       } else {
-        console.error('AI analysis request failed:', response.status, response.statusText);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const errorMessage = errorData.error || `Request failed with status ${response.status}`;
+        console.error('AI analysis request failed:', response.status, errorMessage);
+        setAiError(`AI Assist failed: ${errorMessage}`);
       }
     } catch (error) {
       console.error('AI analysis failed:', error);
+      setAiError('AI Assist failed due to a network error. Please check your connection and try again.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -479,6 +499,23 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Error Toast */}
+      {aiError && (
+        <Toast
+          message={aiError}
+          type="error"
+          duration={6000}
+          onClose={() => setAiError(null)}
+          action={{
+            label: 'Open Settings',
+            onClick: () => {
+              setAiError(null);
+              // Note: Settings modal is controlled by parent - user can click gear icon
+            },
+          }}
+        />
       )}
     </>
   );
