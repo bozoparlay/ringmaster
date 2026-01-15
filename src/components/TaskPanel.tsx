@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { TextDiff } from './TextDiff';
@@ -13,9 +13,11 @@ import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
 import { InlineOptionSelector } from './InlineOptionSelector';
 import { GitHubIssuePicker } from './GitHubIssuePicker';
 import { AiLoadingState } from './AiLoadingState';
+import { SaveStatusIndicator } from './SaveStatusIndicator';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
 import { getAISettings } from './SettingsModal';
 import { Toast } from './Toast';
+import { useAutoSave } from '@/hooks/useAutoSave';
 
 // Helper to get configured GitHub repo
 function getGitHubRepo(): string | null {
@@ -120,6 +122,28 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
   const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
 
+  // Auto-save handler - saves without closing panel
+  const handleAutoSave = useCallback((itemToSave: BacklogItem) => {
+    // Calculate quality score to save with the item
+    const quality = validateTaskQuality(itemToSave.title, itemToSave.description || '', itemToSave.acceptanceCriteria);
+
+    // Save with quality scores attached
+    onSave({
+      ...itemToSave,
+      qualityScore: quality.score,
+      qualityIssues: quality.issues,
+    });
+  }, [onSave]);
+
+  // Auto-save hook - triggers 500ms after changes stop
+  const { status: saveStatus, error: saveError, saveNow, hasUnsavedChanges } = useAutoSave({
+    data: editedItem,
+    onSave: handleAutoSave,
+    delay: 500,
+    enabled: isOpen && !!editedItem,
+    validate: (item) => !!item.title.trim(), // Only save if title is not empty
+  });
+
   useEffect(() => {
     if (item) {
       // Strip HTML comments (e.g., ringmaster-task-id) from description for display
@@ -149,43 +173,34 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     }
   }, [isOpen]);
 
+  // Close handler - auto-save takes care of saving, just close
+  const handleClose = useCallback(() => {
+    // Force save any pending changes before closing
+    if (hasUnsavedChanges) {
+      saveNow();
+    }
+    onClose();
+  }, [hasUnsavedChanges, saveNow, onClose]);
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node) && isOpen) {
-        handleSave();
+        handleClose();
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, editedItem]);
-
-  const handleSave = () => {
-    if (!editedItem || !editedItem.title.trim()) {
-      onClose();
-      return;
-    }
-
-    // Calculate quality score to save with the item
-    const quality = validateTaskQuality(editedItem.title, editedItem.description || '', editedItem.acceptanceCriteria);
-
-    // Save with quality scores attached
-    onSave({
-      ...editedItem,
-      qualityScore: quality.score,
-      qualityIssues: quality.issues,
-    });
-    onClose();
-  };
+  }, [isOpen, handleClose]);
 
   const handleAddTag = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && tagInput.trim() && editedItem) {
@@ -439,7 +454,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-fade-in"
-        onClick={() => handleSave()}
+        onClick={() => handleClose()}
       />
 
       {/* Panel */}
@@ -510,7 +525,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               </svg>
             </button>
             <button
-              onClick={() => handleSave()}
+              onClick={() => handleClose()}
               className="p-2 rounded-lg text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition-colors"
               title="Close"
             >
@@ -519,6 +534,8 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               </svg>
             </button>
           </div>
+          {/* Auto-save status indicator */}
+          <SaveStatusIndicator status={saveStatus} error={saveError} />
         </div>
 
         {/* Content */}
@@ -1144,12 +1161,6 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </button>
           )}
 
-          <button
-            onClick={() => handleSave()}
-            className="w-full bg-accent hover:bg-accent-hover text-surface-900 font-medium py-2.5 px-4 rounded-lg transition-colors shadow-glow-amber-sm hover:shadow-glow-amber"
-          >
-            Save Changes
-          </button>
         </div>
       </div>
 
