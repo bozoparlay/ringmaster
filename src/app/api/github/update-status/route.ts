@@ -3,8 +3,8 @@
  *
  * POST /api/github/update-status - Update the status label on a GitHub issue
  *
- * This removes the old status:* label and adds the new one, enabling
- * bidirectional sync between the GitHub view and GitHub Issues.
+ * Uses ATOMIC update: fetches current labels, modifies, and PATCHes in a single
+ * request to prevent data corruption from partial failures.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,6 +16,11 @@ interface UpdateStatusRequest {
   issueNumber: number;
   oldStatus: Status;
   newStatus: Status;
+}
+
+interface GitHubLabel {
+  name: string;
+  color?: string;
 }
 
 // Map internal status values to GitHub label names
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json() as UpdateStatusRequest;
-    const { repo, issueNumber, oldStatus, newStatus } = body;
+    const { repo, issueNumber, newStatus } = body;
 
     if (!repo || !issueNumber || !newStatus) {
       return NextResponse.json(
@@ -72,51 +77,62 @@ export async function POST(request: NextRequest) {
       'Content-Type': 'application/json',
     };
 
-    // Step 1: Remove old status label if it exists
-    if (oldStatus) {
-      const oldLabel = STATUS_TO_LABEL[oldStatus];
-      if (oldLabel) {
-        const encodedLabel = encodeURIComponent(oldLabel);
-        const removeResponse = await fetch(
-          `https://api.github.com/repos/${repo}/issues/${issueNumber}/labels/${encodedLabel}`,
-          { method: 'DELETE', headers }
-        );
+    // ATOMIC UPDATE: Fetch current issue, modify labels, PATCH in one request
+    // This prevents partial failures where DELETE succeeds but POST fails
 
-        // 404 is OK - label might not exist
-        if (!removeResponse.ok && removeResponse.status !== 404) {
-          console.warn(`[update-status] Failed to remove old label ${oldLabel}:`, removeResponse.status);
-        }
-      }
-    }
+    // Step 1: Get current issue to get all labels
+    const getResponse = await fetch(
+      `https://api.github.com/repos/${repo}/issues/${issueNumber}`,
+      { method: 'GET', headers }
+    );
 
-    // Step 2: Add new status label
-    const newLabel = STATUS_TO_LABEL[newStatus];
-    if (newLabel) {
-      const addResponse = await fetch(
-        `https://api.github.com/repos/${repo}/issues/${issueNumber}/labels`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ labels: [newLabel] }),
-        }
+    if (!getResponse.ok) {
+      const errorText = await getResponse.text();
+      console.error(`[update-status] Failed to get issue #${issueNumber}:`, errorText);
+      return NextResponse.json(
+        { error: `Failed to get issue: ${getResponse.status}` },
+        { status: getResponse.status }
       );
-
-      if (!addResponse.ok) {
-        const errorText = await addResponse.text();
-        console.error(`[update-status] Failed to add label ${newLabel}:`, errorText);
-        return NextResponse.json(
-          { error: `Failed to add status label: ${addResponse.status}` },
-          { status: addResponse.status }
-        );
-      }
     }
 
-    console.log(`[update-status] Updated issue #${issueNumber}: ${oldStatus} -> ${newStatus}`);
+    const issue = await getResponse.json();
+    const currentLabels: GitHubLabel[] = issue.labels || [];
+
+    // Step 2: Build new label list - remove all status labels, add new one
+    const nonStatusLabels = currentLabels
+      .map((l: GitHubLabel) => l.name)
+      .filter((name: string) => !name.startsWith('status:'));
+
+    const newLabel = STATUS_TO_LABEL[newStatus];
+    const updatedLabels = newLabel
+      ? [...nonStatusLabels, newLabel]
+      : nonStatusLabels;
+
+    // Step 3: PATCH issue with complete label list (atomic operation)
+    const patchResponse = await fetch(
+      `https://api.github.com/repos/${repo}/issues/${issueNumber}`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ labels: updatedLabels }),
+      }
+    );
+
+    if (!patchResponse.ok) {
+      const errorText = await patchResponse.text();
+      console.error(`[update-status] Failed to update labels:`, errorText);
+      return NextResponse.json(
+        { error: `Failed to update labels: ${patchResponse.status}` },
+        { status: patchResponse.status }
+      );
+    }
+
+    console.log(`[update-status] Atomically updated issue #${issueNumber} to ${newStatus}`);
     return NextResponse.json({
       success: true,
       issueNumber,
-      oldStatus,
       newStatus,
+      labels: updatedLabels,
     });
   } catch (error) {
     console.error('[update-status] Error:', error);

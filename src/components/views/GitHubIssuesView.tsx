@@ -46,7 +46,6 @@ interface GitHubIssue {
 // We use 60 seconds by default, configurable via localStorage
 const DEFAULT_SYNC_INTERVAL_MS = 60000; // 60 seconds
 const MIN_SYNC_INTERVAL_MS = 30000; // 30 seconds minimum
-const SYNC_COOLDOWN_MS = 5000; // Don't re-sync within 5 seconds of a local update
 
 /**
  * Get configured sync interval from localStorage
@@ -192,6 +191,15 @@ interface GitHubIssuesViewProps {
   searchQuery?: string;
 }
 
+// Failed operation type for retry queue
+interface FailedOperation {
+  type: 'status' | 'labels';
+  issueNumber: number;
+  payload: unknown;
+  retryCount: number;
+  lastAttempt: number;
+}
+
 export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, searchQuery = '' }: GitHubIssuesViewProps) {
   const [issues, setIssues] = useState<GitHubIssue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,11 +223,85 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
   // Auto-sync state
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const lastLocalUpdateRef = useRef<number>(0); // Timestamp of last local update (for cooldown)
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Per-issue local modification tracking (for race condition prevention)
+  // Maps issue number → timestamp of last local modification
+  // When sync completes, we preserve local state if it's newer than GitHub's updated_at
+  const localModificationsRef = useRef<Map<number, number>>(new Map());
+
+  // Retry queue for failed sync operations
+  // Instead of immediately rolling back, we queue failed operations for retry
+  const failedOperationsRef = useRef<FailedOperation[]>([]);
+  const [pendingRetries, setPendingRetries] = useState(0);
+  const MAX_RETRIES = 3;
+  const RETRY_BACKOFF_MS = [2000, 5000, 10000]; // Exponential backoff
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
+  };
+
+  // Process retry queue - called after successful sync
+  const processRetryQueue = useCallback(async () => {
+    const queue = failedOperationsRef.current;
+    if (queue.length === 0) return;
+
+    const now = Date.now();
+    const toRetry = queue.filter(op => {
+      const backoff = RETRY_BACKOFF_MS[Math.min(op.retryCount, RETRY_BACKOFF_MS.length - 1)];
+      return now - op.lastAttempt >= backoff;
+    });
+
+    if (toRetry.length === 0) return;
+
+    console.log(`[GitHubSync] Retrying ${toRetry.length} failed operations`);
+
+    for (const op of toRetry) {
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const endpoint = op.type === 'status' ? '/api/github/update-status' : '/api/github/update-labels';
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(op.payload),
+        });
+
+        if (response.ok) {
+          // Success - remove from queue
+          failedOperationsRef.current = failedOperationsRef.current.filter(o => o !== op);
+          console.log(`[GitHubSync] Retry succeeded for #${op.issueNumber}`);
+        } else {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      } catch (err) {
+        op.retryCount++;
+        op.lastAttempt = now;
+
+        if (op.retryCount >= MAX_RETRIES) {
+          // Max retries exceeded - remove from queue, show error
+          failedOperationsRef.current = failedOperationsRef.current.filter(o => o !== op);
+          showToast(`Failed to sync #${op.issueNumber} after ${MAX_RETRIES} retries`, 'error');
+          // Clear local modification tracking so next sync takes GitHub state
+          localModificationsRef.current.delete(op.issueNumber);
+        }
+      }
+    }
+
+    setPendingRetries(failedOperationsRef.current.length);
+  }, [token]);
+
+  // Helper to queue a failed operation
+  const queueFailedOperation = (type: 'status' | 'labels', issueNumber: number, payload: unknown) => {
+    failedOperationsRef.current.push({
+      type,
+      issueNumber,
+      payload,
+      retryCount: 0,
+      lastAttempt: Date.now(),
+    });
+    setPendingRetries(failedOperationsRef.current.length);
   };
 
   // Handle creating a new GitHub issue from the modal with optimistic update
@@ -361,13 +443,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       return;
     }
 
-    // For background sync, check cooldown (don't refresh right after a local update)
     if (isBackgroundSync) {
-      const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
-      if (timeSinceLastUpdate < SYNC_COOLDOWN_MS) {
-        console.log('[GitHubSync] Skipping background sync - within cooldown window');
-        return;
-      }
       setIsSyncing(true);
     } else {
       setLoading(true);
@@ -393,11 +469,61 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
         throw new Error(data.error || `API error: ${response.status}`);
       }
 
-      setIssues(data.issues || []);
+      const incomingIssues: GitHubIssue[] = data.issues || [];
+
+      // RACE CONDITION FIX: Per-issue merge with local modification tracking
+      // For background sync, preserve local state for issues modified locally
+      // within the last 10 seconds (gives time for GitHub API to update)
+      if (isBackgroundSync) {
+        const LOCAL_MOD_WINDOW_MS = 10000; // 10 second window
+        const now = Date.now();
+        const localMods = localModificationsRef.current;
+
+        setIssues(prevIssues => {
+          // Create a map of previous issues by number for quick lookup
+          const prevIssueMap = new Map(prevIssues.map(i => [i.number, i]));
+
+          // Merge incoming issues with local modifications
+          const mergedIssues = incomingIssues.map(incomingIssue => {
+            const localModTime = localMods.get(incomingIssue.number);
+
+            // If we have a recent local modification for this issue...
+            if (localModTime && now - localModTime < LOCAL_MOD_WINDOW_MS) {
+              const localIssue = prevIssueMap.get(incomingIssue.number);
+              if (localIssue) {
+                // Compare timestamps: incoming updated_at vs our local mod time
+                const incomingUpdatedAt = new Date(incomingIssue.updated_at).getTime();
+
+                // If GitHub's data is older than our local modification, keep local
+                if (incomingUpdatedAt < localModTime) {
+                  console.log(`[GitHubSync] Preserving local state for #${incomingIssue.number} (local mod: ${localModTime}, GitHub: ${incomingUpdatedAt})`);
+                  return localIssue;
+                }
+                // If GitHub's data is newer, use it and clear local mod tracking
+                localMods.delete(incomingIssue.number);
+              }
+            }
+
+            return incomingIssue;
+          });
+
+          // Include any temp issues (negative IDs) that are pending creation
+          const tempIssues = prevIssues.filter(i => i.number < 0);
+
+          return [...tempIssues, ...mergedIssues];
+        });
+      } else {
+        // Full refresh (manual): replace all issues, clear local mod tracking
+        localModificationsRef.current.clear();
+        setIssues(incomingIssues);
+      }
+
       setLastSyncTime(new Date());
 
       if (isBackgroundSync) {
         console.log('[GitHubSync] Background sync complete');
+        // Process any queued retry operations after successful sync
+        processRetryQueue();
       }
     } catch (err) {
       console.error('Failed to fetch GitHub issues:', err);
@@ -408,7 +534,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [repo, token]);
+  }, [repo, token, processRetryQueue]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -534,8 +660,8 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       return;
     }
 
-    // Mark local update time to prevent immediate re-sync (avoid infinite loops)
-    lastLocalUpdateRef.current = Date.now();
+    // Track this specific issue's modification time for race condition prevention
+    localModificationsRef.current.set(issueNumber, Date.now());
 
     // 1. OPTIMISTIC UPDATE - Update local state immediately
     const previousIssues = [...issues];
@@ -592,10 +718,15 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
         // Sync succeeded silently
       })
       .catch(err => {
-        // 3. ROLLBACK on failure
-        console.error('[labels-sync] Failed to sync:', err);
-        setIssues(previousIssues);
-        showToast(`Failed to sync label changes for #${issueNumber}`, 'error');
+        // 3. QUEUE FOR RETRY instead of immediate rollback
+        console.error('[labels-sync] Failed to sync, queuing for retry:', err);
+        queueFailedOperation('labels', issueNumber, {
+          repo: `${repo.owner}/${repo.repo}`,
+          issueNumber,
+          ...changes,
+        });
+        // Don't rollback - keep optimistic state, let retry handle it
+        showToast(`Sync failed for #${issueNumber}, will retry...`, 'info');
       });
   };
 
@@ -607,8 +738,8 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       return;
     }
 
-    // Mark local update time to prevent immediate re-sync (avoid infinite loops)
-    lastLocalUpdateRef.current = Date.now();
+    // Track this specific issue's modification time for race condition prevention
+    localModificationsRef.current.set(issueNumber, Date.now());
 
     // 1. OPTIMISTIC UPDATE - Save previous state for rollback, then update UI immediately
     const previousIssues = [...issues];
@@ -651,10 +782,16 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
         // Sync succeeded silently - no toast needed for success
       })
       .catch(err => {
-        // 3. ROLLBACK on failure
-        console.error('[status-sync] Failed to sync:', err);
-        setIssues(previousIssues);
-        showToast(`Failed to sync status change for #${issueNumber}`, 'error');
+        // 3. QUEUE FOR RETRY instead of immediate rollback
+        console.error('[status-sync] Failed to sync, queuing for retry:', err);
+        queueFailedOperation('status', issueNumber, {
+          repo: `${repo.owner}/${repo.repo}`,
+          issueNumber,
+          oldStatus: fromStatus,
+          newStatus: toStatus,
+        });
+        // Don't rollback - keep optimistic state, let retry handle it
+        showToast(`Sync failed for #${issueNumber}, will retry...`, 'info');
       });
   };
 
@@ -852,6 +989,15 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
           </span>
           <span className="text-surface-700">|</span>
           <span className="font-mono text-accent">{columnItems.in_progress.length} active</span>
+          {/* Pending retries indicator */}
+          {pendingRetries > 0 && (
+            <span className="text-amber-400 text-[10px] flex items-center gap-1" title={`${pendingRetries} operation(s) pending retry`}>
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {pendingRetries} retry
+            </span>
+          )}
           {/* Sync indicator - shows last sync time and current sync status */}
           {lastSyncTime && (
             <span className="text-surface-600 text-[10px]" title={`Auto-syncs every ${getSyncInterval() / 1000}s`}>

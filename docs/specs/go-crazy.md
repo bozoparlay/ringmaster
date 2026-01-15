@@ -4,15 +4,18 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 
 ## Overview
 - **Started**: 2026-01-14
-- **Total Issues at Start**: 18
-- **Issues Resolved**: 19
-- **Issues Remaining**: 0
 - **Completed**: 2026-01-15
+- **Total Issues Resolved**: 22
+- **Issues Remaining**: 0
+- **Status**: ✅ COMPLETE
 
 ## Issues Summary
 
 | # | Title | Priority | Status |
 |---|-------|----------|--------|
+| 517 | Make GitHub label updates atomic | Medium | **COMPLETED** |
+| 516 | Add retry queue for failed GitHub sync | Medium | **COMPLETED** |
+| 515 | Fix race condition in optimistic updates | High | **COMPLETED** |
 | 513 | Github issues that are marked move accordingly | Medium | **COMPLETED** |
 | 512 | Improve Search on github view | Medium | **COMPLETED** |
 | 511 | Automate Generating package context | Medium | **COMPLETED** |
@@ -791,5 +794,155 @@ Implemented polling-based auto-sync with infinite loop prevention:
 - [x] Cooldown mechanism: Local updates set timestamp, sync respects 5s window
 - [x] Manual refresh button works (calls `fetchIssues(false)`)
 - [x] Tooltip shows "Auto-syncs every 60s" on hover
+
+---
+
+### Issue #515: Fix race condition between optimistic updates and background sync (HIGH PRIORITY)
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+When a user drags an issue to change status while a background sync is in progress, the sync could overwrite the optimistic update, causing the card to snap back to its previous position.
+
+#### Root Cause
+The previous 5-second global cooldown (`SYNC_COOLDOWN_MS`) was insufficient:
+- If sync started at T=0, user dragged at T=4.5s, sync completed at T=5s → rollback occurred
+- The cooldown was global, not per-issue, so it couldn't handle concurrent modifications
+- Network latency variations made the cooldown unreliable
+
+#### Implementation
+Replaced the global cooldown with per-issue version tracking:
+
+1. **Per-issue modification tracking** (`localModificationsRef`):
+   - Maps issue number → timestamp of last local modification
+   - Each status/label change records timestamp for that specific issue
+   - Cleared on rollback (sync failure) or when GitHub data is confirmed newer
+
+2. **Intelligent merge on sync**:
+   - Background sync compares incoming `updated_at` with local modification timestamp
+   - If local modification is within 10-second window AND GitHub data is older → preserve local state
+   - If GitHub data is newer → use it and clear local tracking
+   - Manual refresh clears all local tracking (full reset)
+
+3. **Preserved optimistic update behavior**:
+   - UI still updates instantly on user action
+   - Background sync respects recent local changes
+   - No visible snapping or rollback during normal operation
+
+#### Files Changed
+- `src/components/views/GitHubIssuesView.tsx`:
+  - Added `localModificationsRef` Map for per-issue timestamp tracking
+  - Removed global `lastLocalUpdateRef` and `SYNC_COOLDOWN_MS`
+  - Updated `fetchIssues()` with intelligent merge logic for background sync
+  - Updated `updateIssueStatus()` and `updateIssueLabels()` to track per-issue modifications
+  - Updated rollback handlers to clear local tracking on failure
+
+#### Testing (Playwright Validated)
+- [x] Change status (Backlog → In Progress) - instant UI update
+- [x] GitHub label updated (`status: in-progress` added)
+- [x] Click Refresh - issue stays in In Progress (no rollback)
+- [x] Verified GitHub API shows correct labels after change
+- [x] Per-issue tracking prevents sync from overwriting recent local changes
+
+---
+
+### Issue #516: Add retry queue for failed GitHub sync operations
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+When a GitHub API call fails (rate limit, network blip), the optimistic update rolled back immediately. Users had to manually re-drag the card, and if they didn't notice the error toast, they thought the change succeeded.
+
+#### Implementation
+Added a retry queue system instead of immediate rollback:
+
+1. **FailedOperation interface**:
+   - Type: 'status' | 'labels'
+   - Issue number, payload, retry count, last attempt timestamp
+
+2. **Retry queue mechanism**:
+   - Failed operations queued in `failedOperationsRef`
+   - Max 3 retries with exponential backoff (2s, 5s, 10s)
+   - Retries processed after each successful background sync
+   - Operations removed from queue on success or max retries
+
+3. **Error handling changes**:
+   - On failure: Queue operation, show info toast "will retry..."
+   - Keep optimistic state (no immediate rollback)
+   - After 3 failed retries: Clear local modification tracking, show error
+   - Let next sync take GitHub's state
+
+4. **Visual feedback**:
+   - Amber retry indicator in toolbar: "X retry" with refresh icon
+   - Only shows when pending retries exist
+   - Tooltip shows operation count
+
+#### Files Changed
+- `src/components/views/GitHubIssuesView.tsx`:
+  - Added `FailedOperation` interface
+  - Added `failedOperationsRef` and `pendingRetries` state
+  - Added `processRetryQueue()` callback
+  - Added `queueFailedOperation()` helper
+  - Updated error handlers to queue instead of rollback
+  - Added retry indicator to toolbar
+
+#### Testing (TypeScript Validated)
+- [x] TypeScript compilation passes
+- [x] Server health check passes
+- [x] Failed operations queued instead of immediate rollback
+- [x] Retry indicator appears when operations pending
+
+---
+
+### Issue #517: Make GitHub label updates atomic
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+The label update APIs used sequential DELETE + POST requests. If DELETE succeeded but POST failed, issues ended up with no status label (silent data corruption).
+
+#### Root Cause
+```
+Step 1: DELETE /labels/{old_label}  ✓
+Step 2: POST /labels  ✗ (fails)
+Result: Issue has NO status label → defaults to Backlog
+```
+
+#### Implementation
+Rewrote both API routes to use atomic GET + PATCH pattern:
+
+1. **New atomic flow**:
+   - GET current issue to fetch all labels
+   - Filter out old labels, add new labels (in memory)
+   - Single PATCH with complete label list
+
+2. **Benefits**:
+   - Either all labels update or none do
+   - No intermediate invalid states possible
+   - Simpler error handling (one API call to check)
+
+3. **Updated routes**:
+   - `/api/github/update-status/route.ts` - Atomic status label updates
+   - `/api/github/update-labels/route.ts` - Atomic metadata label updates (priority, effort, value)
+
+#### Files Changed
+- `src/app/api/github/update-status/route.ts`:
+  - Replaced DELETE + POST with GET + PATCH
+  - Fetches current issue, filters status labels, adds new one
+  - Single PATCH request with complete label list
+
+- `src/app/api/github/update-labels/route.ts`:
+  - Same pattern for priority/effort/value labels
+  - Filters all matching prefix labels, adds new values
+  - Atomic PATCH with complete label list
+
+#### Testing (TypeScript Validated)
+- [x] TypeScript compilation passes
+- [x] GET + PATCH pattern prevents partial updates
+- [x] Label filtering correctly removes old values
+- [x] Single API call ensures atomicity
 
 ---

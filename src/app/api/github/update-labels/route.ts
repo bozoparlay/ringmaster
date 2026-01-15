@@ -3,8 +3,8 @@
  *
  * POST /api/github/update-labels - Update metadata labels on a GitHub issue
  *
- * This handles updating priority:*, effort:*, and value:* labels on GitHub issues.
- * It removes old labels of the same type and adds the new ones.
+ * Uses ATOMIC update: fetches current labels, modifies, and PATCHes in a single
+ * request to prevent data corruption from partial failures.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -17,6 +17,11 @@ interface UpdateLabelsRequest {
   priority?: { old?: Priority; new: Priority };
   effort?: { old?: Effort; new: Effort };
   value?: { old?: Value; new: Value };
+}
+
+interface GitHubLabel {
+  name: string;
+  color?: string;
 }
 
 // Label prefix mappings
@@ -70,74 +75,77 @@ export async function POST(request: NextRequest) {
       'Content-Type': 'application/json',
     };
 
-    const labelsToRemove: string[] = [];
-    const labelsToAdd: string[] = [];
+    // ATOMIC UPDATE: Fetch current issue, modify labels, PATCH in one request
+    // This prevents partial failures where some labels update but others don't
+
+    // Step 1: Get current issue to get all labels
+    const getResponse = await fetch(
+      `https://api.github.com/repos/${repo}/issues/${issueNumber}`,
+      { method: 'GET', headers }
+    );
+
+    if (!getResponse.ok) {
+      const errorText = await getResponse.text();
+      console.error(`[update-labels] Failed to get issue #${issueNumber}:`, errorText);
+      return NextResponse.json(
+        { error: `Failed to get issue: ${getResponse.status}` },
+        { status: getResponse.status }
+      );
+    }
+
+    const issue = await getResponse.json();
+    const currentLabels: GitHubLabel[] = issue.labels || [];
+    let labelNames = currentLabels.map((l: GitHubLabel) => l.name);
+
+    // Step 2: Build updated label list - remove old prefixed labels, add new ones
+    const changes: string[] = [];
 
     // Process priority change
     if (priority) {
-      if (priority.old) {
-        labelsToRemove.push(`${LABEL_PREFIXES.priority}${priority.old}`);
-      }
-      labelsToAdd.push(`${LABEL_PREFIXES.priority}${priority.new}`);
+      labelNames = labelNames.filter(name => !name.startsWith(LABEL_PREFIXES.priority));
+      labelNames.push(`${LABEL_PREFIXES.priority}${priority.new}`);
+      changes.push(`priority:${priority.new}`);
     }
 
     // Process effort change
     if (effort) {
-      if (effort.old) {
-        labelsToRemove.push(`${LABEL_PREFIXES.effort}${effort.old}`);
-      }
-      labelsToAdd.push(`${LABEL_PREFIXES.effort}${effort.new}`);
+      labelNames = labelNames.filter(name => !name.startsWith(LABEL_PREFIXES.effort));
+      labelNames.push(`${LABEL_PREFIXES.effort}${effort.new}`);
+      changes.push(`effort:${effort.new}`);
     }
 
     // Process value change
     if (value) {
-      if (value.old) {
-        labelsToRemove.push(`${LABEL_PREFIXES.value}${value.old}`);
-      }
-      labelsToAdd.push(`${LABEL_PREFIXES.value}${value.new}`);
+      labelNames = labelNames.filter(name => !name.startsWith(LABEL_PREFIXES.value));
+      labelNames.push(`${LABEL_PREFIXES.value}${value.new}`);
+      changes.push(`value:${value.new}`);
     }
 
-    // Remove old labels
-    for (const label of labelsToRemove) {
-      const encodedLabel = encodeURIComponent(label);
-      const removeResponse = await fetch(
-        `https://api.github.com/repos/${repo}/issues/${issueNumber}/labels/${encodedLabel}`,
-        { method: 'DELETE', headers }
+    // Step 3: PATCH issue with complete label list (atomic operation)
+    const patchResponse = await fetch(
+      `https://api.github.com/repos/${repo}/issues/${issueNumber}`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ labels: labelNames }),
+      }
+    );
+
+    if (!patchResponse.ok) {
+      const errorText = await patchResponse.text();
+      console.error(`[update-labels] Failed to update labels:`, errorText);
+      return NextResponse.json(
+        { error: `Failed to update labels: ${patchResponse.status}` },
+        { status: patchResponse.status }
       );
-
-      // 404 is OK - label might not exist
-      if (!removeResponse.ok && removeResponse.status !== 404) {
-        console.warn(`[update-labels] Failed to remove label ${label}:`, removeResponse.status);
-      }
     }
 
-    // Add new labels
-    if (labelsToAdd.length > 0) {
-      const addResponse = await fetch(
-        `https://api.github.com/repos/${repo}/issues/${issueNumber}/labels`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ labels: labelsToAdd }),
-        }
-      );
-
-      if (!addResponse.ok) {
-        const errorText = await addResponse.text();
-        console.error(`[update-labels] Failed to add labels:`, errorText);
-        return NextResponse.json(
-          { error: `Failed to add labels: ${addResponse.status}` },
-          { status: addResponse.status }
-        );
-      }
-    }
-
-    console.log(`[update-labels] Updated issue #${issueNumber}:`, { priority, effort, value });
+    console.log(`[update-labels] Atomically updated issue #${issueNumber}:`, changes);
     return NextResponse.json({
       success: true,
       issueNumber,
-      labelsRemoved: labelsToRemove,
-      labelsAdded: labelsToAdd,
+      labels: labelNames,
+      changes,
     });
   } catch (error) {
     console.error('[update-labels] Error:', error);
