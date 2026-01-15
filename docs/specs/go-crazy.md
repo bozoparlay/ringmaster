@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 14
-- **Issues Remaining**: 4
+- **Issues Resolved**: 15
+- **Issues Remaining**: 3
 
 ## Issues Summary
 
@@ -28,7 +28,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 498 | Add Dropdown for Categories | Medium | **COMPLETED** |
 | 407 | Improve Similarity Scoring | Medium | Pending |
 | 404 | Fix drag and drop | High | **COMPLETED** |
-| 403 | Improve Grading of Tasks | Medium | Pending |
+| 403 | Improve Grading of Tasks | Medium | **COMPLETED** |
 | 402 | Setup docker container | High | **COMPLETED** |
 
 ---
@@ -547,5 +547,58 @@ Backlog items were displayed in a fixed priority-based order, making it difficul
 - [x] Changed sort to "Title" / "Ascending" - persisted after page refresh
 - [x] Default sort is Priority descending (critical items first)
 - [x] localStorage key: `bozo_backlog_sort_prefs`
+
+---
+
+### Issue #403: Improve Grading of Tasks
+**Status**: COMPLETED
+**Started**: 2026-01-15
+**Completed**: 2026-01-15
+
+#### Problem
+The task scoring algorithm was not responsive to content changes. Users could remove titles or descriptions without seeing scores decrease appropriately. The scoring used step-based penalties instead of proportional weights, making it unpredictable.
+
+#### Implementation
+Rewrote the scoring algorithm with a weighted component model:
+
+1. **Title Scoring (20 points)**:
+   - 0 chars = 0 points (Missing title)
+   - 1-9 chars = proportional 0-10 points
+   - 10-29 chars = 10-18 points
+   - 30+ chars = full 20 points
+
+2. **Description Scoring (35 points)**:
+   - 0 chars = 0 points (Missing description)
+   - 1-49 chars = proportional 0-10 points
+   - 50-149 chars = 10-20 points
+   - 150-299 chars = 20-30 points
+   - 300+ chars = 30 points base + 5 bonus for structure
+   - Penalty: -10 if description just repeats title
+
+3. **Acceptance Criteria Scoring (30 points)**:
+   - 0 criteria = 0 points
+   - 1 criterion = 15 points
+   - 2 criteria = 20 points
+   - 3+ criteria = 25 points base + 5 bonus for well-defined
+   - Penalty: -3 per vague/short criterion
+
+4. **Actionability Scoring (15 points)**:
+   - Both requirements + approach keywords = 15 points
+   - Either one = 10 points
+   - Other actionable keywords = 7 points
+   - None = 0 points
+   - Penalty: -5 for one-liner symptoms
+
+#### Files Changed
+- `src/lib/task-quality.ts` - Complete rewrite with weighted scoring model
+
+#### Testing (Playwright Validated)
+- [x] Empty task with title only scores 20/100 (title points only)
+- [x] Adding 227-char description increased score from 20 to 60
+- [x] Adding 1 well-defined acceptance criterion increased score from 60 to 75
+- [x] Score label changes: "Incomplete" → "Needs detail" → "Well-defined"
+- [x] Breakdown shows which components pass/fail (✓/! indicators)
+- [x] Real-time score updates as user types
+- [x] Proportional scaling within each weight tier
 
 ---
