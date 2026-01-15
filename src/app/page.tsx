@@ -249,6 +249,7 @@ export default function Home() {
             <GitHubIssuesView
               repo={project ? { owner: project.owner, repo: project.repo } : undefined}
               token={githubConfig?.token}
+              searchQuery={searchQuery}
               onAddToBacklog={async (item) => {
                 await importItem(item);
               }}

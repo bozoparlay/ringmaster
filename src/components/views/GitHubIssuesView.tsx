@@ -155,9 +155,11 @@ interface GitHubIssuesViewProps {
   token?: string;
   onTackle?: (item: BacklogItem) => void;
   onAddToBacklog?: (item: BacklogItem) => Promise<void>;
+  /** Search query to filter issues by title/description */
+  searchQuery?: string;
 }
 
-export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitHubIssuesViewProps) {
+export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, searchQuery = '' }: GitHubIssuesViewProps) {
   const [issues, setIssues] = useState<GitHubIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -356,8 +358,23 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
 
   const items = useMemo(() => issues.map(issueToBacklogItem), [issues]);
 
-  // Organize items by column with Up Next calculation
+  // Check if actively searching
+  const isSearching = searchQuery.trim().length > 0;
+
+  // Organize items by column with Up Next calculation and search filtering
   const columnData = useMemo(() => {
+    // Apply search filter first (case-insensitive, partial matches on title and description)
+    let filtered = items;
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = items.filter(item =>
+        item.title.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query) ||
+        item.category?.toLowerCase().includes(query) ||
+        item.tags.some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+
     const columns: Record<Status, BacklogItem[]> = {
       backlog: [],
       up_next: [],
@@ -366,7 +383,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       ready_to_ship: [],
     };
 
-    items.forEach((item) => {
+    filtered.forEach((item) => {
       if (item.status === 'up_next') {
         columns.backlog.push(item);
       } else {
@@ -381,15 +398,17 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       return a.order - b.order;
     });
 
-    // Calculate Up Next from high-priority backlog items
+    // Calculate Up Next from high-priority backlog items (only when not searching)
     let upNextItemIds = new Set<string>();
-    const eligibleForUpNext = columns.backlog.filter(
-      item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
-    );
-    const upNextLimit = calculateUpNextLimit(columns.backlog.length);
-    const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
-    upNextItemIds = new Set(upNextItems.map(item => item.id));
-    columns.up_next = upNextItems;
+    if (!isSearching) {
+      const eligibleForUpNext = columns.backlog.filter(
+        item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
+      );
+      const upNextLimit = calculateUpNextLimit(columns.backlog.length);
+      const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
+      upNextItemIds = new Set(upNextItems.map(item => item.id));
+      columns.up_next = upNextItems;
+    }
 
     // Sort other columns by priority
     ['in_progress', 'review', 'ready_to_ship'].forEach((status) => {
@@ -400,10 +419,13 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       });
     });
 
-    return { columnItems: columns, upNextIds: upNextItemIds };
-  }, [items]);
+    // Calculate total filtered count
+    const filteredCount = filtered.length;
 
-  const { columnItems, upNextIds } = columnData;
+    return { columnItems: columns, upNextIds: upNextItemIds, filteredCount };
+  }, [items, searchQuery, isSearching]);
+
+  const { columnItems, upNextIds, filteredCount } = columnData;
 
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
@@ -690,18 +712,29 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
     );
   }
 
-  if (items.length === 0) {
+  // Show "no results" for search, "no issues" for empty repo
+  if (items.length === 0 || (isSearching && filteredCount === 0)) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 max-w-md text-center">
           <div className="w-12 h-12 rounded-full bg-surface-800 flex items-center justify-center">
-            <svg className="w-6 h-6 text-surface-400" fill="currentColor" viewBox="0 0 24 24">
-              <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10Z" />
-            </svg>
+            {isSearching ? (
+              <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 text-surface-400" fill="currentColor" viewBox="0 0 24 24">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10Z" />
+              </svg>
+            )}
           </div>
-          <p className="text-surface-300">No open issues found</p>
+          <p className="text-surface-300">
+            {isSearching ? 'No tasks found' : 'No open issues found'}
+          </p>
           <p className="text-surface-500 text-sm">
-            {repo ? `in ${repo.owner}/${repo.repo}` : 'Connect a repository to see issues'}
+            {isSearching
+              ? `No issues match "${searchQuery.trim()}"`
+              : repo ? `in ${repo.owner}/${repo.repo}` : 'Connect a repository to see issues'}
           </p>
         </div>
       </div>
@@ -718,7 +751,9 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
           </span>
         </div>
         <div className="flex items-center gap-4 text-xs text-surface-500">
-          <span className="font-mono">{items.length} open issues</span>
+          <span className="font-mono">
+            {isSearching ? `${filteredCount} of ${items.length}` : items.length} open issues
+          </span>
           <span className="text-surface-700">|</span>
           <span className="font-mono text-accent">{columnItems.in_progress.length} active</span>
           <button

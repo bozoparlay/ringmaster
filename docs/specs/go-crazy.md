@@ -5,14 +5,14 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 5
-- **Issues Remaining**: 13
+- **Issues Resolved**: 6
+- **Issues Remaining**: 12
 
 ## Issues Summary
 
 | # | Title | Priority | Status |
 |---|-------|----------|--------|
-| 512 | Improve Search on github view | Medium | Pending |
+| 512 | Improve Search on github view | Medium | **COMPLETED** |
 | 511 | Automate Generating package context | Medium | Pending |
 | 510 | Improve AI Assist - Analyze and Suggest | Medium | Pending |
 | 509 | Get rid of the save button | Low | Pending |
@@ -172,5 +172,41 @@ The `TaskPanel.onSave` handler in `GitHubIssuesView` only synced status changes 
 - [x] Save Changes closes panel - shows $H on card
 - [x] Refresh from GitHub - Value persists as High ($H)
 - [x] Label synced to GitHub (value:high label added)
+
+---
+
+### Issue #512: Improve Search on github view
+**Status**: COMPLETED
+**Started**: 2026-01-14
+**Completed**: 2026-01-14
+
+#### Problem
+The search functionality on the GitHub view was non-functional. Typing in the search box didn't filter the issues - all 17 issues remained visible regardless of the search query.
+
+#### Root Cause
+1. `GitHubIssuesView` component didn't have a `searchQuery` prop
+2. `page.tsx` wasn't passing the `searchQuery` state to `GitHubIssuesView`
+3. No filtering logic existed in `GitHubIssuesView`
+
+#### Implementation
+1. Added `searchQuery` prop to `GitHubIssuesView` interface
+2. Updated `page.tsx` to pass `searchQuery` to `GitHubIssuesView`
+3. Added client-side filtering in the `columnData` memo:
+   - Filters by title, description, category, and tags
+   - Case-insensitive, partial matches
+   - Applied before organizing items into columns
+4. Added "No tasks found" empty state with search icon and query display
+5. Updated toolbar to show "X of Y open issues" during search
+
+#### Files Changed
+- `src/components/views/GitHubIssuesView.tsx` - Added searchQuery prop, filtering logic, empty state
+- `src/app/page.tsx` - Pass searchQuery to GitHubIssuesView
+
+#### Testing (Playwright Validated)
+- [x] Search "docker" filters to 1 issue (#402) - shows "1 of 17 open issues"
+- [x] Clear search restores full list (17 issues)
+- [x] Search with no matches shows "No tasks found" with query
+- [x] Real-time filtering as user types
+- [x] Filters by title AND description content
 
 ---
