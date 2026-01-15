@@ -6,6 +6,7 @@ import { PRIORITY_LABELS, EFFORT_LABELS, VALUE_LABELS } from '@/types/backlog';
 import { InlineOptionSelector } from './InlineOptionSelector';
 import { AcceptanceCriteriaEditor } from './AcceptanceCriteriaEditor';
 import { InlineSimilarityProgress } from './InlineSimilarityProgress';
+import { AiLoadingState } from './AiLoadingState';
 import { getAISettings } from './SettingsModal';
 import { Toast } from './Toast';
 
@@ -302,18 +303,23 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath, existingI
               />
             </div>
 
-            <div>
+            <div className="relative">
               <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
                 Description <span className="text-surface-600">(optional)</span>
               </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={6}
-                disabled={isCheckingSimilarity}
-                className="w-full bg-surface-800 border border-surface-700 rounded-lg px-4 py-3 text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors resize-y min-h-[120px] font-mono text-sm disabled:opacity-60"
-                placeholder="Add some details... (supports markdown)"
-              />
+              {/* Description textarea - hidden when analyzing */}
+              {!isAnalyzing && (
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={6}
+                  disabled={isCheckingSimilarity}
+                  className="w-full bg-surface-800 border border-surface-700 rounded-lg px-4 py-3 text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-colors resize-y min-h-[120px] font-mono text-sm disabled:opacity-60"
+                  placeholder="Add some details... (supports markdown)"
+                />
+              )}
+              {/* AI Loading State - replaces textarea during analysis */}
+              {isAnalyzing && <AiLoadingState height="168px" />}
             </div>
 
             {/* AI Assist Button */}
@@ -323,22 +329,10 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath, existingI
               disabled={!title.trim() || isAnalyzing || isCheckingSimilarity}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/30 hover:to-blue-600/30 border border-purple-500/30 text-purple-300 font-medium py-2.5 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isAnalyzing ? (
-                <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  AI Assist - Analyze & Suggest
-                </>
-              )}
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              AI Assist - Analyze & Suggest
             </button>
 
             {/* Task Details */}
