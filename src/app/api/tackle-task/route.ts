@@ -44,30 +44,48 @@ const IDE_COMMANDS: Record<IdeType, string> = {
 /**
  * Spawn iTerm2 with Claude running in the worktree directory.
  * Uses AppleScript to open a new iTerm window and run Claude with the prompt.
+ *
+ * We write the prompt to a temp file to avoid shell escaping issues with
+ * newlines, quotes, backticks, etc.
  */
 async function spawnItermWithClaude(worktreePath: string, prompt: string, model: string): Promise<void> {
-  // Escape the prompt for use in AppleScript (double-escape for shell + applescript)
-  const escapedPrompt = prompt
-    .replace(/\\/g, '\\\\\\\\')  // Escape backslashes
-    .replace(/"/g, '\\\\\\"')     // Escape double quotes
-    .replace(/'/g, "'\"'\"'");    // Escape single quotes for shell embedding
+  const timestamp = Date.now();
+  const tempPromptPath = path.join('/tmp', `ringmaster-prompt-${timestamp}.txt`);
+  const tempScriptPath = path.join('/tmp', `ringmaster-iterm-${timestamp}.scpt`);
 
-  // AppleScript to open iTerm and run Claude with the specified model
+  // Write prompt to temp file (avoids all escaping issues)
+  await fs.writeFile(tempPromptPath, prompt);
+
+  // Build the shell command - read prompt from file
+  // Using $() to read file contents as the prompt argument
+  const shellCommand = `cd "${worktreePath}" && claude --model ${model} "$(cat '${tempPromptPath}')"`;
+
   const appleScript = `
-    tell application "iTerm2"
-      create window with default profile
-      tell current session of current window
-        write text "cd '${worktreePath}' && claude --model ${model} '${escapedPrompt}'"
-      end tell
-      activate
-    end tell
-  `;
+tell application "iTerm2"
+  create window with default profile
+  tell current session of current window
+    write text ${JSON.stringify(shellCommand)}
+  end tell
+  activate
+end tell
+`;
 
-  await execWithTimeout(
-    `osascript -e '${appleScript.replace(/'/g, "'\"'\"'")}'`,
-    {},
-    EXTERNAL_APP_TIMEOUT_MS + 2000 // Give iTerm a bit more time to launch
-  );
+  try {
+    await fs.writeFile(tempScriptPath, appleScript);
+    await execWithTimeout(
+      `osascript "${tempScriptPath}"`,
+      {},
+      EXTERNAL_APP_TIMEOUT_MS + 2000
+    );
+  } finally {
+    // Clean up AppleScript file (keep prompt file - Claude needs it)
+    // The prompt file will be cleaned up on next run or by OS
+    try {
+      await fs.unlink(tempScriptPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 }
 
 function slugify(text: string): string {
