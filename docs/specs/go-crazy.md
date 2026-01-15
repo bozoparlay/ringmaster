@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 1
-- **Issues Remaining**: 17
+- **Issues Resolved**: 2
+- **Issues Remaining**: 16
 
 ## Issues Summary
 
@@ -22,7 +22,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 505 | Confirm similarity check | Medium | Pending |
 | 504 | New tasks don't appear until refresh | Medium | Pending |
 | 502 | Add github connectivity indicator | Medium | Pending |
-| 501 | Maker server health more subtle | Medium | Pending |
+| 501 | Maker server health more subtle | Medium | **COMPLETED** |
 | 500 | Persist the value on Github view | Medium | Pending |
 | 499 | Add rescope indicator for Github view | Medium | Pending |
 | 498 | Add Dropdown for Categories | Medium | Pending |
@@ -65,5 +65,27 @@ Drag and drop functionality had issues - users had to drag tiles to the middle o
 - [x] Drag task from In Progress to Review (dropping on header) - WORKS
 - [x] Drag task from Review back to Backlog (dropping on header) - WORKS
 - [x] Drop zones now cover the full column area including headers
+
+---
+
+### Issue #501: Make server health more subtle
+**Status**: COMPLETED
+**Started**: 2026-01-14
+**Completed**: 2026-01-14
+
+#### Problem
+Server health indicator was showing both a dot AND text label ("Server healthy"), making the UI cluttered when everything is working fine.
+
+#### Implementation
+Changed the HealthIndicator to only show the text label when the server is NOT healthy. When healthy, just the green dot is visible. The hover tooltip still works to show full details.
+
+#### Files Changed
+- `src/components/HealthIndicator.tsx` - Hide text label when status is 'healthy'
+
+#### Testing (Playwright Validated)
+- [x] When healthy: Only green dot visible, no text
+- [x] Hover shows full tooltip with status details
+- [x] "Checking..." text still shows during initial load
+- [x] Degraded/unhealthy would still show text labels
 
 ---

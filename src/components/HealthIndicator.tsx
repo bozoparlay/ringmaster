@@ -209,7 +209,7 @@ export function HealthIndicator({ pollInterval = 15000, onStatusChange }: Health
           onMouseLeave={() => setShowTooltip(false)}
           onClick={() => checkHealth()}
           className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-surface-800/50 transition-colors"
-          title="Click to refresh"
+          title="Click to refresh server status"
         >
           {/* Status dot with optional pulse */}
           <div className="relative">
@@ -218,7 +218,10 @@ export function HealthIndicator({ pollInterval = 15000, onStatusChange }: Health
               <div className={`absolute inset-0 w-2 h-2 rounded-full ${config.color} animate-ping opacity-75`} />
             )}
           </div>
-          <span className="text-xs text-surface-500 hidden lg:inline">{config.label}</span>
+          {/* Only show text label when not healthy - keeps UI subtle when things are working */}
+          {status !== 'healthy' && (
+            <span className="text-xs text-surface-400">{config.label}</span>
+          )}
         </button>
 
         {/* Tooltip with details */}
