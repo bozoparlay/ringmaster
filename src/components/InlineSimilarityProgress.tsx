@@ -18,11 +18,21 @@ interface ProgressState {
   batchTotal?: number;
 }
 
+interface ExistingItem {
+  id: string;
+  title: string;
+  description: string;
+  category?: string;
+}
+
 interface InlineSimilarityProgressProps {
   title: string;
   description: string;
   category?: string;
-  backlogPath: string;
+  /** Path to local BACKLOG.md file (for backlog mode) */
+  backlogPath?: string;
+  /** Pre-loaded items to check against (for GitHub mode) */
+  existingItems?: ExistingItem[];
   onComplete: (similarTasks: SimilarTask[]) => void;
   onSkipped: () => void;
 }
@@ -32,6 +42,7 @@ export function InlineSimilarityProgress({
   description,
   category,
   backlogPath,
+  existingItems,
   onComplete,
   onSkipped,
 }: InlineSimilarityProgressProps) {
@@ -43,7 +54,7 @@ export function InlineSimilarityProgress({
   const hasStartedRef = useRef(false);
 
   // Store initial params in ref to prevent useCallback recreation on prop changes
-  const paramsRef = useRef({ title, description, category, backlogPath });
+  const paramsRef = useRef({ title, description, category, backlogPath, existingItems });
 
   const startSimilarityCheck = useCallback(async () => {
     if (hasStartedRef.current) return;
@@ -53,13 +64,13 @@ export function InlineSimilarityProgress({
     abortControllerRef.current = controller;
 
     // Use params from ref (captured at mount) to avoid dependency on props
-    const { title: t, description: d, category: c, backlogPath: bp } = paramsRef.current;
+    const { title: t, description: d, category: c, backlogPath: bp, existingItems: ei } = paramsRef.current;
 
     try {
       const response = await fetch('/api/check-similarity-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: t, description: d, category: c, backlogPath: bp }),
+        body: JSON.stringify({ title: t, description: d, category: c, backlogPath: bp, existingItems: ei }),
         signal: controller.signal,
       });
 

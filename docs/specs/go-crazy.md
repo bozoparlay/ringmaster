@@ -5,8 +5,8 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 ## Overview
 - **Started**: 2026-01-14
 - **Total Issues at Start**: 18
-- **Issues Resolved**: 7
-- **Issues Remaining**: 11
+- **Issues Resolved**: 8
+- **Issues Remaining**: 10
 
 ## Issues Summary
 
@@ -19,7 +19,7 @@ This document tracks progress on resolving all GitHub issues for the Ringmaster 
 | 508 | Add sort options on backlog | Low | Pending |
 | 507 | Make things cost effective | Medium | Pending |
 | 506 | Confirm GitHub test can be edited | Medium | **COMPLETED** |
-| 505 | Confirm similarity check | Medium | Pending |
+| 505 | Confirm similarity check | Medium | **COMPLETED** |
 | 504 | New tasks don't appear until refresh | Medium | **COMPLETED** |
 | 502 | Add github connectivity indicator | Medium | **COMPLETED** |
 | 501 | Maker server health more subtle | Medium | **COMPLETED** |
@@ -230,5 +230,56 @@ Verify that GitHub issues can be edited through the task panel and that changes 
 
 #### Notes
 This verification confirmed that the implementation from Issue #500 (Persist the value on Github view) works correctly end-to-end. The optimistic update + background sync pattern handles all metadata changes properly.
+
+---
+
+### Issue #505: Confirm similarity check
+**Status**: COMPLETED
+**Started**: 2026-01-14
+**Completed**: 2026-01-14
+
+#### Problem
+The similarity check feature (which prevents duplicate tasks) only worked for the local Backlog view. When creating new GitHub issues, no similarity check was performed against existing GitHub issues.
+
+#### Root Cause
+1. The `/api/check-similarity-stream` API only accepted `backlogPath` to read tasks from a local file
+2. `NewTaskModal` only triggered similarity checks when `backlogPath` was provided
+3. `GitHubIssuesView` didn't pass any similarity data to `NewTaskModal`
+
+#### Implementation
+1. **Extended API** (`/api/check-similarity-stream/route.ts`):
+   - Added `existingItems` parameter as alternative to `backlogPath`
+   - Updated validation to accept either source
+   - Modified task loading logic to use pre-loaded items when provided
+
+2. **Updated InlineSimilarityProgress component**:
+   - Added `existingItems` prop alongside `backlogPath`
+   - Both are now optional - one or the other must be provided
+   - Passes `existingItems` to API when available
+
+3. **Updated NewTaskModal component**:
+   - Added `existingItems` prop to interface
+   - Updated similarity check gate to trigger when either `backlogPath` OR `existingItems` exists
+   - Passes `existingItems` to `InlineSimilarityProgress`
+
+4. **Updated GitHubIssuesView**:
+   - Passes current GitHub issues as `existingItems` to `NewTaskModal`
+   - Maps `BacklogItem[]` to the simpler `ExistingItem[]` format
+
+#### Files Changed
+- `src/app/api/check-similarity-stream/route.ts` - Extended to support `existingItems`
+- `src/components/InlineSimilarityProgress.tsx` - Added `existingItems` prop
+- `src/components/NewTaskModal.tsx` - Added `existingItems` prop and updated logic
+- `src/components/views/GitHubIssuesView.tsx` - Pass existing issues to modal
+
+#### Testing (Playwright Validated)
+- [x] Open GitHub view with 15 issues loaded
+- [x] Click "Create new GitHub issue" FAB
+- [x] Enter title "Fix drag and drop issues in kanban board" (similar to existing #404)
+- [x] Click "Add Task" - similarity check runs against GitHub issues
+- [x] "Similar Tasks Found" modal appears showing:
+  - "Fix drag and drop" at 90% similarity (Duplicate)
+  - "Github issues that are marked move accordingly" at 70% (Consider Merging)
+- [x] Click "Cancel" to not create duplicate
 
 ---

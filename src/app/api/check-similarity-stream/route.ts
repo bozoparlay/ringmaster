@@ -20,11 +20,21 @@ const bedrockClient = new BedrockRuntimeClient({
 // Use Haiku for fast similarity checks (much faster than Sonnet)
 const CLAUDE_MODEL_ID = 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
 
+interface ExistingItem {
+  id: string;
+  title: string;
+  description: string;
+  category?: string;
+}
+
 interface SimilarityRequest {
   title: string;
   description: string;
   category?: string;
-  backlogPath: string;
+  /** Path to local BACKLOG.md file (for backlog mode) */
+  backlogPath?: string;
+  /** Pre-loaded items to check against (for GitHub mode) */
+  existingItems?: ExistingItem[];
 }
 
 interface SimilarTask {
@@ -144,11 +154,12 @@ export async function POST(request: Request) {
     });
   }
 
-  const { title, description, category, backlogPath } = body;
+  const { title, description, category, backlogPath, existingItems } = body;
 
-  if (!title || !backlogPath) {
-    console.error('[similarity-stream] Missing required fields - title:', title, 'backlogPath:', backlogPath);
-    return new Response(JSON.stringify({ error: 'Title and backlogPath are required' }), {
+  // Require title AND either backlogPath or existingItems
+  if (!title || (!backlogPath && !existingItems)) {
+    console.error('[similarity-stream] Missing required fields - title:', title, 'backlogPath:', backlogPath, 'existingItems:', existingItems?.length);
+    return new Response(JSON.stringify({ error: 'Title and either backlogPath or existingItems are required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -190,11 +201,22 @@ export async function POST(request: Request) {
         return;
       }
 
-      // Read and parse backlog
-      console.log('[similarity-stream] Reading backlog from:', backlogPath);
-      const backlogContent = await fs.readFile(backlogPath, 'utf-8');
-      const existingTasks = parseBacklogMd(backlogContent);
-      console.log('[similarity-stream] Found', existingTasks.length, 'tasks in backlog');
+      // Get existing tasks - either from backlogPath or pre-loaded existingItems
+      let existingTasks: Array<{ id: string; title: string; description: string; category?: string }>;
+
+      if (existingItems && existingItems.length > 0) {
+        // Use pre-loaded items (GitHub mode)
+        console.log('[similarity-stream] Using', existingItems.length, 'pre-loaded items');
+        existingTasks = existingItems;
+      } else if (backlogPath) {
+        // Read from local file (Backlog mode)
+        console.log('[similarity-stream] Reading backlog from:', backlogPath);
+        const backlogContent = await fs.readFile(backlogPath, 'utf-8');
+        existingTasks = parseBacklogMd(backlogContent);
+        console.log('[similarity-stream] Found', existingTasks.length, 'tasks in backlog');
+      } else {
+        existingTasks = [];
+      }
 
       // Filter tasks by category (same category first, then others)
       const sameCategory = existingTasks.filter(t => t.category === category);

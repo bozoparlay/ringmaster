@@ -27,11 +27,21 @@ interface SimilarTask {
   reason: string;
 }
 
+interface ExistingItem {
+  id: string;
+  title: string;
+  description: string;
+  category?: string;
+}
+
 interface NewTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (task: EnhancedTask) => void;
+  /** Path to local BACKLOG.md file (for backlog mode) */
   backlogPath?: string;
+  /** Pre-loaded items to check against (for GitHub mode) */
+  existingItems?: ExistingItem[];
 }
 
 // Priority options with labels
@@ -82,7 +92,7 @@ const valueColors: Record<Value, string> = {
   high: 'bg-red-500',
 };
 
-export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTaskModalProps) {
+export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath, existingItems }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
@@ -232,8 +242,8 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
       return;
     }
 
-    // Start similarity check if backlog path exists
-    if (backlogPath) {
+    // Start similarity check if backlog path or existing items exist
+    if (backlogPath || (existingItems && existingItems.length > 0)) {
       setIsCheckingSimilarity(true);
       abortCheckRef.current = new AbortController();
     } else {
@@ -384,12 +394,13 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, backlogPath }: NewTask
             </div>
 
             {/* Inline Similarity Progress - shown when checking */}
-            {isCheckingSimilarity && backlogPath && (
+            {isCheckingSimilarity && (backlogPath || existingItems) && (
               <InlineSimilarityProgress
                 title={title.trim()}
                 description={description.trim()}
                 category={category.trim() || undefined}
                 backlogPath={backlogPath}
+                existingItems={existingItems}
                 onComplete={handleSimilarityComplete}
                 onSkipped={handleSimilaritySkipped}
               />

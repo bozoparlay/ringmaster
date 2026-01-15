@@ -895,6 +895,12 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
         isOpen={isNewTaskOpen}
         onClose={() => setIsNewTaskOpen(false)}
         onSubmit={handleCreateGitHubTask}
+        existingItems={items.map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          category: item.category,
+        }))}
       />
 
       {/* Floating Action Button - opens native task creation modal */}
