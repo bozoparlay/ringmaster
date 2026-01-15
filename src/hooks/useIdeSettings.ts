@@ -2,37 +2,52 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-export type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro' | 'worktree';
+export type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro' | 'worktree' | 'iterm-interactive';
+
+// Execution mode determines how Claude is launched
+export type ExecutionMode = 'interactive' | 'autonomous';
 
 export interface IdeOption {
   id: IdeType;
   name: string;
   description: string;
   command: string;
-  icon: 'code' | 'terminal' | 'cursor' | 'kiro' | 'folder';
+  icon: 'code' | 'terminal' | 'cursor' | 'kiro' | 'folder' | 'iterm';
+  executionMode: ExecutionMode;
 }
 
 export const IDE_OPTIONS: IdeOption[] = [
   {
+    id: 'iterm-interactive',
+    name: 'iTerm + Claude',
+    description: 'Opens iTerm with Claude running - you can interact and guide',
+    command: 'iterm',
+    icon: 'iterm',
+    executionMode: 'interactive',
+  },
+  {
     id: 'vscode',
     name: 'VS Code',
-    description: 'Open in Visual Studio Code',
+    description: 'Open in Visual Studio Code, prompt copied',
     command: 'code -n',
     icon: 'code',
+    executionMode: 'interactive',
   },
   {
     id: 'cursor',
     name: 'Cursor',
-    description: 'Open in Cursor IDE',
+    description: 'Open in Cursor IDE, prompt copied',
     command: 'cursor',
     icon: 'cursor',
+    executionMode: 'interactive',
   },
   {
     id: 'kiro',
     name: 'Kiro',
-    description: 'Open in Kiro IDE',
+    description: 'Open in Kiro IDE, prompt copied',
     command: 'kiro',
     icon: 'kiro',
+    executionMode: 'interactive',
   },
   {
     id: 'terminal',
@@ -40,6 +55,7 @@ export const IDE_OPTIONS: IdeOption[] = [
     description: 'Copy prompt to clipboard only',
     command: '',
     icon: 'terminal',
+    executionMode: 'interactive',
   },
   {
     id: 'worktree',
@@ -47,11 +63,12 @@ export const IDE_OPTIONS: IdeOption[] = [
     description: 'Create branch/worktree, nothing else',
     command: '',
     icon: 'folder',
+    executionMode: 'interactive',
   },
 ];
 
 const STORAGE_KEY = 'ringmaster-ide-preference';
-const DEFAULT_IDE: IdeType = 'vscode';
+const DEFAULT_IDE: IdeType = 'iterm-interactive';
 
 export function useIdeSettings() {
   const [selectedIde, setSelectedIde] = useState<IdeType>(DEFAULT_IDE);

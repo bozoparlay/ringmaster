@@ -5,6 +5,7 @@ import type { BacklogItem } from '@/types/backlog';
 import { useIdeSettings, IDE_OPTIONS, type IdeType } from '@/hooks/useIdeSettings';
 import { buildTaskPrompt, buildConversationalPrompt } from '@/lib/prompt-builder';
 import { QUALITY_THRESHOLD, validateTaskQuality } from '@/lib/task-quality';
+import { getWorkModel } from '@/components/SettingsModal';
 
 // Client-side slugify to preview branch name (matches server logic)
 function slugify(text: string): string {
@@ -51,6 +52,19 @@ function IdeIcon({ ide, className = "w-4 h-4" }: { ide: string; className?: stri
         <svg className={className} viewBox="0 0 24 24" fill="currentColor">
           <circle cx="12" cy="12" r="10" strokeWidth="2" stroke="currentColor" fill="none"/>
           <path d="M8 12h8M12 8v8" strokeWidth="2" stroke="currentColor" strokeLinecap="round"/>
+        </svg>
+      );
+    case 'iterm':
+      // iTerm2 icon - terminal with colored bars representing the classic iTerm look
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M3 8h18" />
+          <circle cx="6" cy="6" r="1" fill="#EF4444" stroke="none" />
+          <circle cx="9" cy="6" r="1" fill="#FBBF24" stroke="none" />
+          <circle cx="12" cy="6" r="1" fill="#22C55E" stroke="none" />
+          <path d="M7 12l3 2-3 2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M13 16h4" strokeLinecap="round" />
         </svg>
       );
     case 'terminal':
@@ -154,6 +168,7 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
           backlogPath,
           worktreePath: item.worktreePath,
           ide: selectedIde,
+          model: getWorkModel().cliName,  // Pass the configured Claude CLI model
         }),
       });
 
@@ -166,6 +181,8 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
           onShowToast?.('Worktree created! Navigate to .tasks/ directory to start working.', 'success');
         } else if (selectedIde === 'terminal') {
           onShowToast?.('Task prompt copied to clipboard! Paste in your terminal to start.', 'success');
+        } else if (selectedIde === 'iterm-interactive') {
+          onShowToast?.('Opening iTerm with Claude... Interact directly in the terminal!', 'success');
         } else {
           onShowToast?.(`Opening ${currentIde.name}... Task prompt copied to clipboard!`, 'success');
         }
@@ -376,7 +393,13 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
             ) : (
               <>
                 <IdeIcon ide={currentIde.icon} className="w-5 h-5" />
-                {selectedIde === 'worktree' ? 'Create Worktree' : selectedIde === 'terminal' ? 'Copy & Start' : `Open in ${currentIde.name}`}
+                {selectedIde === 'worktree'
+                  ? 'Create Worktree'
+                  : selectedIde === 'terminal'
+                    ? 'Copy & Start'
+                    : selectedIde === 'iterm-interactive'
+                      ? 'Start with Claude'
+                      : `Open in ${currentIde.name}`}
               </>
             )}
           </button>

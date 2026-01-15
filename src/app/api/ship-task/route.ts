@@ -7,6 +7,8 @@ import { execWithTimeout, TimeoutError } from '@/lib/resilience';
 const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
 const GIT_PUSH_TIMEOUT_MS = 30000;      // 30s for git push
 
+type MergeStrategy = 'pr' | 'local-merge' | 'ask';
+
 interface ShipRequest {
   taskId: string;
   title: string;
@@ -21,6 +23,9 @@ interface ShipRequest {
    * Default is true (safe mode) - caller can trigger cleanup separately.
    */
   deferWorktreeCleanup?: boolean;
+  // Git workflow settings
+  mergeStrategy?: MergeStrategy;  // How to handle completed work
+  targetBranch?: string;          // Branch to merge/PR into (default: main)
 }
 
 // GAP #15 FIX: Helper to merge PR via GitHub CLI
@@ -89,6 +94,126 @@ async function mergePR(branch: string, prNumber?: number, repoDir?: string): Pro
   }
 }
 
+/**
+ * Create a PR without merging it
+ */
+async function createPR(branch: string, title: string, targetBranch: string, repoDir?: string): Promise<{
+  success: boolean;
+  prNumber?: number;
+  prUrl?: string;
+  error?: string;
+}> {
+  const cwd = repoDir || process.cwd();
+
+  try {
+    // Check if PR already exists for this branch
+    try {
+      const { stdout: existingPr } = await execWithTimeout(
+        `gh pr view "${branch}" --json number,url`,
+        { cwd },
+        GIT_COMMAND_TIMEOUT_MS
+      );
+      const pr = JSON.parse(existingPr);
+      console.log(`[ship-task] PR already exists: #${pr.number}`);
+      return {
+        success: true,
+        prNumber: pr.number,
+        prUrl: pr.url,
+      };
+    } catch {
+      // No existing PR, create one
+    }
+
+    // Create PR
+    const { stdout } = await execWithTimeout(
+      `gh pr create --title "${title.replace(/"/g, '\\"')}" --body "Task: ${title}" --base "${targetBranch}" --head "${branch}"`,
+      { cwd },
+      GIT_PUSH_TIMEOUT_MS
+    );
+
+    // Parse PR URL from output
+    const prUrl = stdout.trim();
+    const prNumberMatch = prUrl.match(/\/pull\/(\d+)/);
+    const prNumber = prNumberMatch ? parseInt(prNumberMatch[1], 10) : undefined;
+
+    console.log(`[ship-task] Created PR #${prNumber}: ${prUrl}`);
+
+    return {
+      success: true,
+      prNumber,
+      prUrl,
+    };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`[ship-task] PR creation error: ${errorMsg}`);
+    return {
+      success: false,
+      error: errorMsg,
+    };
+  }
+}
+
+/**
+ * Merge branch locally (no PR)
+ */
+async function mergeLocally(branch: string, targetBranch: string, repoDir?: string): Promise<{
+  success: boolean;
+  mergeMethod: 'local';
+  error?: string;
+}> {
+  const cwd = repoDir || process.cwd();
+
+  try {
+    console.log(`[ship-task] Local merge: ${branch} -> ${targetBranch}`);
+
+    // Fetch latest
+    await execWithTimeout(`git fetch origin ${targetBranch}`, { cwd }, GIT_COMMAND_TIMEOUT_MS);
+
+    // Checkout target branch
+    await execWithTimeout(`git checkout ${targetBranch}`, { cwd }, GIT_COMMAND_TIMEOUT_MS);
+
+    // Pull latest
+    await execWithTimeout(`git pull origin ${targetBranch}`, { cwd }, GIT_COMMAND_TIMEOUT_MS);
+
+    // Merge the feature branch
+    await execWithTimeout(`git merge ${branch} --no-ff -m "Merge branch '${branch}' into ${targetBranch}"`, { cwd }, GIT_COMMAND_TIMEOUT_MS);
+
+    // Push merged target branch
+    await execWithTimeout(`git push origin ${targetBranch}`, { cwd }, GIT_PUSH_TIMEOUT_MS);
+
+    // Delete the feature branch locally and remotely
+    try {
+      await execWithTimeout(`git branch -d ${branch}`, { cwd }, GIT_COMMAND_TIMEOUT_MS);
+      await execWithTimeout(`git push origin --delete ${branch}`, { cwd }, GIT_COMMAND_TIMEOUT_MS);
+    } catch {
+      console.warn(`[ship-task] Could not delete branch ${branch}`);
+    }
+
+    console.log(`[ship-task] Local merge successful`);
+
+    return {
+      success: true,
+      mergeMethod: 'local',
+    };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`[ship-task] Local merge error: ${errorMsg}`);
+
+    // Try to recover by going back to the original branch
+    try {
+      await execWithTimeout(`git checkout ${branch}`, { cwd }, GIT_COMMAND_TIMEOUT_MS);
+    } catch {
+      // Ignore recovery error
+    }
+
+    return {
+      success: false,
+      mergeMethod: 'local',
+      error: errorMsg,
+    };
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const {
@@ -101,6 +226,8 @@ export async function POST(request: Request) {
       prNumber,
       skipMerge = false,
       deferWorktreeCleanup = true, // GAP #12 FIX: Default to safe mode
+      mergeStrategy = 'pr',        // Default to PR workflow
+      targetBranch = 'main',       // Default target branch
     } = await request.json() as ShipRequest;
 
     if (!taskId || !title) {
@@ -211,16 +338,60 @@ export async function POST(request: Request) {
       }
     }
 
-    // GAP #15 FIX: Merge the PR
-    let mergeResult: { success: boolean; prNumber?: number; mergeMethod?: string; error?: string } | undefined;
+    // Handle merge based on strategy
+    let mergeResult: { success: boolean; prNumber?: number; prUrl?: string; mergeMethod?: string; error?: string } | undefined;
+    let prCreated = false;
+    const isTargetBranch = currentBranch === targetBranch || currentBranch === 'main' || currentBranch === 'master';
 
-    if (!skipMerge && currentBranch !== 'main' && currentBranch !== 'master') {
-      mergeResult = await mergePR(currentBranch, prNumber, repoDir);
+    if (!skipMerge && !isTargetBranch) {
+      console.log(`[ship-task] Merge strategy: ${mergeStrategy}, target: ${targetBranch}`);
 
-      if (!mergeResult.success) {
-        console.warn(`[ship-task] PR merge failed: ${mergeResult.error}`);
-        // Don't fail the whole operation - warn and continue
-        // User may want to merge manually or PR may not exist yet
+      switch (mergeStrategy) {
+        case 'local-merge':
+          // Merge locally without creating a PR
+          mergeResult = await mergeLocally(currentBranch, targetBranch, repoDir);
+          if (!mergeResult.success) {
+            console.warn(`[ship-task] Local merge failed: ${mergeResult.error}`);
+          }
+          break;
+
+        case 'pr':
+          // Create PR and merge it
+          const prResult = await createPR(currentBranch, title, targetBranch, repoDir);
+          if (prResult.success && prResult.prNumber) {
+            prCreated = true;
+            // Now merge the PR
+            mergeResult = await mergePR(currentBranch, prResult.prNumber, repoDir);
+            if (mergeResult) {
+              mergeResult.prNumber = prResult.prNumber;
+              mergeResult.prUrl = prResult.prUrl;
+            }
+          } else {
+            mergeResult = {
+              success: false,
+              error: prResult.error || 'Failed to create PR',
+            };
+          }
+          if (!mergeResult?.success) {
+            console.warn(`[ship-task] PR workflow failed: ${mergeResult?.error}`);
+          }
+          break;
+
+        case 'ask':
+          // Just create PR but don't merge - user will decide
+          const askPrResult = await createPR(currentBranch, title, targetBranch, repoDir);
+          prCreated = askPrResult.success;
+          mergeResult = {
+            success: askPrResult.success,
+            prNumber: askPrResult.prNumber,
+            prUrl: askPrResult.prUrl,
+            mergeMethod: 'pending', // Not merged yet
+            error: askPrResult.error,
+          };
+          break;
+
+        default:
+          console.warn(`[ship-task] Unknown merge strategy: ${mergeStrategy}`);
       }
     }
 
@@ -263,8 +434,13 @@ export async function POST(request: Request) {
       branch: currentBranch,
       commitSha,
       pushed: true,
-      // GAP #15: PR merge info
+      // Merge workflow info
+      mergeStrategy,
+      targetBranch,
       merged: mergeResult?.success ?? false,
+      prCreated,
+      prNumber: mergeResult?.prNumber,
+      prUrl: mergeResult?.prUrl,
       mergeInfo: mergeResult,
       worktreeRemoved,
       worktreePendingCleanup,

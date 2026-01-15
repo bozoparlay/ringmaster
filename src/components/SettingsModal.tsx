@@ -1,31 +1,37 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { IDE_OPTIONS, type IdeType } from '@/hooks/useIdeSettings';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type SettingsSection = 'ai' | 'editor' | 'git' | 'tasks' | 'github';
+type SettingsSection = 'ai' | 'workflow' | 'git' | 'tasks' | 'github';
 
 interface AISettings {
   model: string;           // Primary model for AI Assist
   similarityModel: string; // Model for similarity checks (defaults to haiku)
   reviewModel: string;     // Model for task review (defaults to sonnet)
+  workModel: string;       // Model for Claude Code when working on tasks
   region: string;
   profile: string;
   enabled: boolean;
 }
 
-interface EditorSettings {
-  preferred: string;
-  openInNewWindow: boolean;
+interface WorkflowSettings {
+  defaultIde: IdeType;
+  openIdeAlongside: boolean;  // When using iTerm, also open IDE?
 }
+
+type MergeStrategy = 'pr' | 'local-merge' | 'ask';
 
 interface GitSettings {
   worktreeLocation: string;
   defaultBranch: string;
   autoCommitOnReview: boolean;
+  mergeStrategy: MergeStrategy;  // How to handle completed work
+  targetBranch: string;          // Branch to merge/PR into
 }
 
 interface TaskSettings {
@@ -41,7 +47,7 @@ interface GitHubSettings {
 
 interface ProjectSettings {
   ai: AISettings;
-  editor: EditorSettings;
+  workflow: WorkflowSettings;
   git: GitSettings;
   tasks: TaskSettings;
   github: GitHubSettings;
@@ -56,18 +62,21 @@ const DEFAULT_SETTINGS: ProjectSettings = {
     model: 'claude-opus-4-5',
     similarityModel: 'claude-haiku',    // Fast/cheap for quick checks
     reviewModel: 'claude-sonnet-4',     // Good quality for reviews
+    workModel: 'claude-sonnet-4',       // Claude Code model for task work
     region: 'us-east-1',
     profile: 'claude',
     enabled: true,
   },
-  editor: {
-    preferred: 'cursor',
-    openInNewWindow: true,
+  workflow: {
+    defaultIde: 'iterm-interactive',   // Interactive mode with iTerm + Claude
+    openIdeAlongside: false,
   },
   git: {
     worktreeLocation: '.tasks',
     defaultBranch: 'main',
     autoCommitOnReview: true,
+    mergeStrategy: 'pr',       // Default to creating PRs
+    targetBranch: 'main',      // Default target branch for PRs/merges
   },
   tasks: {
     defaultPriority: 'medium',
@@ -123,12 +132,7 @@ const AWS_REGIONS = [
   { id: 'eu-west-1', name: 'EU (Ireland)' },
 ];
 
-const EDITORS = [
-  { id: 'cursor', name: 'Cursor', icon: '⌘' },
-  { id: 'kiro', name: 'Kiro', icon: '✦' },
-  { id: 'vscode', name: 'VS Code', icon: '◇' },
-  { id: 'terminal', name: 'Terminal', icon: '▸' },
-];
+// IDE options come from useIdeSettings hook - IDE_OPTIONS imported at top
 
 const PRIORITIES = [
   { id: 'critical', name: 'Critical', color: 'bg-red-500' },
@@ -152,19 +156,39 @@ const EFFORTS = [
 
 const STORAGE_KEY = 'ringmaster-project-settings';
 
+// Storage key for IDE preference (shared with useIdeSettings hook)
+const IDE_STORAGE_KEY = 'ringmaster-ide-preference';
+
 function loadSettings(): ProjectSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
+    // Also load IDE preference from the hook's storage key
+    const idePreference = localStorage.getItem(IDE_STORAGE_KEY) as IdeType | null;
+
     if (stored) {
       const parsed = JSON.parse(stored);
       // Deep merge with defaults to handle new fields
+      // Also merge in the IDE preference from the hook's storage
       return {
         ai: { ...DEFAULT_SETTINGS.ai, ...parsed.ai },
-        editor: { ...DEFAULT_SETTINGS.editor, ...parsed.editor },
+        workflow: {
+          ...DEFAULT_SETTINGS.workflow,
+          ...parsed.workflow,
+          // IDE preference from hook takes precedence if set
+          ...(idePreference ? { defaultIde: idePreference } : {}),
+        },
         git: { ...DEFAULT_SETTINGS.git, ...parsed.git },
         tasks: { ...DEFAULT_SETTINGS.tasks, ...parsed.tasks },
         github: { ...DEFAULT_SETTINGS.github, ...parsed.github },
+      };
+    }
+
+    // No stored settings, but check for IDE preference
+    if (idePreference) {
+      return {
+        ...DEFAULT_SETTINGS,
+        workflow: { ...DEFAULT_SETTINGS.workflow, defaultIde: idePreference },
       };
     }
   } catch (e) {
@@ -177,6 +201,8 @@ function saveSettings(settings: ProjectSettings): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    // Also sync IDE preference to the hook's storage key for consistency
+    localStorage.setItem(IDE_STORAGE_KEY, settings.workflow.defaultIde);
   } catch (e) {
     console.error('Failed to save settings:', e);
   }
@@ -218,6 +244,45 @@ export function getReviewModelId(): string {
   const settings = loadSettings();
   const model = AI_MODELS.find(m => m.id === (settings.ai.reviewModel || 'claude-sonnet-4'));
   return model?.modelId || AI_MODELS.find(m => m.id === 'claude-sonnet-4')?.modelId || AI_MODELS[2].modelId;
+}
+
+// Get model name for Claude Code work (used with --model flag)
+// Returns the short model name like 'sonnet' or 'opus' for Claude CLI
+export function getWorkModel(): { id: string; name: string; cliName: string } {
+  const settings = loadSettings();
+  const modelId = settings.ai.workModel || 'claude-sonnet-4';
+
+  // Map our model IDs to Claude CLI model names
+  const cliModelMap: Record<string, string> = {
+    'claude-opus-4-5': 'opus',
+    'claude-sonnet-4-5': 'sonnet',
+    'claude-sonnet-4': 'sonnet',
+    'claude-3-5-sonnet': 'sonnet',
+    'claude-haiku': 'haiku',
+  };
+
+  const model = AI_MODELS.find(m => m.id === modelId);
+  return {
+    id: modelId,
+    name: model?.name || 'Claude Sonnet 4',
+    cliName: cliModelMap[modelId] || 'sonnet',
+  };
+}
+
+/**
+ * Get git workflow settings for use in ship-task API
+ */
+export function getGitSettings(): {
+  mergeStrategy: 'pr' | 'local-merge' | 'ask';
+  targetBranch: string;
+  worktreeLocation: string;
+} {
+  const settings = loadSettings();
+  return {
+    mergeStrategy: settings.git.mergeStrategy || 'pr',
+    targetBranch: settings.git.targetBranch || 'main',
+    worktreeLocation: settings.git.worktreeLocation || '.tasks',
+  };
 }
 
 // ============================================================================
@@ -554,7 +619,24 @@ function AISection({ settings, updateSettings, onResetSection, dynamicModels, is
 
         {/* Per-operation model selection */}
         <div className="space-y-3 p-3 rounded-lg bg-surface-800/30 border border-surface-700/50">
-          <p className="text-xs text-surface-400">Choose different models per operation to balance cost vs quality:</p>
+          <p className="text-xs text-surface-400">Choose models per operation to balance cost vs quality:</p>
+
+          {/* Execution Model - Used when spawning agent to work on tasks */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-surface-300">Execution</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">Agent work</span>
+            </div>
+            <select
+              value={settings.ai.workModel || 'claude-sonnet-4'}
+              onChange={(e) => updateSettings('ai', { workModel: e.target.value })}
+              className="w-full bg-surface-800/50 border border-surface-700/50 rounded-lg px-3 py-2 text-sm text-surface-100 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+            >
+              {availableModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} - {m.description}</option>
+              ))}
+            </select>
+          </div>
 
           {/* AI Assist Model (primary) */}
           <div className="space-y-1">
@@ -612,7 +694,7 @@ function AISection({ settings, updateSettings, onResetSection, dynamicModels, is
   );
 }
 
-function EditorSection({ settings, updateSettings, onResetSection }: SectionProps) {
+function WorkflowSection({ settings, updateSettings, onResetSection }: SectionProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -620,38 +702,127 @@ function EditorSection({ settings, updateSettings, onResetSection }: SectionProp
           <h3 className="text-lg font-semibold text-surface-100 flex items-center gap-2">
             <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </span>
-            Editor & IDE
+            Workflow
           </h3>
-          <p className="text-xs text-surface-500 mt-1">Choose your development environment</p>
+          <p className="text-xs text-surface-500 mt-1">Configure how tasks are launched</p>
         </div>
         <button
           type="button"
-          onClick={() => onResetSection('editor')}
+          onClick={() => onResetSection('workflow')}
           className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
         >
           Reset
         </button>
       </div>
 
-      <SelectField
-        label="Preferred Editor"
-        value={settings.editor.preferred}
-        onChange={(preferred) => updateSettings('editor', { preferred })}
-        options={EDITORS}
-      />
+      {/* Default Launch Mode */}
+      <div className="space-y-3">
+        <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider">
+          Default Launch Mode
+        </label>
+        <p className="text-xs text-surface-500 -mt-1">
+          Choose how &quot;Start Working&quot; launches your task
+        </p>
+        <div className="grid gap-2">
+          {IDE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => updateSettings('workflow', { defaultIde: option.id })}
+              className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                settings.workflow.defaultIde === option.id
+                  ? 'bg-amber-500/10 border-amber-500/50 text-amber-200'
+                  : 'bg-surface-800/50 border-surface-700/50 text-surface-300 hover:border-surface-600'
+              }`}
+            >
+              {/* Icon based on option */}
+              <span className="w-6 h-6 flex items-center justify-center text-sm">
+                {option.icon === 'iterm' && (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M3 8h18" />
+                    <circle cx="6" cy="6" r="1" fill="#EF4444" stroke="none" />
+                    <circle cx="9" cy="6" r="1" fill="#FBBF24" stroke="none" />
+                    <circle cx="12" cy="6" r="1" fill="#22C55E" stroke="none" />
+                    <path d="M7 12l3 2-3 2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M13 16h4" strokeLinecap="round" />
+                  </svg>
+                )}
+                {option.icon === 'code' && (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.583 2.005L8.994 9.572l-4.166-3.2-2.33 1.16 3.732 3.477-3.732 3.477 2.33 1.16 4.166-3.2 8.59 7.567 3.903-1.822V3.828l-3.904-1.823zm0 3.783v12.424l-5.588-4.925V10.71l5.588-4.922z"/>
+                  </svg>
+                )}
+                {option.icon === 'cursor' && (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 01.35-.15h6.87a.5.5 0 00.35-.85L6.35 2.86a.5.5 0 00-.85.35z"/>
+                  </svg>
+                )}
+                {option.icon === 'kiro' && (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="2" stroke="currentColor" fill="none"/>
+                    <path d="M8 12h8M12 8v8" strokeWidth="2" stroke="currentColor" strokeLinecap="round"/>
+                  </svg>
+                )}
+                {option.icon === 'terminal' && (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
+                {option.icon === 'folder' && (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                )}
+              </span>
+              <div className="flex-1 text-left">
+                <span className="text-sm font-medium">{option.name}</span>
+                <p className="text-xs text-surface-500 mt-0.5">{option.description}</p>
+              </div>
+              {settings.workflow.defaultIde === option.id && (
+                <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <ToggleSwitch
-        enabled={settings.editor.openInNewWindow}
-        onChange={(openInNewWindow) => updateSettings('editor', { openInNewWindow })}
-        label="Open in New Window"
-        description="Launch editor in a new window instead of reusing existing"
-      />
+      {/* Execution Mode Explanation */}
+      <div className="p-3 rounded-lg bg-surface-800/30 border border-surface-700/50">
+        <p className="text-xs text-surface-400">
+          <strong className="text-surface-300">iTerm + Claude</strong> opens a terminal with Claude running interactively - you can guide the AI, ask questions, and iterate.
+          Other options open your IDE and copy the prompt to clipboard.
+        </p>
+      </div>
     </div>
   );
 }
+
+const MERGE_STRATEGIES: { id: MergeStrategy; name: string; description: string; icon: string }[] = [
+  {
+    id: 'pr',
+    name: 'Create Pull Request',
+    description: 'Push branch and create a PR on GitHub for review',
+    icon: 'pr',
+  },
+  {
+    id: 'local-merge',
+    name: 'Merge Locally',
+    description: 'Merge directly into target branch on your machine',
+    icon: 'merge',
+  },
+  {
+    id: 'ask',
+    name: 'Ask Each Time',
+    description: 'Prompt me to choose when shipping a task',
+    icon: 'question',
+  },
+];
 
 function GitSection({ settings, updateSettings, onResetSection }: SectionProps) {
   return (
@@ -664,9 +835,9 @@ function GitSection({ settings, updateSettings, onResetSection }: SectionProps) 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </span>
-            Git & Workflow
+            Git & Shipping
           </h3>
-          <p className="text-xs text-surface-500 mt-1">Configure version control behavior</p>
+          <p className="text-xs text-surface-500 mt-1">Configure version control and how tasks are shipped</p>
         </div>
         <button
           type="button"
@@ -677,20 +848,85 @@ function GitSection({ settings, updateSettings, onResetSection }: SectionProps) 
         </button>
       </div>
 
+      {/* Merge Strategy */}
+      <div className="space-y-3">
+        <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider">
+          When Task is Ready to Ship
+        </label>
+        <div className="grid gap-2">
+          {MERGE_STRATEGIES.map((strategy) => (
+            <button
+              key={strategy.id}
+              type="button"
+              onClick={() => updateSettings('git', { mergeStrategy: strategy.id })}
+              className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                settings.git.mergeStrategy === strategy.id
+                  ? 'bg-amber-500/10 border-amber-500/50 text-amber-200'
+                  : 'bg-surface-800/50 border-surface-700/50 text-surface-300 hover:border-surface-600'
+              }`}
+            >
+              <span className="w-6 h-6 flex items-center justify-center">
+                {strategy.icon === 'pr' && (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                  </svg>
+                )}
+                {strategy.icon === 'merge' && (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                )}
+                {strategy.icon === 'question' && (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+              </span>
+              <div className="flex-1 text-left">
+                <span className="text-sm font-medium">{strategy.name}</span>
+                <p className="text-xs text-surface-500 mt-0.5">{strategy.description}</p>
+              </div>
+              {settings.git.mergeStrategy === strategy.id && (
+                <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Target Branch */}
       <TextField
-        label="Worktree Location"
-        value={settings.git.worktreeLocation}
-        onChange={(worktreeLocation) => updateSettings('git', { worktreeLocation })}
-        placeholder=".tasks"
-        hint="Relative path where task worktrees are created"
+        label="Target Branch"
+        value={settings.git.targetBranch}
+        onChange={(targetBranch) => updateSettings('git', { targetBranch })}
+        placeholder="main"
+        hint="Branch to create PRs against or merge into"
         mono
       />
+
+      <div className="border-t border-surface-700/50 pt-4 mt-4">
+        <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider mb-3">
+          Worktree Settings
+        </label>
+
+        <TextField
+          label="Worktree Location"
+          value={settings.git.worktreeLocation}
+          onChange={(worktreeLocation) => updateSettings('git', { worktreeLocation })}
+          placeholder=".tasks"
+          hint="Relative path where task worktrees are created"
+          mono
+        />
+      </div>
 
       <TextField
         label="Default Branch"
         value={settings.git.defaultBranch}
         onChange={(defaultBranch) => updateSettings('git', { defaultBranch })}
         placeholder="main"
+        hint="Branch to create worktrees from (usually same as target)"
         mono
       />
 
@@ -834,11 +1070,11 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    id: 'editor',
-    label: 'Editor',
+    id: 'workflow',
+    label: 'Workflow',
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
       </svg>
     ),
   },
@@ -976,7 +1212,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   // Check which sections have been modified
   const modifiedSections = new Set<SettingsSection>();
   if (JSON.stringify(settings.ai) !== JSON.stringify(originalSettings.ai)) modifiedSections.add('ai');
-  if (JSON.stringify(settings.editor) !== JSON.stringify(originalSettings.editor)) modifiedSections.add('editor');
+  if (JSON.stringify(settings.workflow) !== JSON.stringify(originalSettings.workflow)) modifiedSections.add('workflow');
   if (JSON.stringify(settings.git) !== JSON.stringify(originalSettings.git)) modifiedSections.add('git');
   if (JSON.stringify(settings.tasks) !== JSON.stringify(originalSettings.tasks)) modifiedSections.add('tasks');
   if (JSON.stringify(settings.github) !== JSON.stringify(originalSettings.github)) modifiedSections.add('github');
@@ -1061,7 +1297,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       onRefreshModels={() => fetchModels(settings.ai.profile, settings.ai.region)}
                     />
                   )}
-                  {activeSection === 'editor' && <EditorSection {...sectionProps} />}
+                  {activeSection === 'workflow' && <WorkflowSection {...sectionProps} />}
                   {activeSection === 'git' && <GitSection {...sectionProps} />}
                   {activeSection === 'tasks' && <TasksSection {...sectionProps} />}
                   {activeSection === 'github' && <GitHubSection {...sectionProps} />}

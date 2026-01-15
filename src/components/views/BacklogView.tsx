@@ -28,6 +28,7 @@ import { DeleteConfirmationModal } from '../DeleteConfirmationModal';
 import { SortControl } from '../SortControl';
 import type { AuxiliarySignals } from '@/lib/local-storage-cache';
 import { getGitHubSyncConfig, GitHubSyncService } from '@/lib/storage/github-sync';
+import { getGitSettings } from '@/components/SettingsModal';
 import { getUserGitHubConfig } from '@/lib/storage/project-config';
 import type { SortConfig } from '@/lib/sorting';
 import { sortItems, loadSortPrefs, saveSortPrefs, DEFAULT_SORT_CONFIG } from '@/lib/sorting';
@@ -584,6 +585,9 @@ export function BacklogView({
 
   const handleShip = async (item: BacklogItem) => {
     try {
+      // Get git workflow settings
+      const gitSettings = getGitSettings();
+
       const response = await fetch('/api/ship-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -593,6 +597,9 @@ export function BacklogView({
           branch: item.branch,
           worktreePath: item.worktreePath,
           backlogPath,
+          // Pass git workflow settings
+          mergeStrategy: gitSettings.mergeStrategy,
+          targetBranch: gitSettings.targetBranch,
         }),
       });
 
@@ -619,7 +626,16 @@ export function BacklogView({
         }
       }
 
-      showToast(`Shipped! Branch ${result.branch} pushed to remote.`, 'success');
+      // Show appropriate success message based on what happened
+      if (result.mergeStrategy === 'local-merge' && result.merged) {
+        showToast(`Shipped! Branch ${result.branch} merged locally to ${result.targetBranch}.`, 'success');
+      } else if (result.merged) {
+        showToast(`Shipped! PR merged to ${result.targetBranch}.`, 'success');
+      } else if (result.prCreated) {
+        showToast(`Shipped! PR #${result.prNumber} created for ${result.branch}.`, 'success');
+      } else {
+        showToast(`Shipped! Branch ${result.branch} pushed to remote.`, 'success');
+      }
     } catch (error) {
       console.error('Ship error:', error);
       showToast('Ship failed. Check console for details.', 'error');

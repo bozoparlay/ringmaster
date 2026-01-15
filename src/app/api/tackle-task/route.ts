@@ -3,13 +3,15 @@ import * as fs from 'fs/promises';
 import path from 'path';
 import { execWithTimeout, TimeoutError } from '@/lib/resilience';
 import { buildTaskPrompt } from '@/lib/prompt-builder';
+import { createExecution, type TaskSource } from '@/lib/db/executions';
+import { upsertWorkspace } from '@/lib/db/workspaces';
 
 // Timeouts for various operations
 const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
 const GIT_WORKTREE_TIMEOUT_MS = 30000;  // 30s for worktree creation
 const EXTERNAL_APP_TIMEOUT_MS = 5000;   // 5s for opening VS Code, clipboard
 
-type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro' | 'worktree';
+type IdeType = 'vscode' | 'terminal' | 'cursor' | 'kiro' | 'worktree' | 'iterm-interactive';
 
 interface TackleRequest {
   taskId: string;
@@ -25,16 +27,48 @@ interface TackleRequest {
   backlogPath?: string;
   worktreePath?: string;  // If already created
   ide?: IdeType;
+  taskSource?: TaskSource;  // 'file' | 'github' | 'quick'
+  model?: string;  // Claude CLI model name (opus, sonnet, haiku)
 }
 
-// IDE launch commands
+// IDE launch commands (empty = no simple command, handled specially)
 const IDE_COMMANDS: Record<IdeType, string> = {
   vscode: 'code -n',
   cursor: 'cursor',
   kiro: 'kiro',
   terminal: '', // No IDE to launch, but still copy to clipboard
   worktree: '', // GAP #4: No IDE and no clipboard - just create worktree
+  'iterm-interactive': '', // Special handling: opens iTerm with Claude running
 };
+
+/**
+ * Spawn iTerm2 with Claude running in the worktree directory.
+ * Uses AppleScript to open a new iTerm window and run Claude with the prompt.
+ */
+async function spawnItermWithClaude(worktreePath: string, prompt: string, model: string): Promise<void> {
+  // Escape the prompt for use in AppleScript (double-escape for shell + applescript)
+  const escapedPrompt = prompt
+    .replace(/\\/g, '\\\\\\\\')  // Escape backslashes
+    .replace(/"/g, '\\\\\\"')     // Escape double quotes
+    .replace(/'/g, "'\"'\"'");    // Escape single quotes for shell embedding
+
+  // AppleScript to open iTerm and run Claude with the specified model
+  const appleScript = `
+    tell application "iTerm2"
+      create window with default profile
+      tell current session of current window
+        write text "cd '${worktreePath}' && claude --model ${model} '${escapedPrompt}'"
+      end tell
+      activate
+    end tell
+  `;
+
+  await execWithTimeout(
+    `osascript -e '${appleScript.replace(/'/g, "'\"'\"'")}'`,
+    {},
+    EXTERNAL_APP_TIMEOUT_MS + 2000 // Give iTerm a bit more time to launch
+  );
+}
 
 function slugify(text: string): string {
   return text
@@ -59,7 +93,9 @@ export async function POST(request: Request) {
       value,
       backlogPath,
       worktreePath,
-      ide = 'vscode'
+      ide = 'vscode',
+      taskSource = 'file',
+      model = 'sonnet'  // Default to sonnet if not specified
     } = await request.json() as TackleRequest;
 
     if (!title || !taskId) {
@@ -151,11 +187,78 @@ export async function POST(request: Request) {
       branch,
     });
 
+    // Create execution record in database
+    let execution;
+    try {
+      execution = await createExecution({
+        taskSource,
+        taskId,
+        taskTitle: title,
+        prompt,
+      });
+      console.log(`[tackle-task] Created execution ${execution.id} for task ${taskId}`);
+    } catch (err) {
+      console.error('[tackle-task] Failed to create execution record:', err);
+      // Non-fatal - continue without execution tracking
+    }
+
+    // Track workspace in database if we have a worktree
+    if (branch && targetDir !== repoDir) {
+      try {
+        await upsertWorkspace({
+          taskSource,
+          taskId,
+          worktreePath: targetDir,
+          branch,
+        });
+        console.log(`[tackle-task] Tracked workspace for task ${taskId}`);
+      } catch (err) {
+        console.error('[tackle-task] Failed to track workspace:', err);
+        // Non-fatal - continue without workspace tracking
+      }
+    }
+
     // Escape single quotes for shell
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
 
-    // The command to run claude with the task context
-    const claudeCommand = `claude '${escapedPrompt}'`;
+    // The command to run claude with the task context (with model flag)
+    const claudeCommand = `claude --model ${model} '${escapedPrompt}'`;
+
+    // Handle iTerm interactive mode specially - spawns iTerm with Claude running
+    if (ide === 'iterm-interactive') {
+      try {
+        await spawnItermWithClaude(targetDir, prompt, model);
+        console.log(`[tackle-task] Spawned iTerm with Claude for task ${taskId}`);
+      } catch (err) {
+        if (err instanceof TimeoutError) {
+          console.warn('[tackle-task] iTerm launch timed out');
+        } else {
+          console.warn('[tackle-task] Failed to launch iTerm:', err);
+        }
+        // Fallback: copy to clipboard so user can still paste manually
+        try {
+          await execWithTimeout(
+            `echo '${escapedPrompt}' | pbcopy`,
+            {},
+            EXTERNAL_APP_TIMEOUT_MS
+          );
+        } catch {
+          // Clipboard fallback also failed, but we continue
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        command: claudeCommand,
+        prompt,
+        targetDir,
+        branch,
+        ide,
+        model,
+        executionId: execution?.id,
+        message: `Opening iTerm with Claude (${model})... You can interact directly!`,
+      });
+    }
 
     // Copy to clipboard using pbcopy (macOS) - skip for worktree-only mode
     if (ide !== 'worktree') {
@@ -201,8 +304,10 @@ export async function POST(request: Request) {
       targetDir,
       branch,
       ide,
+      model,
+      executionId: execution?.id,
       message: ide === 'terminal'
-        ? 'Command copied to clipboard. Paste in your terminal to start!'
+        ? `Command copied to clipboard (${model}). Paste in your terminal to start!`
         : `Opening ${ide}... Command copied to clipboard!`,
     });
   } catch (error) {
