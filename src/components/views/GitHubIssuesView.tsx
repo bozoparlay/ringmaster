@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -39,6 +39,29 @@ interface GitHubIssue {
   labels: Array<{ name: string; color: string }>;
   assignee: { login: string } | null;
   user: { login: string };
+}
+
+// Auto-sync polling interval (in milliseconds)
+// GitHub recommends no more than once per minute for authenticated requests
+// We use 60 seconds by default, configurable via localStorage
+const DEFAULT_SYNC_INTERVAL_MS = 60000; // 60 seconds
+const MIN_SYNC_INTERVAL_MS = 30000; // 30 seconds minimum
+const SYNC_COOLDOWN_MS = 5000; // Don't re-sync within 5 seconds of a local update
+
+/**
+ * Get configured sync interval from localStorage
+ * Key: ringmaster:github:syncInterval (in seconds)
+ */
+function getSyncInterval(): number {
+  if (typeof window === 'undefined') return DEFAULT_SYNC_INTERVAL_MS;
+  const stored = localStorage.getItem('ringmaster:github:syncInterval');
+  if (stored) {
+    const seconds = parseInt(stored, 10);
+    if (!isNaN(seconds) && seconds >= MIN_SYNC_INTERVAL_MS / 1000) {
+      return seconds * 1000;
+    }
+  }
+  return DEFAULT_SYNC_INTERVAL_MS;
 }
 
 // Up Next sizing configuration (same as BacklogView)
@@ -189,6 +212,12 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [isCreatingIssue, setIsCreatingIssue] = useState(false);
 
+  // Auto-sync state
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const lastLocalUpdateRef = useRef<number>(0); // Timestamp of last local update (for cooldown)
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
   };
@@ -325,14 +354,25 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
     return closestCenter(args);
   }, []);
 
-  const fetchIssues = useCallback(async () => {
+  const fetchIssues = useCallback(async (isBackgroundSync = false) => {
     if (!repo) {
       setLoading(false);
       setError('No repository configured. Open Settings to connect GitHub.');
       return;
     }
 
-    setLoading(true);
+    // For background sync, check cooldown (don't refresh right after a local update)
+    if (isBackgroundSync) {
+      const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
+      if (timeSinceLastUpdate < SYNC_COOLDOWN_MS) {
+        console.log('[GitHubSync] Skipping background sync - within cooldown window');
+        return;
+      }
+      setIsSyncing(true);
+    } else {
+      setLoading(true);
+    }
+
     setError(null);
 
     try {
@@ -354,17 +394,50 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       }
 
       setIssues(data.issues || []);
+      setLastSyncTime(new Date());
+
+      if (isBackgroundSync) {
+        console.log('[GitHubSync] Background sync complete');
+      }
     } catch (err) {
       console.error('Failed to fetch GitHub issues:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch issues');
+      if (!isBackgroundSync) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch issues');
+      }
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   }, [repo, token]);
 
+  // Initial fetch on mount
   useEffect(() => {
-    fetchIssues();
+    fetchIssues(false);
   }, [fetchIssues]);
+
+  // Auto-sync polling
+  useEffect(() => {
+    const interval = getSyncInterval();
+
+    // Clear existing interval
+    if (syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current);
+    }
+
+    // Only start polling if repo is configured
+    if (repo) {
+      console.log(`[GitHubSync] Starting auto-sync every ${interval / 1000}s`);
+      syncIntervalRef.current = setInterval(() => {
+        fetchIssues(true);
+      }, interval);
+    }
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, [repo, fetchIssues]);
 
   const items = useMemo(() => issues.map(issueToBacklogItem), [issues]);
 
@@ -461,6 +534,9 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       return;
     }
 
+    // Mark local update time to prevent immediate re-sync (avoid infinite loops)
+    lastLocalUpdateRef.current = Date.now();
+
     // 1. OPTIMISTIC UPDATE - Update local state immediately
     const previousIssues = [...issues];
 
@@ -530,6 +606,9 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       showToast('GitHub repository not configured', 'error');
       return;
     }
+
+    // Mark local update time to prevent immediate re-sync (avoid infinite loops)
+    lastLocalUpdateRef.current = Date.now();
 
     // 1. OPTIMISTIC UPDATE - Save previous state for rollback, then update UI immediately
     const previousIssues = [...issues];
@@ -719,7 +798,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
           </div>
           <p className="text-surface-300">{error}</p>
           <button
-            onClick={fetchIssues}
+            onClick={() => fetchIssues(false)}
             className="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-200 rounded-lg text-sm transition-colors"
           >
             Try Again
@@ -773,12 +852,23 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
           </span>
           <span className="text-surface-700">|</span>
           <span className="font-mono text-accent">{columnItems.in_progress.length} active</span>
+          {/* Sync indicator - shows last sync time and current sync status */}
+          {lastSyncTime && (
+            <span className="text-surface-600 text-[10px]" title={`Auto-syncs every ${getSyncInterval() / 1000}s`}>
+              {isSyncing ? (
+                <span className="text-accent animate-pulse">syncing...</span>
+              ) : (
+                `synced ${Math.round((Date.now() - lastSyncTime.getTime()) / 1000)}s ago`
+              )}
+            </span>
+          )}
           <button
-            onClick={fetchIssues}
-            className="p-1.5 hover:bg-surface-800 rounded-lg transition-colors"
-            title="Refresh"
+            onClick={() => fetchIssues(false)}
+            disabled={loading}
+            className={`p-1.5 hover:bg-surface-800 rounded-lg transition-colors ${loading || isSyncing ? 'opacity-50' : ''}`}
+            title="Refresh now"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
