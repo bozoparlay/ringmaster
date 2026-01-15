@@ -42,8 +42,16 @@ export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, 
   const isUpNext = status === 'up_next';
   const isBacklog = status === 'backlog';
 
+  // The entire column is the drop zone - this ensures drops work near the header too
   return (
-    <div className="flex flex-col min-w-[240px] flex-1">
+    <div
+      ref={setNodeRef}
+      className={`
+        flex flex-col min-w-[240px] flex-1
+        transition-all duration-200
+        ${isOver ? 'scale-[1.01]' : ''}
+      `}
+    >
       {/* Column Header */}
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex flex-col gap-0.5">
@@ -64,7 +72,6 @@ export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, 
 
       {/* Column Content */}
       <div
-        ref={setNodeRef}
         className={`
           flex-1 rounded-xl p-2
           bg-gradient-to-b ${columnAccents[status]} to-transparent

@@ -5,12 +5,14 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   DragStartEvent,
   DragEndEvent,
+  CollisionDetection,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { KanbanColumn } from '../KanbanColumn';
@@ -242,6 +244,26 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Custom collision detection that prioritizes columns over items
+  // This ensures dropping near column headers works correctly
+  const customCollisionDetection: CollisionDetection = useCallback((args) => {
+    // First check for pointer within droppables (columns)
+    const pointerCollisions = pointerWithin(args);
+
+    // Find column collisions (status IDs)
+    const columnCollisions = pointerCollisions.filter(
+      collision => COLUMN_ORDER.includes(collision.id as Status)
+    );
+
+    // If pointer is within a column, prioritize that
+    if (columnCollisions.length > 0) {
+      return columnCollisions;
+    }
+
+    // Fall back to closestCenter for sorting within columns
+    return closestCenter(args);
+  }, []);
 
   const fetchIssues = useCallback(async () => {
     if (!repo) {
@@ -590,7 +612,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog }: GitH
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={customCollisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
