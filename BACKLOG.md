@@ -2,20 +2,6 @@
 
 ## [backlog] Future Considerations
 
-### Subtasks / Task Hierarchies
-<!-- ringmaster:id=2a074610-7208-4247-bb07-1c02b8d9a321 -->
-**Priority**: Medium
-
-**Description**:
-- **Priority:** someday
-- **Effort:** high
-- **Value:** medium
-- **Tags:** tasks, hierarchy, future
-- **Status:** backlog
-
-**Description:**
-Support parent-child task relationships for breaking down complex features into smaller pieces. Would require UI for creating subtasks, collapsible task groups, and dependency tracking.
-
 ### Image/Screenshot Attachments
 <!-- ringmaster:id=83edb8d1-1e50-4afb-a2aa-a7ea12127ea3 -->
 **Priority**: Medium
@@ -204,35 +190,6 @@ type NormalizedEntryType =
   | 'ErrorMessage';
 ```
 
-### Add Keyboard Shortcuts
-<!-- ringmaster:id=6860bdfe-3746-4094-982b-2f63e040a31c -->
-**Priority**: Medium
-
-**Description**:
-- **Priority:** low
-- **Effort:** trivial
-- **Value:** low
-- **Tags:** ui, ux, shortcuts
-- **Status:** backlog
-
-**Description:**
-Add keyboard shortcuts for common actions to improve power user experience.
-
-**Acceptance Criteria:**
-- [ ] Cmd/Ctrl+N: New task
-- [ ] Cmd/Ctrl+T: Tackle selected task
-- [ ] Cmd/Ctrl+R: Review selected task
-- [ ] Cmd/Ctrl+S: Ship selected task
-- [ ] Escape: Close modal/detail view
-- [ ] Arrow keys: Navigate between tasks
-- [ ] Enter: Open selected task
-- [ ] ?: Show keyboard shortcut help
-- [ ] Shortcuts work globally (not just when focused on specific element)
-- [ ] Shortcuts displayed in tooltips
-
-**Notes:**
-Use a library like `react-hotkeys-hook` or build simple custom hook.
-
 ---
 
 ## [backlog] UI/UX Improvements
@@ -260,5 +217,58 @@ Install `react-markdown` and `remark-gfm` (for GitHub Flavored Markdown support)
 
 **Notes:**
 (Additional context, links, or findings to be added by the user)
+
+---
+
+## [ready_to_ship] Future Considerations
+
+### Subtasks / Task Hierarchies
+<!-- ringmaster:id=2a074610-7208-4247-bb07-1c02b8d9a321 -->
+**Priority**: Medium
+
+**Description**:
+- **Priority:** someday
+- **Effort:** high
+- **Value:** medium
+- **Tags:** tasks, hierarchy, future
+- **Status:** backlog
+
+**Description:**
+Support parent-child task relationships for breaking down complex features into smaller pieces. Would require UI for creating subtasks, collapsible task groups, and dependency tracking.
+
+---
+
+## [ready_to_ship] Phase 2: Operations & Polish
+
+### Add Keyboard Shortcuts
+<!-- ringmaster:id=6860bdfe-3746-4094-982b-2f63e040a31c -->
+**Priority**: Medium
+**Branch**: task/6860bdfe-add-keyboard-shortcuts
+**Worktree**: .tasks/task-6860bdfe
+
+**Description**:
+- **Priority:** low
+- **Effort:** trivial
+- **Value:** low
+- **Tags:** ui, ux, shortcuts
+- **Status:** backlog
+
+**Description:**
+Add keyboard shortcuts for common actions to improve power user experience.
+
+**Acceptance Criteria:**
+- [ ] Cmd/Ctrl+N: New task
+- [ ] Cmd/Ctrl+T: Tackle selected task
+- [ ] Cmd/Ctrl+R: Review selected task
+- [ ] Cmd/Ctrl+S: Ship selected task
+- [ ] Escape: Close modal/detail view
+- [ ] Arrow keys: Navigate between tasks
+- [ ] Enter: Open selected task
+- [ ] ?: Show keyboard shortcut help
+- [ ] Shortcuts work globally (not just when focused on specific element)
+- [ ] Shortcuts displayed in tooltips
+
+**Notes:**
+Use a library like `react-hotkeys-hook` or build simple custom hook.
 
 ---
