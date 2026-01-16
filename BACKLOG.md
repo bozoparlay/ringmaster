@@ -34,6 +34,36 @@ Allow attaching images to tasks for mockups, bug screenshots, or visual context.
 
 ## [backlog] Phase 1: Multi-Agent Support
 
+### Add Agent Configuration UI
+<!-- ringmaster:id=a31e2c4b-7a8c-4fc9-aee2-8ba72a49ff32 -->
+**Priority**: High
+
+**Description**:
+- **Priority:** medium
+- **Effort:** medium
+- **Value:** medium
+- **Tags:** agent, ui, settings
+- **Status:** backlog
+
+**Description:**
+Create a settings page where users can configure available agents, set defaults, and manage agent-specific settings (API keys, MCP configs, model preferences).
+
+**Acceptance Criteria:**
+- [ ] Settings page accessible from nav/menu
+- [ ] List of supported agents with enabled/disabled toggle
+- [ ] Default agent selector
+- [ ] Per-agent configuration:
+  - Claude Code: model preference, MCP config path, permission mode
+  - Codex: API key, model
+  - Cursor: path to cursor executable
+- [ ] Agent availability status shown (installed, authenticated, unavailable)
+- [ ] "Test Connection" button for each agent
+- [ ] Settings persisted to database
+- [ ] Settings exportable/importable as JSON
+
+**Notes:**
+VK stores agent configs in ExecutorConfigs with profiles. Consider a simpler approach first - just store configs per agent type.
+
 ### Create Agent Abstraction Layer
 <!-- ringmaster:id=555d37c0-c66a-4a8d-a6a6-a6b561f4dbd0 -->
 **Priority**: Medium
@@ -77,36 +107,6 @@ interface AgentExecutor {
 ```
 
 Start with Claude Code fully implemented, then add others.
-
-### Add Agent Configuration UI
-<!-- ringmaster:id=a31e2c4b-7a8c-4fc9-aee2-8ba72a49ff32 -->
-**Priority**: Medium
-
-**Description**:
-- **Priority:** medium
-- **Effort:** medium
-- **Value:** medium
-- **Tags:** agent, ui, settings
-- **Status:** backlog
-
-**Description:**
-Create a settings page where users can configure available agents, set defaults, and manage agent-specific settings (API keys, MCP configs, model preferences).
-
-**Acceptance Criteria:**
-- [ ] Settings page accessible from nav/menu
-- [ ] List of supported agents with enabled/disabled toggle
-- [ ] Default agent selector
-- [ ] Per-agent configuration:
-  - Claude Code: model preference, MCP config path, permission mode
-  - Codex: API key, model
-  - Cursor: path to cursor executable
-- [ ] Agent availability status shown (installed, authenticated, unavailable)
-- [ ] "Test Connection" button for each agent
-- [ ] Settings persisted to database
-- [ ] Settings exportable/importable as JSON
-
-**Notes:**
-VK stores agent configs in ExecutorConfigs with profiles. Consider a simpler approach first - just store configs per agent type.
 
 ### Implement Codex Agent Support
 <!-- ringmaster:id=f3ca3938-9152-46ae-91a3-7d1e719d5db5 -->

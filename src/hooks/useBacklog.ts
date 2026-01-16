@@ -274,6 +274,7 @@ export function useBacklog(options: UseBacklogOptions = {}): UseBacklogReturn {
       lastSync: new Date().toISOString(),
       filePath: filePath || undefined,
     });
+
   }, [items, signals, filePath, scheduleWrite]);
 
   // Import a full BacklogItem (preserves ID) - used for sync to avoid creating duplicates

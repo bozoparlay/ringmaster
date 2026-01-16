@@ -158,6 +158,19 @@ interface ReviewResult {
   scope?: ScopeAnalysis;
 }
 
+/**
+ * Calculate a 0-100 review score based on issues found.
+ * Critical issues have heavy penalties, suggestions barely affect score.
+ */
+function calculateReviewScore(issues: ReviewResult['issues']): number {
+  let score = 100;
+  score -= issues.filter(i => i.severity === 'critical').length * 25;
+  score -= issues.filter(i => i.severity === 'major').length * 15;
+  score -= issues.filter(i => i.severity === 'minor').length * 5;
+  score -= issues.filter(i => i.severity === 'suggestion').length * 1;
+  return Math.max(0, Math.min(100, score));
+}
+
 export interface BacklogViewProps {
   items: BacklogItem[];
   onUpdateItem: (item: BacklogItem) => Promise<void>;
@@ -261,6 +274,16 @@ export function BacklogView({
         if (data.prUrl) setPrUrl(data.prUrl);
         if (data.prNumber) setPrNumber(data.prNumber);
         if (data.prError) setPrError(data.prError);
+
+        // Save review score to the task
+        const score = calculateReviewScore(data.result.issues || []);
+        await onUpdateItem({
+          ...item,
+          reviewScore: score,
+          reviewPassed: data.result.passed,
+          prUrl: data.prUrl || item.prUrl,
+          prNumber: data.prNumber || item.prNumber,
+        });
       } else {
         setReviewError(data.error || 'Review failed');
       }
@@ -274,7 +297,9 @@ export function BacklogView({
 
   const handleReviewContinue = async () => {
     if (!reviewItem) return;
-    await onUpdateItem({ ...reviewItem, status: 'ready_to_ship' });
+    // Get latest version of item (with review score) from items array
+    const latestItem = items.find(i => i.id === reviewItem.id) || reviewItem;
+    await onUpdateItem({ ...latestItem, status: 'ready_to_ship' });
     setIsReviewOpen(false);
     setReviewItem(null);
     showToast('Task moved to Ready to Ship!', 'success');
@@ -299,8 +324,10 @@ export function BacklogView({
     }
 
     const feedback = feedbackParts.length > 0 ? feedbackParts.join(' | ') : undefined;
+    // Get latest version of item (with review score) from items array
+    const latestItem = items.find(i => i.id === reviewItem.id) || reviewItem;
     await onUpdateItem({
-      ...reviewItem,
+      ...latestItem,
       status: 'in_progress',
       reviewFeedback: feedback,
     });

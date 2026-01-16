@@ -34,6 +34,9 @@ export interface BacklogItem {
   // Quality tracking (computed on load, not persisted)
   qualityScore?: number;     // 0-100 quality score
   qualityIssues?: string[];  // List of quality issues found
+  // Review tracking
+  reviewScore?: number;      // 0-100 score from last code review
+  reviewPassed?: boolean;    // Whether last review passed
 }
 
 export interface Column {

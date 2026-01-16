@@ -3,7 +3,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import ReactMarkdown from 'react-markdown';
-import type { BacklogItem, Priority } from '@/types/backlog';
+import type { BacklogItem, Priority, Status } from '@/types/backlog';
 import { QUALITY_THRESHOLD } from '@/lib/task-quality';
 import { cleanDescriptionForDisplay } from '@/lib/display-utils';
 
@@ -20,6 +20,13 @@ const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }
   medium: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', dot: 'bg-yellow-500' },
   low: { bg: 'bg-green-500/10', text: 'text-green-400', dot: 'bg-green-500' },
   someday: { bg: 'bg-surface-600/30', text: 'text-surface-400', dot: 'bg-surface-500' },
+};
+
+// Execution phase display config
+const phaseConfig: Partial<Record<Status, { label: string; color: string }>> = {
+  in_progress: { label: 'Coding', color: 'text-blue-400' },
+  review: { label: 'QA', color: 'text-purple-400' },
+  ready_to_ship: { label: 'Complete', color: 'text-green-400' },
 };
 
 export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProps) {
@@ -112,6 +119,28 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
         </div>
       )}
 
+      {/* Review score badge (top-right) - shows pass/fail score from code review */}
+      {item.reviewScore !== undefined && (
+        <div
+          className={`absolute -top-1.5 -right-1.5 z-10 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+            item.reviewPassed
+              ? 'bg-green-500/20 text-green-400 border-green-500/30'
+              : 'bg-red-500/20 text-red-400 border-red-500/30'
+          }`}
+          title={item.reviewPassed ? 'Review passed' : 'Review failed'}
+        >
+          {item.reviewScore}%
+        </div>
+      )}
+
+      {/* Needs action indicator - pulsing orange when task returned from failed review */}
+      {item.reviewFeedback && item.status === 'in_progress' && (
+        <div
+          className="absolute top-1/2 -left-2.5 -translate-y-1/2 w-2 h-2 bg-orange-500 rounded-full animate-pulse"
+          title={`Review feedback: ${item.reviewFeedback}`}
+        />
+      )}
+
       {/* Content */}
       <div className="pl-2.5">
         {/* Header with priority badge */}
@@ -156,6 +185,13 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
           {item.value && (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
               ${item.value.charAt(0).toUpperCase()}
+            </span>
+          )}
+
+          {/* Execution phase indicator */}
+          {phaseConfig[item.status] && (
+            <span className={`text-[9px] uppercase tracking-wider ${phaseConfig[item.status]!.color}`}>
+              ● {phaseConfig[item.status]!.label}
             </span>
           )}
 
