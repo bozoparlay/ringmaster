@@ -10,6 +10,7 @@ import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 /**
  * Executions table - tracks each time an agent works on a task.
  * Links to tasks via (task_source, task_id) composite key.
+ * Supports parent-child relationships for subagent tracking.
  */
 export const executions = sqliteTable('executions', {
   id: text('id').primaryKey(),
@@ -31,6 +32,16 @@ export const executions = sqliteTable('executions', {
   // Timestamps (stored as ISO strings for SQLite)
   startedAt: text('started_at').notNull(),
   completedAt: text('completed_at'),
+
+  // Multi-source tracking (new for subagent support)
+  sourceType: text('source_type').default('subprocess'), // 'subprocess' | 'hook'
+  parentExecutionId: text('parent_execution_id'), // Self-reference for parent-child hierarchy
+  subagentType: text('subagent_type'), // 'Explore' | 'Plan' | 'code-reviewer' | etc.
+
+  // Metrics from subagent completion
+  totalTokens: integer('total_tokens'),
+  totalToolUses: integer('total_tool_uses'),
+  durationMs: integer('duration_ms'),
 });
 
 /**
@@ -74,6 +85,31 @@ export const workspaces = sqliteTable('workspaces', {
   touchedAt: text('touched_at').notNull(), // Updated when task is viewed/accessed
 });
 
+/**
+ * Execution events table - fine-grained event tracking for observability.
+ * Records subagent completions, tool uses, and other significant events.
+ */
+export const executionEvents = sqliteTable('execution_events', {
+  id: text('id').primaryKey(),
+  executionId: text('execution_id').notNull().references(() => executions.id),
+
+  // Event classification
+  eventType: text('event_type').notNull(), // 'subagent_stop' | 'tool_use' | 'error' | etc.
+
+  // Tool-specific data
+  toolName: text('tool_name'), // 'Bash', 'Edit', 'Task', etc.
+
+  // Subagent correlation
+  subagentExecutionId: text('subagent_execution_id'), // Links to child execution record
+
+  // Timing
+  timestamp: text('timestamp').notNull(),
+  durationMs: integer('duration_ms'),
+
+  // Flexible metadata storage
+  metadata: text('metadata'), // JSON blob for event-specific data
+});
+
 // Type exports for use in application code
 export type Execution = typeof executions.$inferSelect;
 export type NewExecution = typeof executions.$inferInsert;
@@ -83,3 +119,6 @@ export type NewExecutionLog = typeof executionLogs.$inferInsert;
 
 export type Workspace = typeof workspaces.$inferSelect;
 export type NewWorkspace = typeof workspaces.$inferInsert;
+
+export type ExecutionEvent = typeof executionEvents.$inferSelect;
+export type NewExecutionEvent = typeof executionEvents.$inferInsert;

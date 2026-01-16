@@ -491,6 +491,7 @@ export function QuickTasksView({ onPromoteToBacklog, onNewTask }: QuickTasksView
           setSelectedItem(null);
         } : undefined}
         isQuickTaskView
+        taskSource="quick"
       />
 
       {/* Tackle Modal */}

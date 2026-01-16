@@ -1111,6 +1111,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
           setIsPanelOpen(false);
         } : undefined}
         isGitHubView
+        taskSource="github"
         existingCategories={existingCategories}
       />
 

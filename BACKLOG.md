@@ -1,8 +1,44 @@
 # Backlog
 
-## Phase 1: Multi-Agent Support
+## [backlog] Future Considerations
+
+### Subtasks / Task Hierarchies
+<!-- ringmaster:id=2a074610-7208-4247-bb07-1c02b8d9a321 -->
+**Priority**: Medium
+
+**Description**:
+- **Priority:** someday
+- **Effort:** high
+- **Value:** medium
+- **Tags:** tasks, hierarchy, future
+- **Status:** backlog
+
+**Description:**
+Support parent-child task relationships for breaking down complex features into smaller pieces. Would require UI for creating subtasks, collapsible task groups, and dependency tracking.
+
+### Image/Screenshot Attachments
+<!-- ringmaster:id=83edb8d1-1e50-4afb-a2aa-a7ea12127ea3 -->
+**Priority**: Medium
+
+**Description**:
+- **Priority:** someday
+- **Effort:** medium
+- **Value:** low
+- **Tags:** tasks, attachments, future
+- **Status:** backlog
+
+**Description:**
+Allow attaching images to tasks for mockups, bug screenshots, or visual context. Store in .ringmaster/attachments/ or use base64 in database.
+
+---
+
+## [backlog] Phase 1: Multi-Agent Support
 
 ### Create Agent Abstraction Layer
+<!-- ringmaster:id=555d37c0-c66a-4a8d-a6a6-a6b561f4dbd0 -->
+**Priority**: Medium
+
+**Description**:
 - **Priority:** high
 - **Effort:** medium
 - **Value:** high
@@ -42,9 +78,11 @@ interface AgentExecutor {
 
 Start with Claude Code fully implemented, then add others.
 
----
-
 ### Add Agent Configuration UI
+<!-- ringmaster:id=a31e2c4b-7a8c-4fc9-aee2-8ba72a49ff32 -->
+**Priority**: Medium
+
+**Description**:
 - **Priority:** medium
 - **Effort:** medium
 - **Value:** medium
@@ -70,9 +108,11 @@ Create a settings page where users can configure available agents, set defaults,
 **Notes:**
 VK stores agent configs in ExecutorConfigs with profiles. Consider a simpler approach first - just store configs per agent type.
 
----
-
 ### Implement Codex Agent Support
+<!-- ringmaster:id=f3ca3938-9152-46ae-91a3-7d1e719d5db5 -->
+**Priority**: Medium
+
+**Description**:
 - **Priority:** medium
 - **Effort:** medium
 - **Value:** medium
@@ -96,9 +136,13 @@ Codex may have different capabilities than Claude Code. Document what features a
 
 ---
 
-## Phase 2: Operations & Polish
+## [backlog] Phase 2: Operations & Polish
 
 ### Add Dev Server Management
+<!-- ringmaster:id=44358272-9455-42b0-8679-12c0eef406f2 -->
+**Priority**: Medium
+
+**Description**:
 - **Priority:** low
 - **Effort:** medium
 - **Value:** medium
@@ -122,9 +166,11 @@ Allow users to start/stop dev servers for tasks, with automatic port management 
 **Notes:**
 VK has a sophisticated dev server system with project-level scripts. Start simpler: per-task scripts, manual port config.
 
----
-
 ### Add Real-time Execution Streaming UI
+<!-- ringmaster:id=7294784b-b7a9-4af5-8add-9a907c79675e -->
+**Priority**: Medium
+
+**Description**:
 - **Priority:** medium
 - **Effort:** medium
 - **Value:** high
@@ -158,9 +204,11 @@ type NormalizedEntryType =
   | 'ErrorMessage';
 ```
 
----
-
 ### Add Keyboard Shortcuts
+<!-- ringmaster:id=6860bdfe-3746-4094-982b-2f63e040a31c -->
+**Priority**: Medium
+
+**Description**:
 - **Priority:** low
 - **Effort:** trivial
 - **Value:** low
@@ -187,28 +235,30 @@ Use a library like `react-hotkeys-hook` or build simple custom hook.
 
 ---
 
-## Future Considerations
+## [backlog] UI/UX Improvements
 
-### Subtasks / Task Hierarchies
-- **Priority:** someday
-- **Effort:** high
-- **Value:** medium
-- **Tags:** tasks, hierarchy, future
-- **Status:** backlog
+### Task brief should render in markdown
+<!-- ringmaster:id=91ec65a1-5abb-4387-bee4-225db4893535 -->
+**Priority**: Low | **Effort**: Low | **Value**: Medium
 
+**Description**:
 **Description:**
-Support parent-child task relationships for breaking down complex features into smaller pieces. Would require UI for creating subtasks, collapsible task groups, and dependency tracking.
+Implement markdown rendering for task briefs/descriptions throughout the Bozo Parlay application to improve readability and formatting options. Currently, task descriptions appear as plain text, limiting the ability to structure information with headers, lists, code blocks, and emphasis. Adding markdown support will make task briefs more scannable and professional, especially for complex tasks that require detailed technical explanations or multi-step instructions.
 
----
+**Requirements:**
+- Integrate a markdown parsing library (e.g., `marked`, `react-markdown`, or `markdown-it`) into the frontend
+- Render all task brief/description fields using the markdown parser
+- Support common markdown syntax including headers, bold, italic, lists (ordered and unordered), code blocks, inline code, links, and blockquotes
+- Ensure markdown rendering is sanitized to prevent XSS attacks (use a library like `DOMPurify` or built-in sanitization)
+- Apply consistent styling to rendered markdown that matches the application's design system
+- Maintain backward compatibility with existing plain text descriptions
+- Ensure markdown renders correctly in all contexts where task briefs appear (task cards, detail views, modals, etc.)
+- Consider adding a preview mode if users can edit task descriptions
 
-### Image/Screenshot Attachments
-- **Priority:** someday
-- **Effort:** medium
-- **Value:** low
-- **Tags:** tasks, attachments, future
-- **Status:** backlog
+**Technical Approach:**
+Install `react-markdown` and `remark-gfm` (for GitHub Flavored Markdown support) as dependencies. Create a reusable `MarkdownRenderer` component that wraps the markdown parser with sanitization and custom styling. Update task display components (likely in `components/tasks/` or similar) to use this new renderer instead of plain text display. Add CSS classes to style markdown elements consistently with the app theme. If task editing exists, consider adding `react-simplemde-editor` or similar for a markdown editor with preview.
 
-**Description:**
-Allow attaching images to tasks for mockups, bug screenshots, or visual context. Store in .ringmaster/attachments/ or use base64 in database.
+**Notes:**
+(Additional context, links, or findings to be added by the user)
 
 ---

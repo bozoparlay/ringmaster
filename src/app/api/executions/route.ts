@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   createExecution,
   getExecutionsForTask,
+  getExecutionsWithChildren,
   type TaskSource,
 } from '@/lib/db/executions';
 
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const taskSource = searchParams.get('task_source') as TaskSource | null;
     const taskId = searchParams.get('task_id');
+    const includeChildren = searchParams.get('include_children') === 'true';
 
     if (!taskSource || !taskId) {
       return NextResponse.json(
@@ -24,7 +26,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const executions = await getExecutionsForTask(taskSource, taskId);
+    // Use tree query if children requested
+    const executions = includeChildren
+      ? await getExecutionsWithChildren(taskSource, taskId)
+      : await getExecutionsForTask(taskSource, taskId);
 
     return NextResponse.json({ executions });
   } catch (error) {

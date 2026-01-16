@@ -19,7 +19,9 @@ import { getAISettings } from './SettingsModal';
 import { Toast } from './Toast';
 import { CategorySelector } from './CategorySelector';
 import { useAutoSave } from '@/hooks/useAutoSave';
+import { useTaskSession } from '@/hooks/useTaskSession';
 import { SessionContinuityPanel } from './SessionContinuityPanel';
+import { ExecutionTree } from './ExecutionTree';
 
 // Helper to get configured GitHub repo
 function getGitHubRepo(): string | null {
@@ -152,6 +154,13 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
     enabled: isOpen && !!editedItem,
     validate: (item) => !!item.title.trim(), // Only save if title is not empty
   });
+
+  // Fetch execution history with subagents for in-progress tasks
+  const { executions, isLoading: isLoadingExecutions } = useTaskSession(
+    taskSource,
+    editedItem?.id,
+    { includeChildren: true }
+  );
 
   useEffect(() => {
     if (item) {
@@ -989,6 +998,35 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
               taskTitle={editedItem.title}
               onContinue={(sessionId, prompt) => onContinue(editedItem, sessionId, prompt)}
             />
+          )}
+
+          {/* Execution History with Subagents */}
+          {(isInProgress || isInReview || isReadyToShip) && executions.length > 0 && (
+            <div className="pt-2 border-t border-surface-700/50">
+              <ExecutionTree
+                executions={executions}
+                isLoading={isLoadingExecutions}
+              />
+            </div>
+          )}
+
+          {/* Contextual prompt when no executions exist for in-progress tasks */}
+          {isInProgress && executions.length === 0 && !isLoadingExecutions && (
+            <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-purple-300">Track subagent activity</p>
+                  <p className="text-xs text-purple-300/70 mt-0.5">
+                    Configure Claude Code hooks in Settings → Integrations to see execution history with subagent details.
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* GAP #6 FIX: Open in IDE button for in_progress tasks with worktree */}

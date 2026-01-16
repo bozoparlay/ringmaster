@@ -47,7 +47,13 @@ const SCHEMA_STATEMENTS = [
     exit_code INTEGER,
     prompt TEXT,
     started_at TEXT NOT NULL,
-    completed_at TEXT
+    completed_at TEXT,
+    source_type TEXT DEFAULT 'subprocess',
+    parent_execution_id TEXT,
+    subagent_type TEXT,
+    total_tokens INTEGER,
+    total_tool_uses INTEGER,
+    duration_ms INTEGER
   )`,
   `CREATE TABLE IF NOT EXISTS execution_logs (
     id TEXT PRIMARY KEY,
@@ -68,10 +74,23 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT NOT NULL,
     touched_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS execution_events (
+    id TEXT PRIMARY KEY,
+    execution_id TEXT NOT NULL REFERENCES executions(id),
+    event_type TEXT NOT NULL,
+    tool_name TEXT,
+    subagent_execution_id TEXT,
+    timestamp TEXT NOT NULL,
+    duration_ms INTEGER,
+    metadata TEXT
+  )`,
   `CREATE INDEX IF NOT EXISTS idx_executions_task ON executions(task_source, task_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_executions_session ON executions(agent_session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_executions_parent ON executions(parent_execution_id)`,
   `CREATE INDEX IF NOT EXISTS idx_execution_logs_execution ON execution_logs(execution_id)`,
   `CREATE INDEX IF NOT EXISTS idx_workspaces_task ON workspaces(task_source, task_id)`,
   `CREATE INDEX IF NOT EXISTS idx_workspaces_touched ON workspaces(touched_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_execution_events_execution ON execution_events(execution_id)`,
 ];
 
 /**
