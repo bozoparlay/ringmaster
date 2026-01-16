@@ -89,15 +89,36 @@ function extractCategorySections(content: string): CategorySection[] {
       sections.push({ name, status, content: sectionContent });
     }
   } else {
-    // Original format without status markers - treat entire file as one section
-    // Parse all content starting from first ## or ### header
-    const firstHeader = content.search(/^##?\s+/m);
-    if (firstHeader !== -1) {
-      sections.push({
-        name: 'Backlog',
-        status: 'backlog',
-        content: content.slice(firstHeader),
-      });
+    // Original format without status markers - parse ## headers as categories
+    // Each ## header becomes a separate category section (all with backlog status)
+    const categoryRegex = /^## (.+)$/gm;
+    const categoryMatches = [...content.matchAll(categoryRegex)];
+
+    if (categoryMatches.length > 0) {
+      for (let i = 0; i < categoryMatches.length; i++) {
+        const match = categoryMatches[i];
+        const name = match[1].trim();
+
+        const startIndex = match.index! + match[0].length;
+        const endIndex = i < categoryMatches.length - 1 ? categoryMatches[i + 1].index! : content.length;
+        const sectionContent = content.slice(startIndex, endIndex);
+
+        sections.push({
+          name,
+          status: 'backlog',
+          content: sectionContent,
+        });
+      }
+    } else {
+      // Fallback: if no ## headers found, treat whole content as uncategorized
+      const firstHeader = content.search(/^###?\s+/m);
+      if (firstHeader !== -1) {
+        sections.push({
+          name: 'Uncategorized',
+          status: 'backlog',
+          content: content.slice(firstHeader),
+        });
+      }
     }
   }
 

@@ -12,10 +12,28 @@
 const METADATA_PATTERNS = [
   // Ringmaster task ID HTML comments (both old and new format)
   /<!--\s*ringmaster[-:](?:task-)?id[=:][^>]+-->\s*/gi,
-  // Priority/Effort/Value metadata line
+  // Priority/Effort/Value metadata line (inline format)
   /\*\*Priority\*\*:\s*\w+\s*\|\s*\*\*Effort\*\*:\s*\w+(?:\s*\|\s*\*\*Value\*\*:\s*\w+)?\s*/gi,
   // Standalone Priority line (alternative format)
   /---\s*\*Priority:\s*\w+\*\s*\*Effort:\s*\w+\*\s*/gi,
+  // Bullet-point metadata lines (BACKLOG.md format)
+  /^-\s*\*\*Priority:\*\*\s*.+$/gim,
+  /^-\s*\*\*Effort:\*\*\s*.+$/gim,
+  /^-\s*\*\*Value:\*\*\s*.+$/gim,
+  /^-\s*\*\*Tags:\*\*\s*.+$/gim,
+  /^-\s*\*\*Status:\*\*\s*.+$/gim,
+  // Plain text metadata lines (after markdown stripping)
+  /^Priority:\s*.+$/gim,
+  /^Effort:\s*.+$/gim,
+  /^Value:\s*.+$/gim,
+  /^Tags:\s*.+$/gim,
+  /^Status:\s*.+$/gim,
+  // Section labels that clutter preview
+  /^Description:\s*/gim,
+  /^Acceptance Criteria:\s*/gim,
+  /^Notes:\s*/gim,
+  // Checkbox items ([ ] or [x])
+  /^\[\s*[x ]?\s*\]/gim,
 ];
 
 /**
@@ -30,7 +48,32 @@ export function cleanDescriptionForDisplay(description: string | undefined): str
 
   let cleaned = description;
 
-  // Remove all metadata patterns
+  // First pass: Remove metadata patterns with markdown formatting
+  for (const pattern of METADATA_PATTERNS) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  // Strip markdown formatting for plain text preview
+  cleaned = cleaned
+    // Remove code blocks FIRST (before inline code processing interferes)
+    // Handle both ``` and `` fenced code blocks
+    .replace(/`{2,}[\s\S]*?`{2,}/g, '')
+    // Remove markdown headers (## Header -> Header)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold/italic (**text** or *text* -> text)
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    // Remove inline code (`code` -> code)
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove links but keep text ([text](url) -> text)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove horizontal rules
+    .replace(/^[-*_]{3,}$/gm, '')
+    // Remove list markers (-, *, +, 1.)
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '');
+
+  // Second pass: Remove plain-text metadata lines (after markdown stripped)
   for (const pattern of METADATA_PATTERNS) {
     cleaned = cleaned.replace(pattern, '');
   }
