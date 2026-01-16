@@ -94,6 +94,29 @@ export async function POST(request: Request) {
       GIT_WORKTREE_TIMEOUT_MS
     );
 
+    // Symlink parent's .claude/settings.local.json into worktree (for hooks)
+    // This ensures Claude Code sessions in the worktree inherit the parent's hook config
+    const parentClaudeDir = path.join(repoDir, '.claude');
+    const parentSettingsLocal = path.join(parentClaudeDir, 'settings.local.json');
+    const worktreeClaudeDir = path.join(worktreePath, '.claude');
+    const worktreeSettingsLocal = path.join(worktreeClaudeDir, 'settings.local.json');
+
+    try {
+      await fs.access(parentSettingsLocal);
+      // Parent has settings.local.json - symlink it to worktree
+      await fs.mkdir(worktreeClaudeDir, { recursive: true });
+      // Check if symlink already exists
+      try {
+        await fs.access(worktreeSettingsLocal);
+      } catch {
+        // Doesn't exist, create symlink
+        await fs.symlink(parentSettingsLocal, worktreeSettingsLocal);
+        console.log(`[create-worktree] Symlinked settings.local.json to ${worktreePath}`);
+      }
+    } catch {
+      // Parent doesn't have settings.local.json - that's fine
+    }
+
     return NextResponse.json({
       success: true,
       branch: branchName,

@@ -11,7 +11,7 @@ interface TaskCardProps {
   item: BacklogItem;
   onClick: () => void;
   isDragging?: boolean;
-  isInUpNext?: boolean; // Task is also in Up Next column
+  isPrioritized?: boolean; // Task is marked as priority (star indicator)
 }
 
 const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }> = {
@@ -25,11 +25,12 @@ const priorityConfig: Record<Priority, { bg: string; text: string; dot: string }
 // Execution phase display config
 const phaseConfig: Partial<Record<Status, { label: string; color: string }>> = {
   in_progress: { label: 'Coding', color: 'text-blue-400' },
-  review: { label: 'QA', color: 'text-purple-400' },
+  ai_review: { label: 'AI QA', color: 'text-purple-400' },
+  human_review: { label: 'Review', color: 'text-cyan-400' },
   ready_to_ship: { label: 'Complete', color: 'text-green-400' },
 };
 
-export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProps) {
+export function TaskCard({ item, onClick, isDragging, isPrioritized }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -74,7 +75,7 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
 
       {/* Low quality warning indicator (top-left) - caution triangle similar to star style */}
       {/* Moved from top-right to top-left, changed from red dot to caution triangle */}
-      {isLowQuality && !isInUpNext && (
+      {isLowQuality && !isPrioritized && (
         <div
           className="absolute -top-1.5 -left-1.5 z-10 drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]"
           title={`Low quality (${item.qualityScore}/100): ${item.qualityIssues?.join(', ')}`}
@@ -96,11 +97,11 @@ export function TaskCard({ item, onClick, isDragging, isInUpNext }: TaskCardProp
         </div>
       )}
 
-      {/* Up Next indicator (top-left) - gold star shows when a backlog item is prioritized */}
-      {isInUpNext && (
+      {/* Priority indicator (top-left) - gold star shows when a backlog item is prioritized */}
+      {isPrioritized && (
         <div
           className="absolute -top-1.5 -left-1.5 z-10 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]"
-          title="Priority: Up Next"
+          title="Priority Task"
         >
           <svg
             className="w-5 h-5"

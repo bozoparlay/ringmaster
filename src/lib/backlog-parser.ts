@@ -33,7 +33,10 @@ const STATUS_MAP: Record<string, Status> = {
   'ready': 'backlog',           // legacy mapping
   'in progress': 'in_progress',
   'in_progress': 'in_progress',
-  'review': 'review',
+  'review': 'ai_review',        // migrate old 'review' to ai_review
+  'ai_review': 'ai_review',
+  'human_review': 'human_review',
+  'up_next': 'backlog',         // migrate up_next to backlog (isPrioritized handled separately)
   'done': 'ready_to_ship',      // legacy mapping
   'ready_to_ship': 'ready_to_ship',
 };
@@ -373,8 +376,7 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
 
   // Group by status first, then by category within each status
   const byStatus = new Map<string, Map<string, BacklogItem[]>>();
-  // Note: up_next is a virtual status, so we treat it as backlog for serialization
-  const statusOrder = ['backlog', 'in_progress', 'review', 'ready_to_ship'];
+  const statusOrder = ['backlog', 'in_progress', 'ai_review', 'human_review', 'ready_to_ship'];
 
   for (const status of statusOrder) {
     byStatus.set(status, new Map());
@@ -382,9 +384,7 @@ export function serializeBacklogMd(items: BacklogItem[]): string {
 
   for (const item of deduplicatedItems) {
     const cat = item.category || 'Uncategorized';
-    // Normalize up_next status to backlog (up_next is virtual and computed at display time)
-    const normalizedStatus = item.status === 'up_next' ? 'backlog' : item.status;
-    const statusMap = byStatus.get(normalizedStatus) || byStatus.get('backlog')!;
+    const statusMap = byStatus.get(item.status) || byStatus.get('backlog')!;
     if (!statusMap.has(cat)) {
       statusMap.set(cat, []);
     }

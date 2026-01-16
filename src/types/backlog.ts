@@ -4,7 +4,7 @@ export type Effort = 'trivial' | 'low' | 'medium' | 'high' | 'very_high';
 
 export type Value = 'low' | 'medium' | 'high';
 
-export type Status = 'backlog' | 'up_next' | 'in_progress' | 'review' | 'ready_to_ship';
+export type Status = 'backlog' | 'in_progress' | 'ai_review' | 'human_review' | 'ready_to_ship';
 
 export interface BacklogItem {
   id: string;
@@ -37,6 +37,11 @@ export interface BacklogItem {
   // Review tracking
   reviewScore?: number;      // 0-100 score from last code review
   reviewPassed?: boolean;    // Whether last review passed
+  // Two-stage review pipeline
+  aiReviewStatus?: 'pending' | 'passed' | 'failed';
+  humanReviewStatus?: 'pending' | 'approved' | 'rejected';
+  // Priority indicator (replaces up_next semantics)
+  isPrioritized?: boolean;
 }
 
 export interface Column {
@@ -85,13 +90,10 @@ export const VALUE_LABELS: Record<Value, string> = {
 
 export const STATUS_LABELS: Record<Status, string> = {
   backlog: 'Backlog',
-  up_next: 'Up Next',
   in_progress: 'In Progress',
-  review: 'Review',
+  ai_review: 'AI Review',
+  human_review: 'Human Review',
   ready_to_ship: 'Ready to Ship',
 };
 
-export const COLUMN_ORDER: Status[] = ['backlog', 'up_next', 'in_progress', 'review', 'ready_to_ship'];
-
-// Maximum items shown in Up Next column
-export const UP_NEXT_LIMIT = 5;
+export const COLUMN_ORDER: Status[] = ['backlog', 'in_progress', 'ai_review', 'human_review', 'ready_to_ship'];

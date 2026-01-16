@@ -1,8 +1,9 @@
 /**
  * Claude Code hook configuration utilities.
  *
- * Generates hook configurations for tracking subagent executions
- * and provides helpers for managing user's Claude Code settings.
+ * Generates hook configurations for:
+ * - SubagentStop: Track Task tool subagent executions
+ * - Stop: Auto-move tasks to review when session ends
  */
 
 /**
@@ -11,7 +12,7 @@
 export type HookType = 'SubagentStop' | 'SessionStart' | 'SessionEnd' | 'Stop';
 
 /**
- * Generate the SubagentStop hook configuration for a given Ringmaster URL.
+ * Generate the SubagentStop hook configuration for tracking subagents.
  */
 export function generateSubagentStopHook(baseUrl: string = 'http://localhost:3000') {
   return {
@@ -20,7 +21,24 @@ export function generateSubagentStopHook(baseUrl: string = 'http://localhost:300
       {
         type: 'command',
         command: `curl -s -X POST ${baseUrl}/api/executions/hook/subagent-stop -H 'Content-Type: application/json' -d @-`,
-        timeout: 5000, // 5 second timeout
+        timeout: 5000,
+      },
+    ],
+  };
+}
+
+/**
+ * Generate the Stop hook configuration for auto-review.
+ * When a Claude Code session ends, this moves the task to ai_review.
+ */
+export function generateSessionStopHook(baseUrl: string = 'http://localhost:3000') {
+  return {
+    matcher: '', // Match all - no filtering
+    hooks: [
+      {
+        type: 'command',
+        command: `curl -s -X POST ${baseUrl}/api/executions/hook/session-stop -H 'Content-Type: application/json' -d @-`,
+        timeout: 5000,
       },
     ],
   };
@@ -33,8 +51,7 @@ export function generateRingmasterHooksConfig(
   baseUrl: string = 'http://localhost:3000',
   options: {
     subagentStop?: boolean;
-    sessionStart?: boolean;
-    sessionEnd?: boolean;
+    sessionStop?: boolean;
   } = {}
 ) {
   const hooks: Record<string, Array<{ matcher: string; hooks: Array<{ type: string; command: string; timeout: number }> }>> = {};
@@ -44,9 +61,10 @@ export function generateRingmasterHooksConfig(
     hooks.SubagentStop = [generateSubagentStopHook(baseUrl)];
   }
 
-  // Future: SessionStart - track when any Claude Code session begins
-  // Future: SessionEnd - track when session completes
-  // These can be enabled later for broader tracking
+  // Stop - auto-move tasks to review when session ends
+  if (options.sessionStop !== false) {
+    hooks.Stop = [generateSessionStopHook(baseUrl)];
+  }
 
   return { hooks };
 }

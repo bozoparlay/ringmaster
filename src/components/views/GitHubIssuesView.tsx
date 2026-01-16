@@ -84,9 +84,9 @@ function calculateUpNextLimit(backlogSize: number): number {
 // Map status to GitHub label
 const STATUS_TO_LABEL: Record<Status, string | null> = {
   'backlog': 'status: backlog',
-  'up_next': 'status: up-next',
   'in_progress': 'status: in-progress',
-  'review': 'status: review',
+  'ai_review': 'status: ai-review',
+  'human_review': 'status: human-review',
   'ready_to_ship': 'status: ready-to-ship',
 };
 
@@ -126,14 +126,14 @@ function issueToBacklogItem(issue: GitHubIssue): BacklogItem {
   let status: Status = 'backlog';
   if (issue.labels.some(l => l.name === 'status: in-progress')) {
     status = 'in_progress';
-  } else if (issue.labels.some(l => l.name === 'status: review')) {
-    status = 'review';
+  } else if (issue.labels.some(l => l.name === 'status: ai-review' || l.name === 'status: review')) {
+    status = 'ai_review';  // Map old 'review' label to ai_review
+  } else if (issue.labels.some(l => l.name === 'status: human-review')) {
+    status = 'human_review';
   } else if (issue.labels.some(l => l.name === 'status: ready-to-ship')) {
     status = 'ready_to_ship';
-  } else if (issue.labels.some(l => l.name === 'status: up-next')) {
-    status = 'up_next';
   }
-  // Note: 'status: backlog' label or no status label both map to 'backlog'
+  // Note: 'status: backlog', 'status: up-next', or no status label all map to 'backlog'
 
   // Extract category from category: label if present
   const categoryLabel = issue.labels.find(l => l.name.startsWith('category:'));
@@ -593,41 +593,18 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
 
     const columns: Record<Status, BacklogItem[]> = {
       backlog: [],
-      up_next: [],
       in_progress: [],
-      review: [],
+      ai_review: [],
+      human_review: [],
       ready_to_ship: [],
     };
 
     filtered.forEach((item) => {
-      if (item.status === 'up_next') {
-        columns.backlog.push(item);
-      } else {
-        columns[item.status].push(item);
-      }
+      columns[item.status].push(item);
     });
 
-    // Sort backlog by priority
-    columns.backlog.sort((a, b) => {
-      const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
-      if (priorityDiff !== 0) return priorityDiff;
-      return a.order - b.order;
-    });
-
-    // Calculate Up Next from high-priority backlog items (only when not searching)
-    let upNextItemIds = new Set<string>();
-    if (!isSearching) {
-      const eligibleForUpNext = columns.backlog.filter(
-        item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
-      );
-      const upNextLimit = calculateUpNextLimit(columns.backlog.length);
-      const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
-      upNextItemIds = new Set(upNextItems.map(item => item.id));
-      columns.up_next = upNextItems;
-    }
-
-    // Sort other columns by priority
-    ['in_progress', 'review', 'ready_to_ship'].forEach((status) => {
+    // Sort all columns by priority
+    Object.keys(columns).forEach((status) => {
       columns[status as Status].sort((a, b) => {
         const priorityDiff = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
         if (priorityDiff !== 0) return priorityDiff;
@@ -635,13 +612,18 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
       });
     });
 
+    // Track prioritized items for star display
+    const prioritizedIds = new Set(
+      items.filter(item => item.isPrioritized).map(item => item.id)
+    );
+
     // Calculate total filtered count
     const filteredCount = filtered.length;
 
-    return { columnItems: columns, upNextIds: upNextItemIds, filteredCount };
-  }, [items, searchQuery, isSearching]);
+    return { columnItems: columns, prioritizedIds, filteredCount };
+  }, [items, searchQuery]);
 
-  const { columnItems, upNextIds, filteredCount } = columnData;
+  const { columnItems, prioritizedIds, filteredCount } = columnData;
 
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
@@ -819,7 +801,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
 
     // If dropped on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
-      const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
+      const targetStatus = overId as Status;
       if (draggedItem.status !== targetStatus && draggedItem.githubIssueNumber) {
         updateIssueStatus(draggedItem.githubIssueNumber, draggedItem.status, targetStatus);
       }
@@ -1038,7 +1020,7 @@ export function GitHubIssuesView({ repo, token, onTackle, onAddToBacklog, search
                 onItemClick={handleItemClick}
                 isLoading={false}
                 activeTaskId={undefined}
-                upNextIds={upNextIds}
+                prioritizedIds={prioritizedIds}
               />
             ))}
           </div>

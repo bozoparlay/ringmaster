@@ -13,33 +13,33 @@ interface KanbanColumnProps {
   isLoading?: boolean;
   subtitle?: string;
   activeTaskId?: string | null;
-  upNextIds?: Set<string>;
+  prioritizedIds?: Set<string>;
   columnLabel?: string; // Custom label override for the column header
   onAddItem?: () => void; // Optional callback for adding items (shows + button in empty state)
 }
 
 const columnAccents: Record<Status, string> = {
   backlog: 'from-surface-600/20',
-  up_next: 'from-cyan-500/15',
   in_progress: 'from-accent/10',
-  review: 'from-purple-500/10',
+  ai_review: 'from-purple-500/10',
+  human_review: 'from-cyan-500/15',
   ready_to_ship: 'from-green-500/10',
 };
 
 const columnDots: Record<Status, string> = {
   backlog: 'bg-surface-500',
-  up_next: 'bg-cyan-400',
   in_progress: 'bg-accent',
-  review: 'bg-purple-500',
+  ai_review: 'bg-purple-500',
+  human_review: 'bg-cyan-400',
   ready_to_ship: 'bg-green-500',
 };
 
-export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, activeTaskId, upNextIds, columnLabel, onAddItem }: KanbanColumnProps) {
+export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, activeTaskId, prioritizedIds, columnLabel, onAddItem }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
 
-  const isUpNext = status === 'up_next';
+  const isHumanReview = status === 'human_review';
   const isBacklog = status === 'backlog';
 
   // The entire column is the drop zone - this ensures drops work near the header too
@@ -56,8 +56,8 @@ export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, 
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${columnDots[status]} ${isUpNext ? 'animate-pulse' : ''}`} />
-            <h2 className={`font-medium text-sm tracking-wide ${isUpNext ? 'text-cyan-300' : 'text-surface-200'}`}>
+            <span className={`w-2 h-2 rounded-full ${columnDots[status]} ${isHumanReview ? 'animate-pulse' : ''}`} />
+            <h2 className={`font-medium text-sm tracking-wide ${isHumanReview ? 'text-cyan-300' : 'text-surface-200'}`}>
               {columnLabel || STATUS_LABELS[status]}
             </h2>
             <span className="text-xs font-mono text-surface-500 tabular-nums">
@@ -95,7 +95,7 @@ export function KanbanColumn({ status, items, onItemClick, isLoading, subtitle, 
                   key={item.id}
                   item={item}
                   onClick={() => onItemClick(item)}
-                  isInUpNext={isBacklog && upNextIds?.has(item.id)}
+                  isPrioritized={isBacklog && prioritizedIds?.has(item.id)}
                 />
               ))
             ) : onAddItem ? (

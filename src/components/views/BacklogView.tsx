@@ -104,38 +104,8 @@ async function syncToGitHub(item: BacklogItem): Promise<boolean> {
   }
 }
 
-// Priority levels in order from highest to lowest
+// Priority levels in order from highest to lowest (used for priority indicator)
 const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'someday'];
-
-// Up Next sizing configuration
-const UP_NEXT_CONFIG = {
-  SMALL_THRESHOLD: 5,
-  SMALL_LIMIT: 1,
-  MEDIUM_THRESHOLD: 10,
-  MEDIUM_LIMIT: 3,
-  LARGE_THRESHOLD: 15,
-  LARGE_LIMIT: 4,
-  MAX_LIMIT: 5,
-} as const;
-
-function downgradePriority(current: Priority): Priority {
-  const index = PRIORITY_ORDER.indexOf(current);
-  if (index >= PRIORITY_ORDER.length - 1) return current;
-  return PRIORITY_ORDER[index + 1];
-}
-
-function upgradePriority(current: Priority): Priority {
-  const index = PRIORITY_ORDER.indexOf(current);
-  if (index <= 0) return current;
-  return PRIORITY_ORDER[index - 1];
-}
-
-function calculateUpNextLimit(backlogSize: number): number {
-  if (backlogSize < UP_NEXT_CONFIG.SMALL_THRESHOLD) return UP_NEXT_CONFIG.SMALL_LIMIT;
-  if (backlogSize < UP_NEXT_CONFIG.MEDIUM_THRESHOLD) return UP_NEXT_CONFIG.MEDIUM_LIMIT;
-  if (backlogSize < UP_NEXT_CONFIG.LARGE_THRESHOLD) return UP_NEXT_CONFIG.LARGE_LIMIT;
-  return UP_NEXT_CONFIG.MAX_LIMIT;
-}
 
 interface ScopeAnalysis {
   aligned: boolean;
@@ -253,6 +223,12 @@ export function BacklogView({
     setPrNumber(undefined);
     setPrError(undefined);
 
+    // Mark as pending while review runs
+    await onUpdateItem({
+      ...item,
+      aiReviewStatus: 'pending',
+    });
+
     try {
       const response = await fetch('/api/review-task', {
         method: 'POST',
@@ -275,36 +251,83 @@ export function BacklogView({
         if (data.prNumber) setPrNumber(data.prNumber);
         if (data.prError) setPrError(data.prError);
 
-        // Save review score to the task
+        // Save review score and AI review status to the task
         const score = calculateReviewScore(data.result.issues || []);
         await onUpdateItem({
           ...item,
           reviewScore: score,
           reviewPassed: data.result.passed,
+          aiReviewStatus: data.result.passed ? 'passed' : 'failed',
           prUrl: data.prUrl || item.prUrl,
           prNumber: data.prNumber || item.prNumber,
         });
       } else {
         setReviewError(data.error || 'Review failed');
+        // Mark as failed on error
+        await onUpdateItem({
+          ...item,
+          aiReviewStatus: 'failed',
+        });
       }
     } catch (error) {
       console.error('Review error:', error);
       setReviewError(error instanceof Error ? error.message : 'Review failed');
+      // Mark as failed on error
+      await onUpdateItem({
+        ...item,
+        aiReviewStatus: 'failed',
+      });
     } finally {
       setIsReviewLoading(false);
     }
   };
 
+  // Move task to human review after AI review passes
   const handleReviewContinue = async () => {
     if (!reviewItem) return;
     // Get latest version of item (with review score) from items array
     const latestItem = items.find(i => i.id === reviewItem.id) || reviewItem;
-    await onUpdateItem({ ...latestItem, status: 'ready_to_ship' });
+    await onUpdateItem({
+      ...latestItem,
+      status: 'human_review',
+      aiReviewStatus: 'passed',
+      humanReviewStatus: 'pending',
+    });
     setIsReviewOpen(false);
     setReviewItem(null);
-    showToast('Task moved to Ready to Ship!', 'success');
+    showToast('AI review passed! Task moved to Human Review.', 'success');
   };
 
+  // Human approves - move to ready to ship
+  const handleHumanApprove = async () => {
+    if (!reviewItem) return;
+    const latestItem = items.find(i => i.id === reviewItem.id) || reviewItem;
+    await onUpdateItem({
+      ...latestItem,
+      status: 'ready_to_ship',
+      humanReviewStatus: 'approved',
+    });
+    setIsReviewOpen(false);
+    setReviewItem(null);
+    showToast('Approved! Task moved to Ready to Ship.', 'success');
+  };
+
+  // Human rejects - return to in progress
+  const handleHumanReject = async () => {
+    if (!reviewItem) return;
+    const latestItem = items.find(i => i.id === reviewItem.id) || reviewItem;
+    await onUpdateItem({
+      ...latestItem,
+      status: 'in_progress',
+      humanReviewStatus: 'rejected',
+      reviewFeedback: 'Returned from Human Review - needs revision',
+    });
+    setIsReviewOpen(false);
+    setReviewItem(null);
+    showToast('Task returned to In Progress for revision.', 'info');
+  };
+
+  // Return task to in_progress after failed AI review
   const handleReviewRetry = async () => {
     if (!reviewItem) return;
 
@@ -329,6 +352,7 @@ export function BacklogView({
     await onUpdateItem({
       ...latestItem,
       status: 'in_progress',
+      aiReviewStatus: undefined, // Clear AI review status when returning to work
       reviewFeedback: feedback,
     });
     setIsReviewOpen(false);
@@ -385,49 +409,30 @@ export function BacklogView({
 
     const columns: Record<Status, BacklogItem[]> = {
       backlog: [],
-      up_next: [],
       in_progress: [],
-      review: [],
+      ai_review: [],
+      human_review: [],
       ready_to_ship: [],
     };
 
     filtered.forEach((item) => {
-      if (item.status === 'up_next') {
-        columns.backlog.push(item);
-      } else {
-        columns[item.status].push(item);
-      }
+      columns[item.status].push(item);
     });
 
-    // Sort the backlog using the user's sort preference
-    columns.backlog = sortItems(columns.backlog, sortConfig);
-
-    let upNextItemIds = new Set<string>();
-    if (!isSearching) {
-      // Up Next selection still based on priority (critical/high/medium get promoted)
-      // Sort by priority first to select the right items for Up Next
-      const prioritySorted = [...columns.backlog].sort((a, b) =>
-        PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority]
-      );
-      const eligibleForUpNext = prioritySorted.filter(
-        item => item.priority === 'critical' || item.priority === 'high' || item.priority === 'medium'
-      );
-      const upNextLimit = calculateUpNextLimit(columns.backlog.length);
-      const upNextItems = eligibleForUpNext.slice(0, upNextLimit);
-      upNextItemIds = new Set(upNextItems.map(item => item.id));
-      // Keep the user's sort order for Up Next display
-      columns.up_next = columns.backlog.filter(item => upNextItemIds.has(item.id));
-    }
-
-    // Sort other columns using the same user preference
-    ['in_progress', 'review', 'ready_to_ship'].forEach((status) => {
+    // Sort all columns using the user's sort preference
+    Object.keys(columns).forEach((status) => {
       columns[status as Status] = sortItems(columns[status as Status], sortConfig);
     });
 
-    return { columnItems: columns, upNextIds: upNextItemIds };
-  }, [items, priorityFilter, searchQuery, isSearching, sortConfig]);
+    // Track prioritized items (those with isPrioritized flag) for star display
+    const prioritizedIds = new Set(
+      items.filter(item => item.isPrioritized).map(item => item.id)
+    );
 
-  const { columnItems, upNextIds } = columnData;
+    return { columnItems: columns, prioritizedIds };
+  }, [items, priorityFilter, searchQuery, sortConfig]);
+
+  const { columnItems, prioritizedIds } = columnData;
   const activeItem = activeId ? items.find(i => i.id === activeId) : null;
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -452,33 +457,25 @@ export function BacklogView({
       return;
     }
 
+    // Dropped directly on a column
     if (COLUMN_ORDER.includes(overId as Status)) {
-      const isInUpNext = columnItems.up_next.some(i => i.id === activeItem.id);
-      const isInBacklog = columnItems.backlog.some(i => i.id === activeItem.id);
-
-      if (isInUpNext && overId === 'backlog') {
-        const newPriority = downgradePriority(activeItem.priority);
-        onUpdateItem({ ...activeItem, priority: newPriority });
-        return;
-      }
-
-      if (isInBacklog && overId === 'up_next') {
-        let newPriority = upgradePriority(activeItem.priority);
-        const priorityIndex = PRIORITY_ORDER.indexOf(newPriority);
-        const mediumIndex = PRIORITY_ORDER.indexOf('medium');
-        if (priorityIndex > mediumIndex) {
-          newPriority = 'medium';
-        }
-        onUpdateItem({ ...activeItem, priority: newPriority });
-        return;
-      }
-
-      const targetStatus = overId === 'up_next' ? 'backlog' : overId as Status;
+      const targetStatus = overId as Status;
       if (activeItem.status !== targetStatus) {
-        if (targetStatus === 'review' && activeItem.status === 'in_progress') {
-          const updatedItem = { ...activeItem, status: 'review' as Status };
+        // Auto-trigger AI review when dragging from in_progress to ai_review
+        if (targetStatus === 'ai_review' && activeItem.status === 'in_progress') {
+          const updatedItem = { ...activeItem, status: 'ai_review' as Status };
           onUpdateItem(updatedItem);
           triggerReview(updatedItem);
+          return;
+        }
+        // Clear review state when returning to in_progress
+        if (targetStatus === 'in_progress' && (activeItem.status === 'ai_review' || activeItem.status === 'human_review')) {
+          onUpdateItem({
+            ...activeItem,
+            status: 'in_progress',
+            aiReviewStatus: undefined,
+            humanReviewStatus: undefined,
+          });
           return;
         }
         onUpdateItem({ ...activeItem, status: targetStatus });
@@ -486,6 +483,7 @@ export function BacklogView({
       return;
     }
 
+    // Dropped on another item - handle reordering or cross-column move
     const overItem = items.find(i => i.id === overId);
     if (overItem) {
       let activeVisualColumn: Status | null = null;
@@ -500,35 +498,30 @@ export function BacklogView({
         }
       }
 
+      // Cross-column move (dropped on item in different column)
       if (targetVisualColumn && activeVisualColumn !== targetVisualColumn) {
-        if (activeVisualColumn === 'up_next' && targetVisualColumn === 'backlog') {
-          const newPriority = downgradePriority(activeItem.priority);
-          onUpdateItem({ ...activeItem, priority: newPriority });
-          return;
-        }
-
-        if (activeVisualColumn === 'backlog' && targetVisualColumn === 'up_next') {
-          let newPriority = upgradePriority(activeItem.priority);
-          const priorityIndex = PRIORITY_ORDER.indexOf(newPriority);
-          const mediumIndex = PRIORITY_ORDER.indexOf('medium');
-          if (priorityIndex > mediumIndex) {
-            newPriority = 'medium';
-          }
-          onUpdateItem({ ...activeItem, priority: newPriority });
-          return;
-        }
-
-        const actualStatus = targetVisualColumn === 'up_next' ? 'backlog' : targetVisualColumn;
-        if (actualStatus === 'review' && activeItem.status === 'in_progress') {
-          const updatedItem = { ...activeItem, status: 'review' as Status };
+        // Auto-trigger AI review when moving to ai_review
+        if (targetVisualColumn === 'ai_review' && activeItem.status === 'in_progress') {
+          const updatedItem = { ...activeItem, status: 'ai_review' as Status };
           onUpdateItem(updatedItem);
           triggerReview(updatedItem);
           return;
         }
-        onUpdateItem({ ...activeItem, status: actualStatus });
+        // Clear review state when returning to in_progress
+        if (targetVisualColumn === 'in_progress' && (activeItem.status === 'ai_review' || activeItem.status === 'human_review')) {
+          onUpdateItem({
+            ...activeItem,
+            status: 'in_progress',
+            aiReviewStatus: undefined,
+            humanReviewStatus: undefined,
+          });
+          return;
+        }
+        onUpdateItem({ ...activeItem, status: targetVisualColumn });
         return;
       }
 
+      // Same column reordering
       if (targetVisualColumn && activeVisualColumn === targetVisualColumn) {
         const columnItemsList = columnItems[targetVisualColumn];
         const oldIndex = columnItemsList.findIndex(i => i.id === active.id);
@@ -763,7 +756,7 @@ export function BacklogView({
                 onItemClick={handleItemClick}
                 isLoading={isLoading}
                 activeTaskId={undefined}
-                upNextIds={upNextIds}
+                prioritizedIds={prioritizedIds}
                 onAddItem={status === 'backlog' ? onNewTask : undefined}
               />
             ))}
@@ -871,7 +864,10 @@ export function BacklogView({
         }}
         onContinue={handleReviewContinue}
         onRetry={handleReviewRetry}
+        onHumanApprove={handleHumanApprove}
+        onHumanReject={handleHumanReject}
         taskTitle={reviewItem?.title || ''}
+        reviewStage={reviewItem?.status === 'human_review' ? 'human' : 'ai'}
         prUrl={prUrl}
         prNumber={prNumber}
         prError={prError}

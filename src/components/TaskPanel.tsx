@@ -122,9 +122,10 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
 
   const hasAiChanges = preAiItem !== null;
   const isReadyToShip = editedItem?.status === 'ready_to_ship';
-  const isInReview = editedItem?.status === 'review';
+  const isInAiReview = editedItem?.status === 'ai_review';
+  const isInHumanReview = editedItem?.status === 'human_review';
   const isInProgress = editedItem?.status === 'in_progress';
-  const isInBacklog = editedItem?.status === 'backlog' || editedItem?.status === 'up_next';
+  const isInBacklog = editedItem?.status === 'backlog';
   const hasBranch = !!editedItem?.branch;
   const hasReviewFeedback = !!editedItem?.reviewFeedback;
   const isLowQuality = editedItem?.qualityScore !== undefined && editedItem.qualityScore < QUALITY_THRESHOLD;
@@ -1001,7 +1002,7 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
           )}
 
           {/* Execution History with Subagents */}
-          {(isInProgress || isInReview || isReadyToShip) && executions.length > 0 && (
+          {(isInProgress || isInAiReview || isInHumanReview || isReadyToShip) && executions.length > 0 && (
             <div className="pt-2 border-t border-surface-700/50">
               <ExecutionTree
                 executions={executions}
@@ -1095,16 +1096,16 @@ export function TaskPanel({ item, isOpen, onClose, onSave, onDelete, onTackle, o
             </button>
           )}
 
-          {/* Review button (shown when in review status) */}
-          {isInReview && onReview && (
+          {/* Re-run AI Review button (shown when in AI review status) */}
+          {isInAiReview && onReview && (
             <button
               onClick={() => onReview(editedItem)}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-cyan-500/25"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all shadow-lg hover:shadow-purple-500/25"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
-              Run Code Review
+              Re-run AI Review
             </button>
           )}
 

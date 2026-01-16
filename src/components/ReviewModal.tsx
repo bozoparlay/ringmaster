@@ -31,9 +31,12 @@ interface ReviewModalProps {
   result: ReviewResult | null;
   error?: string;
   onClose: () => void;
-  onContinue: () => void;  // Move to ready_to_ship on pass
-  onRetry: () => void;     // Move back to in_progress on fail
+  onContinue: () => void;  // AI pass: Move to human_review
+  onRetry: () => void;     // AI fail: Move back to in_progress
+  onHumanApprove?: () => void;  // Human approve: Move to ready_to_ship
+  onHumanReject?: () => void;   // Human reject: Return to in_progress
   taskTitle: string;
+  reviewStage?: 'ai' | 'human';  // Which stage we're in (default: ai)
   prUrl?: string;
   prNumber?: number;
   prError?: string;
@@ -73,11 +76,15 @@ export function ReviewModal({
   onClose,
   onContinue,
   onRetry,
+  onHumanApprove,
+  onHumanReject,
   taskTitle,
+  reviewStage = 'ai',
   prUrl,
   prNumber,
   prError,
 }: ReviewModalProps) {
+  const isHumanStage = reviewStage === 'human';
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !isLoading) onClose();
@@ -123,9 +130,10 @@ export function ReviewModal({
             </div>
             <div>
               <h2 className="font-display text-lg text-surface-100">
-                {isLoading ? 'Reviewing Code...' :
+                {isHumanStage ? 'Human Review' :
+                 isLoading ? 'AI Reviewing Code...' :
                  error ? 'Review Error' :
-                 result?.passed ? 'Review Passed' : 'Review Found Issues'}
+                 result?.passed ? 'AI Review Passed' : 'AI Review Found Issues'}
               </h2>
               <p className="text-xs text-surface-500 truncate max-w-md">{taskTitle}</p>
             </div>
@@ -355,7 +363,26 @@ export function ReviewModal({
         {/* Footer */}
         {!isLoading && (
           <div className="px-6 py-4 border-t border-surface-800 bg-surface-900/80 flex gap-3">
-            {error && (
+            {/* Human Review Stage */}
+            {isHumanStage && onHumanApprove && onHumanReject && (
+              <>
+                <button
+                  onClick={onHumanReject}
+                  className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors"
+                >
+                  Request Changes
+                </button>
+                <button
+                  onClick={onHumanApprove}
+                  className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-green-600 hover:bg-green-500 text-white transition-colors shadow-lg shadow-green-500/20"
+                >
+                  Approve & Ship
+                </button>
+              </>
+            )}
+
+            {/* AI Review Stage - Error */}
+            {!isHumanStage && error && (
               <>
                 <button
                   onClick={onClose}
@@ -372,7 +399,8 @@ export function ReviewModal({
               </>
             )}
 
-            {result?.passed && (
+            {/* AI Review Stage - Passed */}
+            {!isHumanStage && result?.passed && (
               <>
                 <button
                   onClick={onClose}
@@ -384,12 +412,13 @@ export function ReviewModal({
                   onClick={onContinue}
                   className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-green-600 hover:bg-green-500 text-white transition-colors shadow-lg shadow-green-500/20"
                 >
-                  Move to Ready to Ship
+                  Move to Human Review
                 </button>
               </>
             )}
 
-            {result && !result.passed && (
+            {/* AI Review Stage - Failed */}
+            {!isHumanStage && result && !result.passed && (
               <>
                 <button
                   onClick={onRetry}
@@ -401,7 +430,7 @@ export function ReviewModal({
                   onClick={onContinue}
                   className="flex-1 py-2.5 px-4 rounded-lg font-medium bg-orange-600 hover:bg-orange-500 text-white transition-colors"
                 >
-                  Ship Anyway
+                  Override & Move to Human Review
                 </button>
               </>
             )}

@@ -27,9 +27,9 @@ interface GitHubLabel {
 // Note: Labels include space after colon to match existing GitHub labels
 const STATUS_TO_LABEL: Record<Status, string | null> = {
   backlog: 'status: backlog',
-  up_next: 'status: up-next',
   in_progress: 'status: in-progress',
-  review: 'status: review',
+  ai_review: 'status: ai-review',
+  human_review: 'status: human-review',
   ready_to_ship: 'status: ready-to-ship',
 };
 
