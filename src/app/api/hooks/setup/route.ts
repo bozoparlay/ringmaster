@@ -22,6 +22,7 @@ interface SetupRequest {
   baseUrl?: string;
   enableSubagentStop?: boolean;
   enableSessionStop?: boolean;
+  trustTaskWorktrees?: boolean;  // Add .tasks to additionalDirectories
 }
 
 interface HookConfig {
@@ -38,6 +39,11 @@ interface ClaudeSettings {
     SubagentStop?: HookConfig[];
     Stop?: HookConfig[];
     [key: string]: HookConfig[] | undefined;
+  };
+  permissions?: {
+    additionalDirectories?: string[];
+    allow?: string[];
+    [key: string]: unknown;
   };
   [key: string]: unknown;
 }
@@ -77,6 +83,7 @@ export async function POST(request: Request) {
     const baseUrl = body.baseUrl || 'http://localhost:3000';
     const enableSubagentStop = body.enableSubagentStop !== false; // Default true
     const enableSessionStop = body.enableSessionStop !== false; // Default true
+    const trustTaskWorktrees = body.trustTaskWorktrees !== false; // Default true
 
     // Ensure .claude directory exists
     const claudeDir = path.join(projectRoot, '.claude');
@@ -110,6 +117,20 @@ export async function POST(request: Request) {
     // Configure Stop hook (session completion → auto-review)
     if (enableSessionStop) {
       settings.hooks.Stop = [generateSessionStopHook(baseUrl)];
+    }
+
+    // Configure permissions for task worktrees
+    if (trustTaskWorktrees) {
+      if (!settings.permissions) {
+        settings.permissions = {};
+      }
+      const tasksDir = '.tasks';
+      if (!settings.permissions.additionalDirectories) {
+        settings.permissions.additionalDirectories = [];
+      }
+      if (!settings.permissions.additionalDirectories.includes(tasksDir)) {
+        settings.permissions.additionalDirectories.push(tasksDir);
+      }
     }
 
     // Write settings file
@@ -148,6 +169,7 @@ export async function POST(request: Request) {
       configured: {
         subagentStop: enableSubagentStop,
         sessionStop: enableSessionStop,
+        trustTaskWorktrees,
       },
     });
   } catch (error) {

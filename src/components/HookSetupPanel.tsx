@@ -7,6 +7,7 @@ interface HookStatus {
   configured: boolean;
   hasSubagentStop: boolean;
   hasSessionStop: boolean;
+  trustsTaskWorktrees: boolean;
   settingsPath: string | null;
   settingsSource: 'project-local' | 'project' | 'global' | 'none';
   issues: string[];
@@ -80,6 +81,7 @@ export function HookSetupPanel({
           baseUrl,
           enableSubagentStop: true,
           enableSessionStop: true,
+          trustTaskWorktrees: true,
         }),
       });
 
@@ -256,7 +258,7 @@ export function HookSetupPanel({
               </div>
 
               {/* Feature list */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-3 gap-3 pt-2">
                 <div className="flex items-center gap-2 text-sm text-surface-300">
                   <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -268,6 +270,12 @@ export function HookSetupPanel({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>Auto-review trigger</span>
+                </div>
+                <div className={`flex items-center gap-2 text-sm ${status?.trustsTaskWorktrees ? 'text-surface-300' : 'text-surface-500'}`}>
+                  <svg className={`w-4 h-4 ${status?.trustsTaskWorktrees ? 'text-green-400' : 'text-surface-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={status?.trustsTaskWorktrees ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"} />
+                  </svg>
+                  <span>Worktree trust</span>
                 </div>
               </div>
 
@@ -303,7 +311,7 @@ export function HookSetupPanel({
               </div>
 
               {/* Feature status */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-3 gap-3 pt-2">
                 <div className={`flex items-center gap-2 text-sm ${status?.hasSubagentStop ? 'text-surface-300' : 'text-surface-500'}`}>
                   <svg className={`w-4 h-4 ${status?.hasSubagentStop ? 'text-green-400' : 'text-surface-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={status?.hasSubagentStop ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"} />
@@ -315,6 +323,12 @@ export function HookSetupPanel({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={status?.hasSessionStop ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"} />
                   </svg>
                   <span>Auto-review trigger</span>
+                </div>
+                <div className={`flex items-center gap-2 text-sm ${status?.trustsTaskWorktrees ? 'text-surface-300' : 'text-surface-500'}`}>
+                  <svg className={`w-4 h-4 ${status?.trustsTaskWorktrees ? 'text-green-400' : 'text-surface-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={status?.trustsTaskWorktrees ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"} />
+                  </svg>
+                  <span>Worktree trust</span>
                 </div>
               </div>
 
@@ -355,7 +369,7 @@ export function HookSetupPanel({
               </div>
 
               {/* Feature preview */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-3 gap-3 pt-2">
                 <div className="flex items-center gap-2 text-sm text-surface-400">
                   <svg className="w-4 h-4 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -367,6 +381,12 @@ export function HookSetupPanel({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
                   <span>Auto-review trigger</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-surface-400">
+                  <svg className="w-4 h-4 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>Worktree trust</span>
                 </div>
               </div>
 

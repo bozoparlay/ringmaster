@@ -30,6 +30,10 @@ interface ClaudeSettings {
     Stop?: HookConfig[];
     [key: string]: HookConfig[] | undefined;
   };
+  permissions?: {
+    additionalDirectories?: string[];
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -37,6 +41,7 @@ interface HookStatus {
   configured: boolean;
   hasSubagentStop: boolean;
   hasSessionStop: boolean;
+  trustsTaskWorktrees: boolean;  // .tasks in additionalDirectories
   settingsPath: string | null;
   settingsSource: 'project-local' | 'project' | 'global' | 'none';
   issues: string[];
@@ -65,11 +70,17 @@ function analyzeHooks(settings: ClaudeSettings, settingsPath: string): Omit<Hook
   const issues: string[] = [];
   let hasSubagentStop = false;
   let hasSessionStop = false;
+  let trustsTaskWorktrees = false;
   let ringmasterUrl: string | null = null;
+
+  // Check if .tasks is in additionalDirectories
+  if (settings.permissions?.additionalDirectories?.includes('.tasks')) {
+    trustsTaskWorktrees = true;
+  }
 
   if (!settings.hooks) {
     issues.push('No hooks configured');
-    return { configured: false, hasSubagentStop, hasSessionStop, issues, ringmasterUrl };
+    return { configured: false, hasSubagentStop, hasSessionStop, trustsTaskWorktrees, issues, ringmasterUrl };
   }
 
   // Check SubagentStop hook
@@ -104,7 +115,7 @@ function analyzeHooks(settings: ClaudeSettings, settingsPath: string): Omit<Hook
 
   const configured = hasSubagentStop || hasSessionStop;
 
-  return { configured, hasSubagentStop, hasSessionStop, issues, ringmasterUrl };
+  return { configured, hasSubagentStop, hasSessionStop, trustsTaskWorktrees, issues, ringmasterUrl };
 }
 
 export async function GET(request: Request) {
@@ -122,6 +133,7 @@ export async function GET(request: Request) {
     configured: false,
     hasSubagentStop: false,
     hasSessionStop: false,
+    trustsTaskWorktrees: false,
     settingsPath: null,
     settingsSource: 'none',
     issues: ['No Claude Code settings file found'],
