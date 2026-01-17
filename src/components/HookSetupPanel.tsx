@@ -8,8 +8,8 @@ interface HookStatus {
   hasSubagentStop: boolean;
   hasSessionStop: boolean;
   trustsTaskWorktrees: boolean;
-  settingsPath: string | null;
-  settingsSource: 'project-local' | 'project' | 'global' | 'none';
+  globalSettingsPath: string;
+  projectSettingsPath: string;
   issues: string[];
   ringmasterUrl: string | null;
 }
@@ -252,7 +252,7 @@ export function HookSetupPanel({
                 <div>
                   <p className="text-sm font-medium text-green-300">Hooks Configured</p>
                   <p className="text-xs text-surface-400 mt-0.5">
-                    {status?.settingsSource === 'project-local' ? 'Project-level' : status?.settingsSource} settings
+                    Global settings (~/.claude/settings.json)
                   </p>
                 </div>
               </div>

@@ -3,19 +3,20 @@
  *
  * POST /api/hooks/setup - Configure Claude Code hooks for Ringmaster integration
  *
- * Creates or updates .claude/settings.local.json with the required hooks:
- * - SubagentStop: Track Task tool subagents
- * - Stop: Auto-move tasks to review when session ends
+ * Writes hooks to GLOBAL ~/.claude/settings.json because:
+ * - Hooks need to work in worktrees, which have their own .claude/settings.local.json
+ * - Global hooks apply everywhere (worktrees, main repo, any project)
+ * - The session-stop handler filters non-Ringmaster directories, so global is safe
  *
- * The .local.json file is used because:
- * 1. It's project-specific (not global)
- * 2. It's typically gitignored (contains localhost URLs)
- * 3. It won't conflict with team settings in settings.json
+ * Writes worktree trust to PROJECT-level .claude/settings.local.json because:
+ * - additionalDirectories is project-specific
+ * - Different projects have different .tasks locations
  */
 
 import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import os from 'os';
 
 interface SetupRequest {
   projectRoot?: string;
@@ -85,87 +86,119 @@ export async function POST(request: Request) {
     const enableSessionStop = body.enableSessionStop !== false; // Default true
     const trustTaskWorktrees = body.trustTaskWorktrees !== false; // Default true
 
-    // Ensure .claude directory exists
-    const claudeDir = path.join(projectRoot, '.claude');
+    // ===== GLOBAL HOOKS =====
+    // Write hooks to ~/.claude/settings.json so they work in worktrees
+    const globalClaudeDir = path.join(os.homedir(), '.claude');
+    const globalSettingsPath = path.join(globalClaudeDir, 'settings.json');
+
+    // Ensure global .claude directory exists
     try {
-      await fs.mkdir(claudeDir, { recursive: true });
-    } catch (error) {
-      // Directory might already exist, that's fine
+      await fs.mkdir(globalClaudeDir, { recursive: true });
+    } catch {
+      // Directory might already exist
     }
 
-    const settingsPath = path.join(claudeDir, 'settings.local.json');
-
-    // Load existing settings or start fresh
-    let settings: ClaudeSettings = {};
+    // Load existing global settings
+    let globalSettings: ClaudeSettings = {};
     try {
-      const existingContent = await fs.readFile(settingsPath, 'utf-8');
-      settings = JSON.parse(existingContent);
+      const existingContent = await fs.readFile(globalSettingsPath, 'utf-8');
+      globalSettings = JSON.parse(existingContent);
     } catch {
       // File doesn't exist or isn't valid JSON, start fresh
     }
 
     // Initialize hooks object if needed
-    if (!settings.hooks) {
-      settings.hooks = {};
+    if (!globalSettings.hooks) {
+      globalSettings.hooks = {};
     }
 
-    // Configure SubagentStop hook
+    // Configure SubagentStop hook globally
     if (enableSubagentStop) {
-      settings.hooks.SubagentStop = [generateSubagentStopHook(baseUrl)];
+      globalSettings.hooks.SubagentStop = [generateSubagentStopHook(baseUrl)];
     }
 
-    // Configure Stop hook (session completion → auto-review)
+    // Configure Stop hook globally (session completion → auto-review)
     if (enableSessionStop) {
-      settings.hooks.Stop = [generateSessionStopHook(baseUrl)];
+      globalSettings.hooks.Stop = [generateSessionStopHook(baseUrl)];
     }
 
-    // Configure permissions for task worktrees
-    if (trustTaskWorktrees) {
-      if (!settings.permissions) {
-        settings.permissions = {};
-      }
-      const tasksDir = '.tasks';
-      if (!settings.permissions.additionalDirectories) {
-        settings.permissions.additionalDirectories = [];
-      }
-      if (!settings.permissions.additionalDirectories.includes(tasksDir)) {
-        settings.permissions.additionalDirectories.push(tasksDir);
-      }
-    }
-
-    // Write settings file
+    // Write global settings
     await fs.writeFile(
-      settingsPath,
-      JSON.stringify(settings, null, 2) + '\n',
+      globalSettingsPath,
+      JSON.stringify(globalSettings, null, 2) + '\n',
       'utf-8'
     );
+    console.log(`[hooks/setup] Wrote hooks to global settings: ${globalSettingsPath}`);
 
-    console.log(`[hooks/setup] Wrote configuration to ${settingsPath}`);
+    // ===== PROJECT-LEVEL WORKTREE TRUST =====
+    // Write additionalDirectories to project-level settings (project-specific)
+    let projectSettingsPath: string | undefined;
+    if (trustTaskWorktrees) {
+      const projectClaudeDir = path.join(projectRoot, '.claude');
+      projectSettingsPath = path.join(projectClaudeDir, 'settings.local.json');
 
-    // Also ensure .claude/settings.local.json is in .gitignore
-    const gitignorePath = path.join(projectRoot, '.gitignore');
-    try {
-      let gitignore = '';
+      // Ensure project .claude directory exists
       try {
-        gitignore = await fs.readFile(gitignorePath, 'utf-8');
+        await fs.mkdir(projectClaudeDir, { recursive: true });
       } catch {
-        // .gitignore doesn't exist
+        // Directory might already exist
       }
 
-      const ignorePattern = '.claude/settings.local.json';
-      if (!gitignore.includes(ignorePattern)) {
-        const newContent = gitignore.trimEnd() + '\n\n# Claude Code local settings (contains localhost URLs)\n' + ignorePattern + '\n';
-        await fs.writeFile(gitignorePath, newContent, 'utf-8');
-        console.log(`[hooks/setup] Added ${ignorePattern} to .gitignore`);
+      // Load existing project settings
+      let projectSettings: ClaudeSettings = {};
+      try {
+        const existingContent = await fs.readFile(projectSettingsPath, 'utf-8');
+        projectSettings = JSON.parse(existingContent);
+      } catch {
+        // File doesn't exist or isn't valid JSON, start fresh
       }
-    } catch (error) {
-      console.warn('[hooks/setup] Could not update .gitignore:', error);
-      // Non-fatal, continue
+
+      // Configure permissions for task worktrees
+      if (!projectSettings.permissions) {
+        projectSettings.permissions = {};
+      }
+      const tasksDir = '.tasks';
+      if (!projectSettings.permissions.additionalDirectories) {
+        projectSettings.permissions.additionalDirectories = [];
+      }
+      if (!projectSettings.permissions.additionalDirectories.includes(tasksDir)) {
+        projectSettings.permissions.additionalDirectories.push(tasksDir);
+      }
+
+      // Write project settings
+      await fs.writeFile(
+        projectSettingsPath,
+        JSON.stringify(projectSettings, null, 2) + '\n',
+        'utf-8'
+      );
+      console.log(`[hooks/setup] Wrote worktree trust to project settings: ${projectSettingsPath}`);
+
+      // Ensure .claude/settings.local.json is in .gitignore
+      const gitignorePath = path.join(projectRoot, '.gitignore');
+      try {
+        let gitignore = '';
+        try {
+          gitignore = await fs.readFile(gitignorePath, 'utf-8');
+        } catch {
+          // .gitignore doesn't exist
+        }
+
+        const ignorePattern = '.claude/settings.local.json';
+        if (!gitignore.includes(ignorePattern)) {
+          const newContent = gitignore.trimEnd() + '\n\n# Claude Code local settings\n' + ignorePattern + '\n';
+          await fs.writeFile(gitignorePath, newContent, 'utf-8');
+          console.log(`[hooks/setup] Added ${ignorePattern} to .gitignore`);
+        }
+      } catch (error) {
+        console.warn('[hooks/setup] Could not update .gitignore:', error);
+        // Non-fatal, continue
+      }
     }
 
     return NextResponse.json({
       success: true,
-      settingsPath,
+      globalSettingsPath,
+      projectSettingsPath,
       configured: {
         subagentStop: enableSubagentStop,
         sessionStop: enableSessionStop,
@@ -186,56 +219,86 @@ export async function POST(request: Request) {
 
 /**
  * DELETE /api/hooks/setup - Remove Ringmaster hooks configuration
+ *
+ * Removes hooks from global settings and worktree trust from project settings.
  */
 export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url);
     const projectRoot = url.searchParams.get('projectRoot') || process.cwd();
 
-    const settingsPath = path.join(projectRoot, '.claude', 'settings.local.json');
+    // ===== REMOVE GLOBAL HOOKS =====
+    const globalSettingsPath = path.join(os.homedir(), '.claude', 'settings.json');
 
-    // Load existing settings
-    let settings: ClaudeSettings = {};
     try {
-      const existingContent = await fs.readFile(settingsPath, 'utf-8');
-      settings = JSON.parse(existingContent);
-    } catch {
-      return NextResponse.json({
-        success: true,
-        message: 'No settings file to clean up',
-      });
-    }
+      const existingContent = await fs.readFile(globalSettingsPath, 'utf-8');
+      const globalSettings: ClaudeSettings = JSON.parse(existingContent);
 
-    // Remove Ringmaster hooks
-    if (settings.hooks) {
-      delete settings.hooks.SubagentStop;
-      delete settings.hooks.Stop;
+      // Remove Ringmaster hooks
+      if (globalSettings.hooks) {
+        delete globalSettings.hooks.SubagentStop;
+        delete globalSettings.hooks.Stop;
 
-      // If hooks object is now empty, remove it
-      if (Object.keys(settings.hooks).length === 0) {
-        delete settings.hooks;
+        // If hooks object is now empty, remove it
+        if (Object.keys(globalSettings.hooks).length === 0) {
+          delete globalSettings.hooks;
+        }
       }
+
+      // Write updated global settings (don't delete file - may have other settings)
+      await fs.writeFile(
+        globalSettingsPath,
+        JSON.stringify(globalSettings, null, 2) + '\n',
+        'utf-8'
+      );
+      console.log(`[hooks/setup] Removed hooks from global settings`);
+    } catch {
+      // Global settings don't exist, nothing to clean up
     }
 
-    // If settings object is empty, delete the file
-    if (Object.keys(settings).length === 0) {
-      await fs.unlink(settingsPath);
-      return NextResponse.json({
-        success: true,
-        message: 'Settings file removed',
-      });
-    }
+    // ===== REMOVE PROJECT WORKTREE TRUST =====
+    const projectSettingsPath = path.join(projectRoot, '.claude', 'settings.local.json');
 
-    // Otherwise, write updated settings
-    await fs.writeFile(
-      settingsPath,
-      JSON.stringify(settings, null, 2) + '\n',
-      'utf-8'
-    );
+    try {
+      const existingContent = await fs.readFile(projectSettingsPath, 'utf-8');
+      const projectSettings: ClaudeSettings = JSON.parse(existingContent);
+
+      // Remove .tasks from additionalDirectories
+      if (projectSettings.permissions?.additionalDirectories) {
+        projectSettings.permissions.additionalDirectories =
+          projectSettings.permissions.additionalDirectories.filter(d => d !== '.tasks');
+
+        // If additionalDirectories is now empty, remove it
+        if (projectSettings.permissions.additionalDirectories.length === 0) {
+          delete projectSettings.permissions.additionalDirectories;
+        }
+
+        // If permissions is now empty, remove it
+        if (Object.keys(projectSettings.permissions).length === 0) {
+          delete projectSettings.permissions;
+        }
+      }
+
+      // If settings object is empty, delete the file
+      if (Object.keys(projectSettings).length === 0) {
+        await fs.unlink(projectSettingsPath);
+        console.log(`[hooks/setup] Deleted empty project settings file`);
+      } else {
+        // Otherwise, write updated settings
+        await fs.writeFile(
+          projectSettingsPath,
+          JSON.stringify(projectSettings, null, 2) + '\n',
+          'utf-8'
+        );
+        console.log(`[hooks/setup] Updated project settings`);
+      }
+    } catch {
+      // Project settings don't exist, nothing to clean up
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Ringmaster hooks removed',
+      message: 'Ringmaster configuration removed',
     });
   } catch (error) {
     console.error('[hooks/setup] Error:', error);

@@ -3,17 +3,24 @@
  *
  * GET /api/hooks/status - Check if Claude Code hooks are properly configured
  *
+ * Checks:
+ * - Global ~/.claude/settings.json for hooks (SubagentStop, Stop)
+ * - Project .claude/settings.local.json for worktree trust (additionalDirectories)
+ *
  * Returns:
  * - configured: boolean - Whether hooks are set up
  * - hasSubagentStop: boolean - SubagentStop hook configured
  * - hasSessionStop: boolean - Stop hook configured (for auto-review)
- * - settingsPath: string - Path to settings file
+ * - trustsTaskWorktrees: boolean - .tasks in additionalDirectories
+ * - globalSettingsPath: string - Path to global settings
+ * - projectSettingsPath: string - Path to project settings
  * - issues: string[] - List of configuration issues
  */
 
 import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import os from 'os';
 
 interface HookConfig {
   matcher: string;
@@ -42,8 +49,8 @@ interface HookStatus {
   hasSubagentStop: boolean;
   hasSessionStop: boolean;
   trustsTaskWorktrees: boolean;  // .tasks in additionalDirectories
-  settingsPath: string | null;
-  settingsSource: 'project-local' | 'project' | 'global' | 'none';
+  globalSettingsPath: string;
+  projectSettingsPath: string;
   issues: string[];
   ringmasterUrl: string | null;
 }
@@ -64,23 +71,22 @@ function isRingmasterHook(command: string): { isValid: boolean; url: string | nu
 }
 
 /**
- * Analyze hooks configuration and return status.
+ * Analyze hooks in global settings.
  */
-function analyzeHooks(settings: ClaudeSettings, settingsPath: string): Omit<HookStatus, 'settingsPath' | 'settingsSource'> {
+function analyzeGlobalHooks(settings: ClaudeSettings): {
+  hasSubagentStop: boolean;
+  hasSessionStop: boolean;
+  ringmasterUrl: string | null;
+  issues: string[];
+} {
   const issues: string[] = [];
   let hasSubagentStop = false;
   let hasSessionStop = false;
-  let trustsTaskWorktrees = false;
   let ringmasterUrl: string | null = null;
 
-  // Check if .tasks is in additionalDirectories
-  if (settings.permissions?.additionalDirectories?.includes('.tasks')) {
-    trustsTaskWorktrees = true;
-  }
-
   if (!settings.hooks) {
-    issues.push('No hooks configured');
-    return { configured: false, hasSubagentStop, hasSessionStop, trustsTaskWorktrees, issues, ringmasterUrl };
+    issues.push('No hooks configured in global settings');
+    return { hasSubagentStop, hasSessionStop, ringmasterUrl, issues };
   }
 
   // Check SubagentStop hook
@@ -113,55 +119,64 @@ function analyzeHooks(settings: ClaudeSettings, settingsPath: string): Omit<Hook
     issues.push('Stop hook not configured (required for auto-review)');
   }
 
-  const configured = hasSubagentStop || hasSessionStop;
+  return { hasSubagentStop, hasSessionStop, ringmasterUrl, issues };
+}
 
-  return { configured, hasSubagentStop, hasSessionStop, trustsTaskWorktrees, issues, ringmasterUrl };
+/**
+ * Check if .tasks is trusted in project settings.
+ */
+function analyzeProjectTrust(settings: ClaudeSettings): boolean {
+  return settings.permissions?.additionalDirectories?.includes('.tasks') ?? false;
 }
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const projectRoot = url.searchParams.get('projectRoot') || process.cwd();
 
-  // Check settings files in priority order
-  const settingsLocations = [
-    { path: path.join(projectRoot, '.claude', 'settings.local.json'), source: 'project-local' as const },
-    { path: path.join(projectRoot, '.claude', 'settings.json'), source: 'project' as const },
-    { path: path.join(process.env.HOME || '~', '.claude', 'settings.json'), source: 'global' as const },
-  ];
+  const globalSettingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  const projectSettingsPath = path.join(projectRoot, '.claude', 'settings.local.json');
 
-  let result: HookStatus = {
-    configured: false,
-    hasSubagentStop: false,
-    hasSessionStop: false,
-    trustsTaskWorktrees: false,
-    settingsPath: null,
-    settingsSource: 'none',
-    issues: ['No Claude Code settings file found'],
-    ringmasterUrl: null,
-  };
+  const issues: string[] = [];
+  let hasSubagentStop = false;
+  let hasSessionStop = false;
+  let trustsTaskWorktrees = false;
+  let ringmasterUrl: string | null = null;
 
-  for (const { path: settingsPath, source } of settingsLocations) {
-    try {
-      const content = await fs.readFile(settingsPath, 'utf-8');
-      const settings: ClaudeSettings = JSON.parse(content);
+  // Check GLOBAL settings for hooks
+  try {
+    const content = await fs.readFile(globalSettingsPath, 'utf-8');
+    const globalSettings: ClaudeSettings = JSON.parse(content);
+    const globalAnalysis = analyzeGlobalHooks(globalSettings);
 
-      const analysis = analyzeHooks(settings, settingsPath);
-
-      result = {
-        ...analysis,
-        settingsPath,
-        settingsSource: source,
-      };
-
-      // If we found a configured settings file, stop searching
-      if (analysis.configured) {
-        break;
-      }
-    } catch {
-      // File doesn't exist or isn't valid JSON, continue to next
-      continue;
-    }
+    hasSubagentStop = globalAnalysis.hasSubagentStop;
+    hasSessionStop = globalAnalysis.hasSessionStop;
+    ringmasterUrl = globalAnalysis.ringmasterUrl;
+    issues.push(...globalAnalysis.issues);
+  } catch {
+    issues.push('Global settings file not found or invalid');
   }
+
+  // Check PROJECT settings for worktree trust
+  try {
+    const content = await fs.readFile(projectSettingsPath, 'utf-8');
+    const projectSettings: ClaudeSettings = JSON.parse(content);
+    trustsTaskWorktrees = analyzeProjectTrust(projectSettings);
+  } catch {
+    // Project settings don't exist - that's okay, just means no worktree trust
+  }
+
+  const configured = hasSubagentStop || hasSessionStop;
+
+  const result: HookStatus = {
+    configured,
+    hasSubagentStop,
+    hasSessionStop,
+    trustsTaskWorktrees,
+    globalSettingsPath,
+    projectSettingsPath,
+    issues: configured ? [] : issues, // Only show issues if not configured
+    ringmasterUrl,
+  };
 
   return NextResponse.json(result);
 }
