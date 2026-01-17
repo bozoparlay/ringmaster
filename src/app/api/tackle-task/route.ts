@@ -1,10 +1,25 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { execWithTimeout, TimeoutError } from '@/lib/resilience';
 import { buildTaskPrompt } from '@/lib/prompt-builder';
 import { createExecution, type TaskSource } from '@/lib/db/executions';
 import { upsertWorkspace } from '@/lib/db/workspaces';
+
+/**
+ * Expand ~ to the user's home directory.
+ * Shell doesn't expand ~ inside double quotes, so we need to handle it in Node.
+ */
+function expandTilde(filepath: string): string {
+  if (filepath.startsWith('~/')) {
+    return path.join(os.homedir(), filepath.slice(2));
+  }
+  if (filepath === '~') {
+    return os.homedir();
+  }
+  return filepath;
+}
 
 // Timeouts for various operations
 const GIT_COMMAND_TIMEOUT_MS = 15000;   // 15s for git commands
@@ -120,18 +135,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Title and taskId are required' }, { status: 400 });
     }
 
-    // Determine the repo directory
-    const repoDir = backlogPath ? path.dirname(backlogPath) : process.cwd();
+    // Determine the repo directory (expand ~ to home directory)
+    const repoDir = backlogPath ? path.dirname(expandTilde(backlogPath)) : process.cwd();
 
     // Determine target directory - use worktree if exists
     let targetDir = repoDir;
     let branch: string | undefined;
 
     if (worktreePath) {
-      // Worktree path provided - use it
-      const absoluteWorktreePath = path.isAbsolute(worktreePath)
-        ? worktreePath
-        : path.join(repoDir, worktreePath);
+      // Worktree path provided - use it (expand ~ to home directory)
+      const expandedWorktreePath = expandTilde(worktreePath);
+      const absoluteWorktreePath = path.isAbsolute(expandedWorktreePath)
+        ? expandedWorktreePath
+        : path.join(repoDir, expandedWorktreePath);
       try {
         await fs.access(absoluteWorktreePath);
         targetDir = absoluteWorktreePath;
