@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { BacklogItem } from '@/types/backlog';
 import { useIdeSettings, IDE_OPTIONS, type IdeType } from '@/hooks/useIdeSettings';
 import { buildTaskPrompt, buildConversationalPrompt } from '@/lib/prompt-builder';
@@ -324,9 +326,39 @@ export function TackleModal({ item, isOpen, onClose, onStartWork, onShowToast, b
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          <pre className="whitespace-pre-wrap text-sm text-surface-300 font-mono leading-relaxed">
-            {mode === 'plan' ? generatePlan() : generatePrompt()}
-          </pre>
+          <div className="prose prose-invert prose-sm max-w-none
+            prose-headings:text-surface-100 prose-headings:font-display prose-headings:font-semibold
+            prose-h1:text-lg prose-h1:mb-3 prose-h1:mt-0
+            prose-h2:text-base prose-h2:mb-2 prose-h2:mt-4
+            prose-p:text-surface-300 prose-p:leading-relaxed prose-p:mb-3
+            prose-strong:text-surface-200 prose-strong:font-semibold
+            prose-code:text-accent prose-code:text-xs prose-code:bg-surface-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
+            prose-pre:bg-surface-950 prose-pre:border prose-pre:border-surface-800 prose-pre:text-xs
+            prose-ul:text-surface-300 prose-ul:my-2 prose-li:my-1
+            prose-ol:text-surface-300 prose-ol:my-2
+            prose-a:text-accent prose-a:no-underline hover:prose-a:underline
+            prose-blockquote:border-l-accent prose-blockquote:text-surface-400"
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Preserve code blocks with their formatting
+                pre: ({ children, ...props }) => (
+                  <pre className="bg-surface-950 border border-surface-800 rounded-lg p-4 overflow-x-auto" {...props}>
+                    {children}
+                  </pre>
+                ),
+                // Style inline code
+                code: ({ children, ...props }) => (
+                  <code className="text-accent bg-surface-800 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>
+                    {children}
+                  </code>
+                ),
+              }}
+            >
+              {mode === 'plan' ? generatePlan() : generatePrompt()}
+            </ReactMarkdown>
+          </div>
         </div>
 
         {/* Footer */}

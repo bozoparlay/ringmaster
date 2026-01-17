@@ -1,6 +1,9 @@
 'use client';
 
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { BacklogItem } from '@/types/backlog';
+import { cleanDescriptionForDisplay } from '@/lib/display-utils';
 
 interface DeleteConfirmationModalProps {
   /** The item to be deleted */
@@ -13,15 +16,6 @@ interface DeleteConfirmationModalProps {
   onCancel: () => void;
 }
 
-/**
- * Clean description text by removing HTML comments and metadata
- */
-function cleanDescription(text: string | undefined): string | undefined {
-  if (!text) return undefined;
-  // Remove HTML comments (e.g., <!-- ringmaster-task-id:xxx -->)
-  const cleaned = text.replace(/<!--[\s\S]*?-->/g, '').trim();
-  return cleaned || undefined;
-}
 
 /**
  * Confirmation modal shown before deleting a task via drag-and-drop.
@@ -34,7 +28,7 @@ export function DeleteConfirmationModal({
 }: DeleteConfirmationModalProps) {
   if (!isOpen || !item) return null;
 
-  const cleanedDescription = cleanDescription(item.description);
+  const cleanedDescription = cleanDescriptionForDisplay(item.description);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -65,7 +59,11 @@ export function DeleteConfirmationModal({
           <div className="bg-surface-800/50 rounded-lg p-4 border border-surface-700">
             <h3 className="font-medium text-surface-200 line-clamp-2">{item.title}</h3>
             {cleanedDescription && (
-              <p className="text-sm text-surface-400 mt-2 line-clamp-2">{cleanedDescription}</p>
+              <div className="text-sm text-surface-400 mt-2 line-clamp-2 prose prose-invert prose-sm max-w-none prose-p:m-0 prose-headings:text-surface-300 prose-headings:text-xs prose-headings:font-medium prose-headings:m-0 prose-strong:text-surface-300 prose-code:text-accent prose-code:text-[10px] prose-code:bg-surface-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-ul:m-0 prose-ul:list-inside prose-li:m-0 prose-a:text-accent prose-a:no-underline hover:prose-a:underline">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {cleanedDescription}
+                </ReactMarkdown>
+              </div>
             )}
             <div className="flex items-center gap-2 mt-3">
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${

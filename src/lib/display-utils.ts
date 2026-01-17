@@ -37,23 +37,45 @@ const METADATA_PATTERNS = [
 ];
 
 /**
- * Strips internal metadata from a description for display in UI previews.
- * The original data is preserved - this only affects how it's shown to users.
+ * Strips internal metadata from a description while preserving markdown formatting.
+ * Use this for markdown previews where you want formatting intact.
  *
  * @param description - Raw description that may contain metadata
- * @returns Cleaned description suitable for display
+ * @returns Cleaned description with markdown preserved
  */
 export function cleanDescriptionForDisplay(description: string | undefined): string {
   if (!description) return '';
 
   let cleaned = description;
 
-  // First pass: Remove metadata patterns with markdown formatting
+  // Remove metadata patterns while preserving markdown formatting
   for (const pattern of METADATA_PATTERNS) {
     cleaned = cleaned.replace(pattern, '');
   }
 
-  // Strip markdown formatting for plain text preview
+  // Clean up excessive whitespace left after removal
+  cleaned = cleaned
+    .replace(/^\s*\n+/gm, '\n')  // Remove leading empty lines
+    .replace(/\n{3,}/g, '\n\n')  // Collapse multiple newlines
+    .trim();
+
+  return cleaned;
+}
+
+/**
+ * Strips internal metadata AND markdown formatting for plain text display.
+ * Use this when you need a truly plain text preview without any formatting.
+ *
+ * @param description - Raw description that may contain metadata
+ * @returns Plain text description suitable for non-markdown contexts
+ */
+export function stripMarkdownForDisplay(description: string | undefined): string {
+  if (!description) return '';
+
+  // First clean metadata
+  let cleaned = cleanDescriptionForDisplay(description);
+
+  // Then strip markdown formatting for plain text preview
   cleaned = cleaned
     // Remove code blocks FIRST (before inline code processing interferes)
     // Handle both ``` and `` fenced code blocks
@@ -73,12 +95,7 @@ export function cleanDescriptionForDisplay(description: string | undefined): str
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/^\s*\d+\.\s+/gm, '');
 
-  // Second pass: Remove plain-text metadata lines (after markdown stripped)
-  for (const pattern of METADATA_PATTERNS) {
-    cleaned = cleaned.replace(pattern, '');
-  }
-
-  // Clean up excessive whitespace left after removal
+  // Clean up excessive whitespace left after stripping
   cleaned = cleaned
     .replace(/^\s*\n+/gm, '\n')  // Remove leading empty lines
     .replace(/\n{3,}/g, '\n\n')  // Collapse multiple newlines
